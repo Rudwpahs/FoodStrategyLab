@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="메뉴 원가와 판매가를 비교하는 푸드 전략 실험실" />
+    <title>Food Strategy Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero glass">
+        <div>
+          <p class="eyebrow">MENU INTELLIGENCE / 01</p>
+          <h1>Food Strategy <span>Lab</span></h1>
+          <p class="lede">원가와 판매가를 한눈에 비교하고, 다음 메뉴 결정을 더 빠르게 실험해보세요.</p>
+        </div>
+        <div class="orb" aria-hidden="true"></div>
+      </header>
+
+      <section class="metrics" aria-label="요약 지표">
+        <article class="metric glass"><span>메뉴 수</span><strong id="item-count">0</strong></article>
+        <article class="metric glass"><span>평균 마진율</span><strong id="avg-margin">0%</strong></article>
+        <article class="metric glass"><span>최고 수익 메뉴</span><strong id="top-item">—</strong></article>
+      </section>
+
+      <section class="workspace">
+        <form id="menu-form" class="panel glass">
+          <div class="section-heading"><div><p class="eyebrow">NEW EXPERIMENT</p><h2>메뉴 추가</h2></div><span class="step">01</span></div>
+          <label>메뉴 이름<input id="name" required placeholder="예: 바질 치킨 샌드위치" /></label>
+          <div class="split"><label>재료 원가<input id="cost" type="number" min="0" step="100" required placeholder="4500" /></label><label>판매가<input id="price" type="number" min="0" step="100" required placeholder="12000" /></label></div>
+          <label>카테고리<select id="category"><option>메인</option><option>사이드</option><option>음료</option><option>디저트</option></select></label>
+          <button class="primary" type="submit">메뉴 분석하기 <span>→</span></button>
+          <button class="ghost" id="reset" type="button">샘플 데이터로 초기화</button>
+        </form>
+
+        <section class="panel glass list-panel">
+          <div class="section-heading"><div><p class="eyebrow">PORTFOLIO VIEW</p><h2>메뉴 포트폴리오</h2></div><select id="filter" aria-label="카테고리 필터"><option value="all">전체</option><option>메인</option><option>사이드</option><option>음료</option><option>디저트</option></select></div>
+          <div id="menu-list" class="menu-list"></div>
+          <p id="empty" class="empty">왼쪽에서 첫 메뉴를 추가해보세요.</p>
+        </section>
+      </section>
+      <footer><span>LOCAL-FIRST TOOL</span><span>데이터는 이 브라우저에만 저장됩니다.</span></footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
