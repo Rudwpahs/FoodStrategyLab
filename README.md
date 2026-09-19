@@ -1,16 +1,58 @@
 # Food Strategy Lab
 
-A dependency-free, GitHub Pages-ready menu profitability playground. Add menu
-items, compare food cost with sale price, filter by category, and see average
-margin plus the highest-profit item. Data is stored locally in the browser.
+메뉴의 원가와 판매가를 입력했을 때 어떤 메뉴가 실제로 수익성이 좋은지 빠르게 비교해보려고 만든 작은 실험 도구입니다. 서버나 프레임워크 없이 브라우저만으로 돌아갑니다.
 
-## Run
+## 할 수 있는 것
 
-Open `index.html` directly, or serve the folder with any static web server:
+- 메뉴 이름, 원가, 판매가, 카테고리 입력
+- 메뉴별 마진율 계산
+- 전체 메뉴 평균 마진율 계산
+- 절대 수익이 가장 큰 메뉴 표시
+- 카테고리별 필터
+- 메뉴 삭제와 샘플 데이터 초기화
+- 브라우저에 입력 데이터 저장
+
+## 계산 알고리즘
+
+메뉴 하나의 마진율은 아래 식으로 계산합니다.
+
+```text
+마진율(%) = (판매가 - 원가) / 판매가 × 100
+```
+
+화면을 다시 그릴 때는 다음 순서로 처리합니다.
+
+```text
+localStorage에서 메뉴 목록 불러오기
+        ↓
+현재 카테고리 필터에 맞는 메뉴만 선택
+        ↓
+각 메뉴의 마진율 계산
+        ↓
+전체 메뉴의 평균 마진율 계산
+        ↓
+(판매가 - 원가)가 가장 큰 메뉴 탐색
+        ↓
+목록과 요약 지표를 다시 렌더링
+        ↓
+추가·삭제가 생기면 localStorage에 저장
+```
+
+여기서 `최고 수익 메뉴`는 마진율이 가장 높은 메뉴가 아니라 **한 개를 팔았을 때 판매가에서 원가를 뺀 금액이 가장 큰 메뉴**입니다.
+
+## 실행
+
+의존성이 없어서 `index.html`을 바로 열어도 됩니다. 로컬 서버로 보고 싶다면:
 
 ```bash
 python -m http.server 8000
 ```
 
-The project is intentionally framework-free so it can be deployed directly from
-the repository with GitHub Pages.
+## 기술
+
+- HTML
+- CSS
+- Vanilla JavaScript
+- localStorage
+
+현재 기본 브랜치는 `agent/food-strategy-lab`입니다. 프로젝트가 더 커지면 `main` 중심 구조로 정리하는 게 다음 단계입니다.
