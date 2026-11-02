@@ -74,7 +74,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             if (r) loadPreview();
           }}
         >
-          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 도구 없음 — VoiceStudio 또는 edge-tts 필요'}
+          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 없음 — [캐릭터·목소리]에서 VoiceStudio 연결'}
         </button>
       </div>
 

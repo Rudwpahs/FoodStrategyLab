@@ -24,11 +24,10 @@ export function ttsSettings() {
       proxy: e.TTS_PROXY ?? '',
     },
     voicestudio: {
-      url: (e.VOICESTUDIO_URL ?? 'http://127.0.0.1:3900').replace(/\/$/, ''),
       /** 'tts-1'은 VoiceStudio 앱에서 고른 엔진을 뜻한다 */
       model: e.VOICESTUDIO_MODEL ?? 'tts-1',
-      /** 앱에서 만든 목소리 프로필 이름 (예: 맛조수) */
-      voice: e.VOICESTUDIO_VOICE ?? 'default',
+      /** 목소리 프로필 이름을 강제로 지정할 때만 (보통은 스튜디오 화면에서 고른다) */
+      voiceOverride: e.VOICESTUDIO_VOICE ?? '',
       speed: Number(e.VOICESTUDIO_SPEED ?? '1.05'),
       apiKey: e.OMNIVOICE_API_KEY ?? '',
     },

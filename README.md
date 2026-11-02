@@ -56,14 +56,15 @@ npm run dev
 
 브라우저에서 http://localhost:5178 을 엽니다. `npm run seed`는 파일럿 샘플 3개(김치전·시금치·달걀)를 넣습니다.
 
-### 음성 (둘 중 하나, 모두 무료)
+### 음성: VoiceStudio (무료, 내 PC에서 실행)
 
-1. **VoiceStudio (추천)** — 내 PC에서 돌아가는 오픈소스 음성 앱([debpalash/VoiceStudio](https://github.com/debpalash/VoiceStudio)). 앱을 켜 두면 스튜디오가 자동으로 찾아 씁니다(`http://127.0.0.1:3900`). 앱의 목소리 디자인으로 맛조수 목소리를 만들고 프로필 이름을 `맛조수`로 저장한 뒤 `VOICESTUDIO_VOICE=맛조수`로 지정하세요. 한국어가 되는 엔진(VoxCPM2, GPT-SoVITS 등)을 고르고, 모델별 이용 조건은 앱의 Model Manager에서 확인하세요. 실제 사람 목소리 복제는 본인 동의가 있을 때만 씁니다.
-2. **edge-tts** — 설치 후 서버를 다시 시작합니다.
+1. [VoiceStudio 최신 버전](https://github.com/debpalash/VoiceStudio/releases/latest)에서 내 PC용 설치 파일을 받아 설치하고 앱을 켭니다. Windows는 `.exe`이고, 처음 켤 때 모델을 내려받느라 몇 분 걸립니다.
+2. 스튜디오의 **캐릭터·목소리** 메뉴에서 연결 상태가 `VoiceStudio 연결됨`으로 바뀌면 **맛조수 목소리 자동으로 만들기 → ▶ 들어보기**를 누릅니다.
+3. 마음에 안 들면 VoiceStudio 앱의 목소리 디자인에서 다듬거나 새로 만든 뒤, 스튜디오에서 그 목소리를 고릅니다.
 
-```bash
-pip install edge-tts
-```
+스튜디오는 앱이 쓰는 포트(3900, 막혀 있으면 4900·5900…)를 자동으로 찾습니다. 앱을 나중에 켜도 15초 안에 알아챕니다. 모델별 이용 조건은 앱의 Model Manager에서 확인하고, 실제 사람 목소리 복제는 본인 동의가 있을 때만 씁니다.
+
+VoiceStudio 없이 간단히 쓰려면 edge-tts도 됩니다(`pip install edge-tts` 후 스튜디오 재시작).
 
 둘 다 없으면 자막만 있는 영상이 만들어집니다.
 
@@ -84,8 +85,8 @@ pip install edge-tts
 | `PORT` | `5178` | 스튜디오 주소 포트 |
 | `MATLAB_DATA_DIR` | `./data` | DB·음성·완성본 저장 폴더 |
 | `TTS_PROVIDER` | `auto` | `auto`(VoiceStudio → edge-tts → 없음 순) · `voicestudio` · `edge` · `none` |
-| `VOICESTUDIO_URL` | `http://127.0.0.1:3900` | VoiceStudio 로컬 API 주소 |
-| `VOICESTUDIO_VOICE` / `VOICESTUDIO_MODEL` | `default` / `tts-1` | 목소리 프로필 이름 / 엔진 (`tts-1` = 앱에서 고른 엔진) |
+| `VOICESTUDIO_URL` | (자동 찾기) | VoiceStudio 주소를 직접 정할 때만 |
+| `VOICESTUDIO_VOICE` / `VOICESTUDIO_MODEL` | (화면에서 고름) / `tts-1` | 목소리 강제 지정 / 엔진 (`tts-1` = 앱에서 고른 엔진) |
 | `TTS_VOICE` | `ko-KR-SunHiNeural` | 캐릭터 목소리 (`edge-tts --list-voices`로 확인) |
 | `TTS_RATE` / `TTS_PITCH` | `+8%` / `+15Hz` | 말 속도·높이 |
 | `REMOTION_BROWSER_EXECUTABLE` | (자동 다운로드) | 이미 있는 크롬/크로미움 경로 |

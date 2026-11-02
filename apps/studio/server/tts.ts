@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ttsSettings } from './config.ts';
+import { findVoiceStudio, readVoiceSettings } from './voicestudio.ts';
 
 /**
  * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
@@ -13,20 +14,27 @@ import { ttsSettings } from './config.ts';
 export type TtsProvider = 'voicestudio' | 'edge' | 'none';
 
 let detected: Promise<TtsProvider> | null = null;
+let detectedAt = 0;
+/** 앱을 나중에 켜도 알아채도록 15초마다 다시 확인한다 */
+const DETECT_TTL_MS = 15_000;
 
 /** 설정이 바뀌었을 때 다시 감지하도록 캐시를 지운다 */
 export function resetTtsDetection() {
   detected = null;
 }
 
+/** 지금 쓰는 VoiceStudio 목소리 프로필 이름 (환경 변수 > 스튜디오 화면에서 고른 것 > 기본) */
+export function voicestudioVoice(): string {
+  return ttsSettings().voicestudio.voiceOverride || readVoiceSettings().voicestudioVoice || 'default';
+}
+
+async function voicestudioUrl(): Promise<string | null> {
+  const s = await findVoiceStudio();
+  return s.state === 'ok' ? s.url : null;
+}
+
 async function voicestudioUp(): Promise<boolean> {
-  const { url, apiKey } = ttsSettings().voicestudio;
-  try {
-    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1500), headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return (await voicestudioUrl()) !== null;
 }
 
 async function edgeUp(): Promise<boolean> {
@@ -39,10 +47,12 @@ async function edgeUp(): Promise<boolean> {
 export function ttsProvider(): Promise<TtsProvider> {
   const choice = ttsSettings().provider;
   if (choice === 'none') return Promise.resolve('none');
+  if (detected && Date.now() - detectedAt > DETECT_TTL_MS) detected = null;
+  if (!detected) detectedAt = Date.now();
   detected ??= (async (): Promise<TtsProvider> => {
     if (choice === 'voicestudio') {
       if (await voicestudioUp()) return 'voicestudio';
-      throw new Error(`VoiceStudio(${ttsSettings().voicestudio.url})에 연결할 수 없습니다. VoiceStudio 앱을 켜 주세요.`);
+      throw new Error('VoiceStudio에 연결할 수 없습니다. VoiceStudio 앱을 켜고, 모델 준비가 끝날 때까지 기다려 주세요.');
     }
     if (choice === 'edge') {
       if (await edgeUp()) return 'edge';
@@ -60,7 +70,7 @@ export function ttsProvider(): Promise<TtsProvider> {
 
 export function describeVoice(provider: TtsProvider): string {
   const s = ttsSettings();
-  if (provider === 'voicestudio') return `VoiceStudio · ${s.voicestudio.voice} (${s.voicestudio.model})`;
+  if (provider === 'voicestudio') return `VoiceStudio · ${voicestudioVoice()}`;
   if (provider === 'edge') return `edge-tts · ${s.edge.voice}`;
   return '음성 없음 (자막만)';
 }
@@ -78,12 +88,15 @@ function run(cmd: string, args: string[]): Promise<void> {
 /** 목소리 설정 + 문장으로 캐시 키를 만든다 (설정이 바뀌면 새로 만든다) */
 export function audioKey(text: string, provider: TtsProvider = 'edge'): string {
   const s = ttsSettings();
-  const voice = provider === 'voicestudio' ? ['vs', s.voicestudio.model, s.voicestudio.voice, s.voicestudio.speed] : [s.edge.voice, s.edge.rate, s.edge.pitch];
+  const voice = provider === 'voicestudio' ? ['vs', s.voicestudio.model, voicestudioVoice(), s.voicestudio.speed] : [s.edge.voice, s.edge.rate, s.edge.pitch];
   return crypto.createHash('sha1').update([...voice, text].join('|')).digest('hex').slice(0, 16);
 }
 
 async function voicestudioSpeech(text: string, out: string) {
-  const { url, model, voice, speed, apiKey } = ttsSettings().voicestudio;
+  const { model, speed, apiKey } = ttsSettings().voicestudio;
+  const url = await voicestudioUrl();
+  if (!url) throw new Error('VoiceStudio에 연결할 수 없습니다. 앱을 켜 주세요.');
+  const voice = voicestudioVoice();
   const res = await fetch(`${url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
@@ -105,7 +118,9 @@ export async function measuredWords(file: string, line: string): Promise<[number
   const cache = `${file}.words.json`;
   if (fs.existsSync(cache)) return (JSON.parse(fs.readFileSync(cache, 'utf8')) as [number, number][] | null) ?? undefined;
   if ((await ttsProvider().catch(() => 'none')) !== 'voicestudio') return undefined;
-  const { url, apiKey } = ttsSettings().voicestudio;
+  const { apiKey } = ttsSettings().voicestudio;
+  const url = await voicestudioUrl();
+  if (!url) return undefined;
   let words: [number, number][] | null = null;
   try {
     const form = new FormData();

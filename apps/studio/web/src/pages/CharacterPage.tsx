@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BRAND, EMOTIONS, EMOTION_LABELS, brandDescription } from '@mat-lab/recipe-core';
 import { COLORS, Character } from '@mat-lab/video';
 import { useApp } from '../App.tsx';
+import { VoicePanel } from '../components/VoicePanel.tsx';
 
 /** 30fps 프레임 카운터 (캐릭터 애니메이션 미리보기용) */
 function useFrame() {
@@ -36,6 +37,8 @@ export const CharacterPage: React.FC = () => {
           <input type="checkbox" checked={talking} onChange={(e) => setTalking(e.target.checked)} /> 말하는 입 모양 보기
         </label>
       </div>
+
+      <VoicePanel />
 
       <div className="chars">
         {EMOTIONS.map((e) => (

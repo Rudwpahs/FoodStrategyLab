@@ -78,7 +78,7 @@ export const App: React.FC = () => {
         <nav>
           <a href="#/" className={!project && hash === '#/' ? 'active' : ''}>콘텐츠 목록</a>
           <a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}>새 콘텐츠</a>
-          <a href="#/character" className={hash.startsWith('#/character') ? 'active' : ''}>캐릭터·브랜드</a>
+          <a href="#/character" className={hash.startsWith('#/character') ? 'active' : ''}>캐릭터·목소리</a>
         </nav>
       </header>
       <main>{page}</main>

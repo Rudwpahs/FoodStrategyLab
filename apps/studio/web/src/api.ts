@@ -27,7 +27,19 @@ export interface RenderStatus extends RenderRow {
   baseUrl: string;
 }
 
+export interface VoiceInfo {
+  voicestudio: { state: 'ok' | 'starting'; url: string; version: string } | { state: 'offline' };
+  profiles: { id: string; name: string; kind: string; audioUrl: string | null }[];
+  selected: string;
+  provider: 'voicestudio' | 'edge' | 'none';
+  describe: string;
+}
+
 export const api = {
+  voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
+  setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
+  designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),
+  voiceSample: (text?: string) => request<{ url: string; seconds: number }>('POST', '/voice/sample', { text }),
   meta: () => request<Meta>('GET', '/meta'),
   list: () => request<ProjectSummary[]>('GET', '/projects'),
   get: (id: number) => request<ProjectDetail>('GET', `/projects/${id}`),

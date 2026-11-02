@@ -5,9 +5,10 @@ import { ZodError } from 'zod';
 import { SAMPLE_RECIPES, buildAiPrompt, buildReelPromptPack, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, parseAiScript } from '@mat-lab/recipe-core';
 import { buildBlogPost, buildSocialCopy } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
-import { generateVoice, previewTimeline, startRender } from './pipeline.ts';
+import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { HttpError, type Repo } from './repo.ts';
-import { describeVoice, ttsProvider } from './tts.ts';
+import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
+import { createDesignedVoice, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 const id = (req: Request) => {
   const n = Number(req.params.id);
@@ -31,6 +32,42 @@ export function createApp(repo: Repo) {
   api.get('/meta', async (_req, res) => {
     const provider = await ttsProvider().catch(() => 'none' as const);
     res.json({ tts: { provider, voice: describeVoice(provider) }, samples: SAMPLE_RECIPES });
+  });
+
+  // ---- 음성 설정 (VoiceStudio) ----
+  api.get('/voice', async (_req, res) => {
+    const vs = await findVoiceStudio();
+    const profiles = vs.state === 'ok' ? await listProfiles(vs.url).catch(() => []) : [];
+    const provider = await ttsProvider().catch(() => 'none' as const);
+    res.json({ voicestudio: vs, profiles, selected: voicestudioVoice(), provider, describe: describeVoice(provider) });
+  });
+
+  api.put('/voice', (req, res) => {
+    const voice = String(req.body?.voice ?? '').trim();
+    if (!voice) throw new HttpError(400, '목소리를 고르세요.');
+    writeVoiceSettings({ voicestudioVoice: voice });
+    resetTtsDetection();
+    res.json({ selected: voicestudioVoice() });
+  });
+
+  /** 맛조수 목소리를 VoiceStudio에 자동으로 만든다 (이미 있으면 그대로 쓴다) */
+  api.post('/voice/design', async (req, res) => {
+    const vs = await findVoiceStudio();
+    if (vs.state !== 'ok') throw new HttpError(409, vs.state === 'starting' ? 'VoiceStudio가 아직 준비 중입니다. 잠시 뒤 다시 눌러 주세요.' : 'VoiceStudio 앱이 꺼져 있습니다. 앱을 켜 주세요.');
+    const name = String(req.body?.name ?? '맛조수').trim() || '맛조수';
+    const existing = (await listProfiles(vs.url)).find((p) => p.name === name);
+    const profile = existing ?? (await createDesignedVoice(vs.url, name));
+    writeVoiceSettings({ voicestudioVoice: profile.name });
+    resetTtsDetection();
+    res.json({ profile, created: !existing });
+  });
+
+  /** 지금 목소리로 짧은 문장을 만들어 들어본다 */
+  api.post('/voice/sample', async (req, res) => {
+    const text = String(req.body?.text ?? '이희재의 맛 연구소에서 오늘도 실험!').slice(0, 200);
+    if ((await ttsProvider().catch(() => 'none')) === 'none') throw new HttpError(409, '사용할 수 있는 음성 도구가 없습니다.');
+    const a = await synthesize(text, AUDIO_DIR);
+    res.json({ url: `/media/audio/${path.basename(a.file)}`, seconds: a.seconds });
   });
 
   api.get('/projects', (_req, res) => res.json(repo.listProjects()));
