@@ -13,7 +13,7 @@ export interface Issue {
 
 const UNITS = [
   'kg', 'mg', 'g', 'ml', 'mL', 'L', 'l', 'cc',
-  '컵', '큰술', '작은술', '스푼', '숟가락', '티스푼', 'T', 't',
+  '컵', 'C', '큰술', '작은술', '스푼', '숟가락', '티스푼', 'T', 't',
   '개', '알', '장', '줌', '꼬집', '쪽', '대', '모',
   '시간', '분', '초', '도', '°C', '℃', '배', '%',
 ];
@@ -43,6 +43,7 @@ function normalizeUnit(u: string): string {
   if (u === 'mL' || u === 'cc') return 'ml';
   if (u === 'l') return 'L';
   if (u === 'T' || u === '스푼' || u === '숟가락') return '큰술';
+  if (u === 'C') return '컵';
   if (u === 't' || u === '티스푼') return '작은술';
   return u;
 }

@@ -106,26 +106,35 @@ export interface RecipeCardProps {
 /** 블로그·저장용 레시피 카드 (1080×1350). 원본 데이터만 사용한다. */
 export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, reviewed }) => {
   const steps = recipe.steps;
-  const stepSize = steps.length > 5 ? 36 : 40;
+  const many = recipe.ingredients.length > 10;
+  const ingSize = recipe.ingredients.length > 16 ? 22 : many ? 25 : 36;
+  const stepSize = steps.length > 7 ? 26 : steps.length > 5 ? 34 : 40;
+  const groups = new Map<string, RecipeInput['ingredients']>();
+  for (const i of recipe.ingredients) groups.set(i.group ?? '', [...(groups.get(i.group ?? '') ?? []), i]);
   return (
-    <AbsoluteFill style={{ background: COLORS.cream, fontFamily: FONT_FAMILY, color: COLORS.ink, padding: 60, letterSpacing: -1, wordBreak: 'keep-all' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 34, fontWeight: 800, color: COLORS.red }}>
-        <LogoMark size={56} /> {BRAND.labName}
+    <AbsoluteFill style={{ background: COLORS.cream, fontFamily: FONT_FAMILY, color: COLORS.ink, padding: 56, letterSpacing: -1, wordBreak: 'keep-all' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 32, fontWeight: 800, color: COLORS.red }}>
+        <LogoMark size={52} /> {BRAND.labName}
       </div>
-      <div style={{ fontSize: fitSize(recipe.dishName || recipe.topic, 76, 12), fontWeight: 950, marginTop: 20, letterSpacing: -2 }}>{recipe.dishName || recipe.topic}</div>
-      <div style={{ display: 'flex', gap: 36, marginTop: 34, flex: 1 }}>
-        <div style={{ width: 380, background: COLORS.white, border: `5px solid ${COLORS.ink}`, borderRadius: 32, padding: 32 }}>
-          <div style={{ fontSize: 38, fontWeight: 900, color: COLORS.red, marginBottom: 18 }}>재료</div>
-          {recipe.ingredients.map((i, idx) => (
-            <div key={idx} style={{ fontSize: 36, fontWeight: 600, lineHeight: 1.35, marginBottom: 14 }}>
-              · {formatIngredient(i)}
+      <div style={{ fontSize: fitSize(recipe.dishName || recipe.topic, 72, 12), fontWeight: 950, marginTop: 14, letterSpacing: -2 }}>{recipe.dishName || recipe.topic}</div>
+      <div style={{ display: 'flex', gap: 28, marginTop: 26, flex: 1, minHeight: 0 }}>
+        <div style={{ width: many ? 330 : 380, background: COLORS.white, border: `5px solid ${COLORS.ink}`, borderRadius: 32, padding: 28 }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: COLORS.red, marginBottom: 12 }}>재료</div>
+          {[...groups.entries()].map(([group, items]) => (
+            <div key={group} style={{ marginBottom: group ? 6 : 0 }}>
+              {group && <div style={{ fontSize: ingSize + 2, fontWeight: 850, margin: '4px 0 2px', color: COLORS.navy }}>[{group}]</div>}
+              {items.map((i, idx) => (
+                <div key={idx} style={{ fontSize: ingSize, fontWeight: 600, lineHeight: many ? 1.25 : 1.32, marginBottom: many ? 1 : 12 }}>
+                  · {formatIngredient(i)}
+                </div>
+              ))}
             </div>
           ))}
         </div>
-        <div style={{ flex: 1, background: COLORS.white, border: `5px solid ${COLORS.ink}`, borderRadius: 32, padding: 32 }}>
-          <div style={{ fontSize: 38, fontWeight: 900, color: COLORS.red, marginBottom: 18 }}>만드는 법</div>
+        <div style={{ flex: 1, background: COLORS.white, border: `5px solid ${COLORS.ink}`, borderRadius: 32, padding: 28 }}>
+          <div style={{ fontSize: 36, fontWeight: 900, color: COLORS.red, marginBottom: 12 }}>만드는 법</div>
           {steps.map((s, idx) => (
-            <div key={idx} style={{ display: 'flex', gap: 14, fontSize: stepSize, fontWeight: 600, lineHeight: 1.35, marginBottom: 16 }}>
+            <div key={idx} style={{ display: 'flex', gap: 12, fontSize: stepSize, fontWeight: 600, lineHeight: 1.32, marginBottom: steps.length > 7 ? 8 : 16 }}>
               <b style={{ color: COLORS.red }}>{idx + 1}</b>
               <span>{s}</span>
             </div>
@@ -133,11 +142,11 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, reviewed }) => {
         </div>
       </div>
       {recipe.tips[0] && (
-        <div style={{ marginTop: 30, background: COLORS.yellow, border: `5px solid ${COLORS.ink}`, borderRadius: 28, padding: '24px 30px', fontSize: 34, fontWeight: 700, lineHeight: 1.4 }}>
+        <div style={{ marginTop: 22, background: COLORS.yellow, border: `5px solid ${COLORS.ink}`, borderRadius: 28, padding: '20px 28px', fontSize: 30, fontWeight: 700, lineHeight: 1.4 }}>
           💡 {BRAND.tipPhrase} — {recipe.tips[0]}
         </div>
       )}
-      <div style={{ marginTop: 24, fontSize: 26, fontWeight: 600, opacity: 0.7 }}>
+      <div style={{ marginTop: 18, fontSize: 24, fontWeight: 600, opacity: 0.7 }}>
         {reviewed ? `${BRAND.researcherTitle} ${BRAND.researcher} 검토 완료` : '검수 전 초안'} · 출처: {recipe.source}
       </div>
     </AbsoluteFill>

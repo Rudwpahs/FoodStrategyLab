@@ -138,13 +138,15 @@ const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?
 /** 볶음·기타: 작은 조각 더미 */
 const Heap: React.FC<{ food: FoodProfile; cook: number; jiggle?: number; radius?: number }> = ({ food, cook, jiggle = 0, radius = 0.13 }) => {
   const bits = useBits(26, radius, 3);
-  const palette = [mix(food.rawColor, food.cookedColor, cook), ...food.bits];
+  // 견과류(호두 등)는 둥근 조각으로, 시럽에 조린 듯 윤기 있게
+  const nutty = food.bits[0] === '#A9733F';
+  const palette = nutty ? [mix(food.rawColor, food.cookedColor, cook), mix(food.rawColor, food.cookedColor, cook * 0.8)] : [mix(food.rawColor, food.cookedColor, cook), ...food.bits];
   return (
     <group>
       {bits.map((b, i) => (
         <mesh key={i} position={[b.x, 0.015 + (1 - Math.hypot(b.x, b.z) / radius) * 0.04 + Math.sin(jiggle + i) * 0.006, b.z]} rotation={[b.rot, b.rot * 2, 0]} scale={b.s} castShadow>
-          <boxGeometry args={[0.035, 0.022, 0.03]} />
-          <M color={palette[Math.floor(b.c * palette.length)] ?? palette[0]!} />
+          {nutty ? <dodecahedronGeometry args={[0.02, 0]} /> : <boxGeometry args={[0.035, 0.022, 0.03]} />}
+          <M color={palette[Math.floor(b.c * palette.length)] ?? palette[0]!} rough={nutty ? 0.45 : 0.75} />
         </mesh>
       ))}
     </group>

@@ -38,6 +38,8 @@ export const FORMAT_LABELS: Record<Format, string> = {
 export const IngredientSchema = z.object({
   name: z.string().trim().min(1, '재료 이름을 입력하세요'),
   amount: z.string().trim().default(''),
+  /** 재료 묶음 (예: 들깨소스, 고명). 비어 있으면 묶음 없음 */
+  group: z.string().trim().optional(),
 });
 export type Ingredient = z.infer<typeof IngredientSchema>;
 

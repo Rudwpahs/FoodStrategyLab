@@ -41,7 +41,11 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
   md.push(`## ${BRAND.notePhrase}`, '', recipe.principle, '');
   if (recipe.commonMistake) md.push(`## 이런 실수, 해보셨나요?`, '', recipe.commonMistake, '');
   if (recipe.ingredients.length) {
-    md.push(`## 재료`, '', ...recipe.ingredients.map((i) => `- ${formatIngredient(i)}`), '');
+    md.push(`## 재료`, '');
+    for (const [group, items] of groupIngredients(recipe.ingredients)) {
+      if (group) md.push(`### ${group}`, '');
+      md.push(...items.map((i) => `- ${formatIngredient(i)}`), '');
+    }
   }
   if (recipe.steps.length) {
     md.push(`## 만드는 법`, '', ...recipe.steps.map((s, i) => `${i + 1}. ${s}`), '');
@@ -54,6 +58,16 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
   md.push('---', '', reviewLine, AI_NOTICE, `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
 
   return { title, markdown: md.join('\n'), html: markdownToHtml(md.join('\n')), tags };
+}
+
+/** 재료를 묶음별로 나눈다 (입력 순서 유지) */
+export function groupIngredients<T extends { group?: string }>(items: T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const key = it.group ?? '';
+    groups.set(key, [...(groups.get(key) ?? []), it]);
+  }
+  return [...groups.entries()];
 }
 
 function image(src: string | undefined, alt: string): string {
@@ -96,6 +110,7 @@ export function markdownToHtml(md: string): string {
     if (!line.trim()) continue;
     if ((m = line.match(/^# (.*)$/))) out.push(`<h1>${inline(m[1]!)}</h1>`);
     else if ((m = line.match(/^## (.*)$/))) out.push(`<h2>${inline(m[1]!)}</h2>`);
+    else if ((m = line.match(/^### (.*)$/))) out.push(`<h3>${inline(m[1]!)}</h3>`);
     else if ((m = line.match(/^> (.*)$/))) out.push(`<blockquote>${inline(m[1]!)}</blockquote>`);
     else if ((m = line.match(/^!\[(.*?)\]\((.*?)\)$/))) out.push(`<p><img src="${escapeHtml(m[2]!)}" alt="${escapeHtml(m[1]!)}" style="max-width:100%"></p>`);
     else if (line === '---') out.push('<hr>');
