@@ -17,7 +17,7 @@ type CylProps = { pos: [number, number, number]; r: number; h: number; color: st
 export const Cyl: React.FC<CylProps> = ({ pos, r, h, color, seg = 20, rot, r2, metal }) => (
   <mesh position={pos} rotation={rot} castShadow receiveShadow>
     <cylinderGeometry args={[r, r2 ?? r, h, seg]} />
-    <meshStandardMaterial color={color} roughness={metal ? 0.35 : 0.8} metalness={metal ? 0.5 : 0} />
+    <meshStandardMaterial color={color} roughness={metal ? 0.35 : 0.8} metalness={metal ? 0.5 : 0} flatShading />
   </mesh>
 );
 
@@ -170,23 +170,9 @@ export const Plate: React.FC = () => (
   </group>
 );
 
+/** 주방 세트 (조명은 장면 분위기에 따라 KitchenScene에서 넣는다) */
 export const KitchenSet: React.FC = () => (
   <group>
-    <color attach="background" args={['#FFF1DC']} />
-    <hemisphereLight args={['#FFF7EA', '#B9784A', 1.15]} />
-    <directionalLight
-      position={[-3.2, 4.2, 2.6]}
-      intensity={2.3}
-      color="#FFF4E0"
-      castShadow
-      shadow-mapSize={[1024, 1024]}
-      shadow-camera-left={-3}
-      shadow-camera-right={3}
-      shadow-camera-top={3}
-      shadow-camera-bottom={-3}
-      shadow-bias={-0.0008}
-    />
-    <ambientLight intensity={0.25} />
     <Floor />
     <Walls />
     <Counter />

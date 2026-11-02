@@ -26,6 +26,7 @@ const M: React.FC<{ color: string; rough?: number; opacity?: number; emissive?: 
     opacity={opacity ?? 1}
     emissive={emissive ?? '#000000'}
     emissiveIntensity={emissive ? 0.9 : 0}
+    flatShading
   />
 );
 

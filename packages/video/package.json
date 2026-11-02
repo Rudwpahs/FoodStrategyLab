@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./render": "./src/render.ts",
-    "./timeline": "./src/timeline.ts"
+    "./timeline": "./src/timeline.ts",
+    "./audio": "./src/audio.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

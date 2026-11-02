@@ -23,6 +23,7 @@ export interface Meta {
 
 export interface RenderStatus extends RenderRow {
   files: string[];
+  captionChecks: string[];
   baseUrl: string;
 }
 
@@ -51,6 +52,13 @@ export const api = {
     if (!res.ok) throw new Error(data?.error ?? '사진 업로드 실패');
     return data as ProjectDetail;
   },
+  uploadSceneMedia: async (id: number, sceneId: string, file: File) => {
+    const res = await fetch(`/api/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? '업로드 실패');
+    return data as ProjectDetail;
+  },
+  deleteSceneMedia: (id: number, sceneId: string) => request<ProjectDetail>('DELETE', `/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`),
   deletePhoto: (id: number) => request<ProjectDetail>('DELETE', `/projects/${id}/photo`),
   reelPrompts: (id: number) =>
     request<{ characterSheet: string; environment: string; clips: { file: string; frameFile: string; framePrompt: string; videoPrompt: string; line: string }[]; markdown: string }>('GET', `/projects/${id}/reel-prompts`),

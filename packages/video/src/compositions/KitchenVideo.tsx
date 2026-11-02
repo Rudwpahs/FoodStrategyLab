@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
-import { Captions } from '../components/Captions.tsx';
+import { AbsoluteFill, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
+import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
+import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
+import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
@@ -27,10 +29,16 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const props = useMemo(() => ingredientProps(recipe), [recipe]);
   const state = stageAt(script, timings, frame, food.kind, props.length);
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
+  const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
+  const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
+  const captionBottom = state && !clipNow ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
-      {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />}
+      {/* 색 보정: 대비·채도를 살짝 올려 영화 같은 느낌 */}
+      <AbsoluteFill style={{ filter: 'contrast(1.07) saturate(1.1)' }}>
+        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />}
+      </AbsoluteFill>
       {/* 재료 이름표: 3D 소품 위에 붙는다 */}
       {state &&
         props.map((p, i) => {
@@ -63,14 +71,20 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
             </div>
           );
         })}
+      {/* 생성 AI 클립: 묶음 첫 장면에 올리면 약 8초 묶음 전체를 덮는다 */}
+      {clips.map((c) => (
+        <Sequence key={c.key} from={c.from} durationInFrames={c.duration} name={`clip ${c.key}`}>
+          <SceneClip media={c.media} />
+        </Sequence>
+      ))}
+      <PostFx frame={frame} />
       {script.scenes.map((scene) => {
         const timing = byId.get(scene.id);
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            {sceneMedia[scene.id] && <SceneClip media={sceneMedia[scene.id]!} />}
-            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} photoUrl={photoUrl} />
-            {timing.audioUrl ? <Audio src={timing.audioUrl} /> : null}
+            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} photoUrl={photoUrl} captionBottom={captionBottom} />
+            <SpeechAudio timing={timing} />
           </Sequence>
         );
       })}
@@ -79,6 +93,44 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
     </AbsoluteFill>
   );
 };
+
+type Media = { url: string; kind: 'video' | 'image' };
+
+/** 올린 클립이 덮을 구간: 묶음 첫 장면이면 묶음 전체, 아니면 그 장면만 */
+function clipLayers(script: VideoProps['script'], timings: SceneTiming[], media: Record<string, Media>) {
+  const t = new Map(timings.map((x) => [x.sceneId, x]));
+  const layers: { key: string; from: number; duration: number; media: Media }[] = [];
+  for (const group of clipGroups(script)) {
+    group.forEach((id, k) => {
+      const m = media[id];
+      const start = t.get(id);
+      if (!m || !start) return;
+      // 묶음 안 다른 장면에 따로 올린 클립이 있으면 그 앞에서 멈춘다
+      let endId = id;
+      if (k === 0) for (const g of group.slice(1)) {
+        if (media[g]) break;
+        endId = g;
+      }
+      const end = t.get(endId)!;
+      layers.push({ key: id, from: start.from, duration: end.from + end.durationInFrames - start.from, media: m });
+    });
+  }
+  return layers;
+}
+
+/** 가장자리 어둡게(비네트) + 은은한 필름 질감 */
+const PostFx: React.FC<{ frame: number }> = ({ frame }) => (
+  <AbsoluteFill style={{ pointerEvents: 'none' }}>
+    <AbsoluteFill style={{ background: 'radial-gradient(ellipse 75% 62% at 50% 52%, rgba(0,0,0,0) 58%, rgba(30,14,6,0.42) 100%)' }} />
+    <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.08, mixBlendMode: 'overlay' }}>
+      <filter id="grain">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={frame % 12} stitchTiles="stitch" />
+        <feColorMatrix type="saturate" values="0" />
+      </filter>
+      <rect width="100%" height="100%" filter="url(#grain)" />
+    </svg>
+  </AbsoluteFill>
+);
 
 /**
  * 생성 AI로 만든 장면 클립(또는 첫 프레임 이미지)을 3D 장면 대신 보여준다.
@@ -104,7 +156,14 @@ const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> =
 };
 
 /** 3D 화면을 가리지 않도록 카드를 작게, 위쪽에 띄운다 */
-const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; photoUrl?: string }> = ({ scene, timing, topic, reviewed, photoUrl }) => {
+const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; photoUrl?: string; captionBottom: number }> = ({
+  scene,
+  timing,
+  topic,
+  reviewed,
+  photoUrl,
+  captionBottom,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const showPhoto = photoUrl && (scene.type === 'tip' || scene.type === 'outro');
@@ -120,7 +179,15 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         </div>
       )}
       {showPhoto && <PhotoInset url={photoUrl} frame={frame} fps={fps} />}
-      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} punch={scene.type === 'tip' || scene.type === 'mistake'} />
+      <Captions
+        line={scene.line}
+        frame={frame}
+        speechFrames={Math.max(1, timing.speechFrames)}
+        punch={scene.type === 'tip' || scene.type === 'mistake'}
+        words={timing.words}
+        voice={scene.type === 'tip' || scene.type === 'explain' ? 'researcher' : 'character'}
+        bottomY={captionBottom}
+      />
     </AbsoluteFill>
   );
 };
@@ -237,5 +304,6 @@ function coverState(emotion: Scene['emotion'], square: boolean): import('../thre
     plated: 'done',
     propPop: [],
     chefPop: 1,
+    mood: 'golden',
   };
 }

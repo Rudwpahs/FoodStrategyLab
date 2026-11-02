@@ -198,8 +198,10 @@ export function createApp(repo: Repo) {
 
   api.get('/renders/:id', (req, res) => {
     const r = repo.getRender(id(req));
-    const files = r.status === 'done' && fs.existsSync(r.outputDir) ? fs.readdirSync(r.outputDir) : [];
-    res.json({ ...r, files, baseUrl: `/media/renders/${r.id}` });
+    const files = r.status === 'done' && fs.existsSync(r.outputDir) ? fs.readdirSync(r.outputDir).filter((f) => f.includes('.')) : [];
+    const checkDir = path.join(r.outputDir, 'caption-check');
+    const captionChecks = r.status === 'done' && fs.existsSync(checkDir) ? fs.readdirSync(checkDir).sort() : [];
+    res.json({ ...r, files, captionChecks, baseUrl: `/media/renders/${r.id}` });
   });
 
   api.get('/renders/:id/download', (req, res) => {

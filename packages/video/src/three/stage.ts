@@ -72,6 +72,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     plated: shot.plated,
     propPop,
     chefPop: index === 0 ? popIn(local / 10) : 1,
+    mood: shot.mood,
   };
 }
 

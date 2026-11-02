@@ -97,6 +97,36 @@ async function voicestudioSpeech(text: string, out: string) {
   fs.writeFileSync(out, Buffer.from(await res.arrayBuffer()));
 }
 
+/**
+ * 실제 음성의 어절별 시간 (VoiceStudio 받아쓰기, Whisper 계열).
+ * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다. 결과는 음성 파일 옆에 저장한다.
+ */
+export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
+  const cache = `${file}.words.json`;
+  if (fs.existsSync(cache)) return (JSON.parse(fs.readFileSync(cache, 'utf8')) as [number, number][] | null) ?? undefined;
+  if ((await ttsProvider().catch(() => 'none')) !== 'voicestudio') return undefined;
+  const { url, apiKey } = ttsSettings().voicestudio;
+  let words: [number, number][] | null = null;
+  try {
+    const form = new FormData();
+    form.append('file', new Blob([fs.readFileSync(file)], { type: 'audio/mpeg' }), path.basename(file));
+    form.append('model', 'whisper-1');
+    form.append('language', 'ko');
+    form.append('response_format', 'verbose_json');
+    form.append('timestamp_granularities[]', 'word');
+    const res = await fetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(120_000) });
+    if (res.ok) {
+      const data = (await res.json()) as { words?: { start: number; end: number }[] };
+      const expected = line.trim().split(/\s+/).filter(Boolean).length;
+      if (data.words && data.words.length === expected) words = data.words.map((w) => [w.start, w.end]);
+    }
+  } catch {
+    words = null;
+  }
+  fs.writeFileSync(cache, JSON.stringify(words));
+  return words ?? undefined;
+}
+
 /** 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초) */
 export async function synthesize(text: string, audioDir: string): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();

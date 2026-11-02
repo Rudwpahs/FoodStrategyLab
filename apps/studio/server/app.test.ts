@@ -52,7 +52,10 @@ describe('스튜디오 API 흐름', () => {
     expect(approved.body.approval.reviewer).toBe('이희재');
 
     const pack = await call('GET', `/projects/${pid}/reel-prompts`);
-    expect(pack.body.clips.length).toBe(approved.body.latest.script.scenes.length);
+    // 약 8초 클립으로 묶고, 클립당 대사는 2줄 이하, 모든 장면이 순서대로 들어간다
+    const ids = pack.body.clips.flatMap((c: { sceneIds: string[] }) => c.sceneIds);
+    expect(ids).toEqual(approved.body.latest.script.scenes.map((x: { id: string }) => x.id));
+    expect(pack.body.clips.every((c: { sceneIds: string[] }) => c.sceneIds.length <= 2)).toBe(true);
     expect(pack.body.clips[0].videoPrompt).toContain(approved.body.latest.script.scenes[0].line);
     expect(pack.body.characterSheet).toContain('MATJOSU');
 

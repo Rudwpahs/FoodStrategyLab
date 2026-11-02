@@ -3,6 +3,8 @@ import { SAMPLE_RECIPES, generateTemplateScript, ingredientProps } from '@mat-la
 import { buildTimeline } from '../timeline.ts';
 import { propPositions } from './layout.ts';
 import { projectToScreen, stageAt } from './stage.ts';
+import { faceSafeCaptionBottom } from './captionPlacement.ts';
+import { CHEF_POS } from './layout.ts';
 
 const recipe = SAMPLE_RECIPES[0]!;
 const script = generateTemplateScript(recipe);
@@ -44,5 +46,28 @@ describe('3D 장면 상태', () => {
       expect(s.x).toBeGreaterThan(40);
       expect(s.x).toBeLessThan(1040);
     }
+  });
+});
+
+describe('자막과 얼굴', () => {
+  it('캐릭터가 카메라를 보는 장면에서 자막이 얼굴과 겹치지 않는다', () => {
+    for (const type of ['intro', 'question', 'mistake', 'outro']) {
+      for (const t of [0.1, 0.5, 0.9]) {
+        const st = stageAt(script, timings, frameOf(type, t), 'pancake', props)!;
+        const bottom = faceSafeCaptionBottom(st, 1080, 1920);
+        const top = projectToScreen([CHEF_POS[0], CHEF_POS[1] + 0.95, CHEF_POS[2]], st.camera, 1080, 1920).y;
+        const chin = projectToScreen([CHEF_POS[0], CHEF_POS[1] + 0.2, CHEF_POS[2]], st.camera, 1080, 1920).y;
+        const capTop = bottom - 230;
+        const overlap = chin > capTop && top < bottom;
+        expect(overlap && bottom !== 1480, `${type} ${t}`).toBe(false);
+        expect(bottom).toBeLessThanOrEqual(1480);
+      }
+    }
+  });
+
+  it('장면마다 분위기 조명이 다르다', () => {
+    expect(stageAt(script, timings, frameOf('mistake', 0.5), 'pancake', props)!.mood).toBe('gloom');
+    expect(stageAt(script, timings, frameOf('steps', 0.5), 'pancake', props)!.mood).toBe('fire');
+    expect(stageAt(script, timings, frameOf('tip', 0.5), 'pancake', props)!.mood).toBe('golden');
   });
 });

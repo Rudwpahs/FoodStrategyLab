@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Audio, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Scene } from '@mat-lab/recipe-core';
 import { Character } from '../components/Character.tsx';
 import { Captions } from '../components/Captions.tsx';
+import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark, LabBackground } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
@@ -27,7 +28,7 @@ export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed }) =
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
             <SceneLayer scene={scene} timing={timing} topic={script.title} reviewed={reviewed} />
-            {timing.audioUrl ? <Audio src={timing.audioUrl} /> : null}
+            <SpeechAudio timing={timing} />
           </Sequence>
         );
       })}
@@ -60,7 +61,7 @@ const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; r
       >
         <Character emotion={scene.emotion} frame={frame} talking={talking} size={size} />
       </div>
-      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} punch={scene.type === 'tip'} />
+      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} punch={scene.type === 'tip'} words={timing.words} voice={scene.type === 'tip' || scene.type === 'explain' ? 'researcher' : 'character'} />
     </AbsoluteFill>
   );
 };

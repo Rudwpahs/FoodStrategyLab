@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildReelPromptPack, canRender, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { buildBlogPost, buildSocialCopy, buildSrt, buildZip } from '@mat-lab/publishing';
-import { buildTimeline, type SceneTiming, type VideoProps } from '@mat-lab/video/timeline';
+import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
+import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
-import { cachedAudio, synthesize, ttsProvider } from './tts.ts';
+import { cachedAudio, measuredWords, synthesize, ttsProvider } from './tts.ts';
 
 export const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 export const RENDER_DIR = path.join(DATA_DIR, 'renders');
@@ -18,10 +19,25 @@ export async function previewTimeline(script: Script, origin = ''): Promise<{ ti
   const provider = await ttsProvider().catch(() => 'none' as const);
   const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR, provider));
   const voiced = audio.every(Boolean);
+  // 음성 앞뒤 무음을 잘라 실제 말소리 길이로 장면 길이를 맞춘다 (PDF: 무음 자르기)
+  const extras: (SpeechExtra | undefined)[] = [];
+  const seconds: (number | null)[] = [];
+  for (const [i, a] of audio.entries()) {
+    if (!a) {
+      extras.push(undefined);
+      seconds.push(null);
+      continue;
+    }
+    const bounds = await cachedSpeechBounds(a.file).catch(() => ({ start: 0, end: a.seconds }));
+    const words = await measuredWords(a.file, script.scenes[i]!.line).catch(() => undefined);
+    extras.push({ trimStart: bounds.start, words });
+    seconds.push(Math.max(0.3, bounds.end - bounds.start));
+  }
   const timings = buildTimeline(
     script,
-    audio.map((a) => a?.seconds ?? null),
+    seconds,
     audio.map((a) => (a ? audioUrl(a.file, origin) : undefined)),
+    extras,
   );
   return { timings, voiced };
 }
@@ -86,11 +102,20 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     await renderer.getServeUrl();
 
     set('영상 렌더링', 0.12);
+    const raw = path.join(outDir, 'video-raw.mp4');
     await renderer.renderVideo({
       inputProps: props,
-      outputLocation: path.join(outDir, 'video.mp4'),
-      onProgress: (p) => set('영상 렌더링', 0.12 + p * 0.73),
+      outputLocation: raw,
+      onProgress: (p) => set('영상 렌더링', 0.12 + p * 0.7),
     });
+    // 숏폼 기준 음량(-14 LUFS)으로 맞춘다
+    set('음량 맞추기', 0.83);
+    await normalizeLoudness(raw, path.join(outDir, 'video.mp4')).then(
+      () => fs.rmSync(raw),
+      () => fs.renameSync(raw, path.join(outDir, 'video.mp4')),
+    );
+    set('자막 확인 프레임', 0.85);
+    await captionCheckFrames(path.join(outDir, 'video.mp4'), script, timings, path.join(outDir, 'caption-check')).catch(() => undefined);
 
     set('썸네일·레시피 카드', 0.86);
     const cover = { title: recipe.topic, emotion: 'joy' as const, recipe, photoColor: photo?.color || undefined };
@@ -109,6 +134,22 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     repo.updateRender(renderId, { status: 'failed', error: message, finished: true });
     repo.logEvent(projectId, 'error', `제작 실패 (작업 #${renderId}): ${message}`);
   }
+}
+
+/** 자막마다 한 장씩 프레임을 뽑아 둔다: 자막이 얼굴을 가리거나 잘리지 않았는지 확인용 */
+export async function captionCheckFrames(video: string, script: Script, timings: SceneTiming[], dir: string) {
+  fs.mkdirSync(dir, { recursive: true });
+  let n = 0;
+  for (const t of timings) {
+    const scene = script.scenes.find((s) => s.id === t.sceneId);
+    if (!scene) continue;
+    for (const g of captionGroups(scene.line, Math.max(1, t.speechFrames), t.words)) {
+      n++;
+      const at = (t.from + (g.from + g.to) / 2) / 30;
+      await extractFrame(video, at, path.join(dir, `${String(n).padStart(2, '0')}-${scene.id}.png`));
+    }
+  }
+  return n;
 }
 
 export function writePackage(outDir: string, recipe: RecipeInput, script: Script, timings: SceneTiming[], review: { reviewer: string; reviewedAt: string }) {

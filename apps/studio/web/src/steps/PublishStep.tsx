@@ -91,7 +91,7 @@ const ReelPrompts: React.FC<{ projectId: number; approved: boolean }> = ({ proje
         </button>
       </div>
       <div className="muted small">
-        ChatGPT(이미지)·Gemini(영상) 같은 생성 AI로 장면을 직접 만들 때 쓰는 프롬프트입니다. 캐릭터 시트 → 주방 배경 → 장면별 첫 프레임·영상 순서로 복사해 쓰세요.
+        ChatGPT(이미지)·Gemini(영상)로 장면을 직접 만들 때 쓰는 프롬프트입니다. 캐릭터 시트 → 주방 배경 → 클립별(약 8초) 첫 프레임 → 영상 순서로, 같은 채팅에서 이어서 쓰세요. 만든 클립은 [영상 제작]에서 같은 번호에 올리세요.
         서비스별로 무료 사용량이 다르고 유료일 수 있으며, 생성 영상이 대사·분량을 바꾸면 쓰지 마세요. {approved ? '' : '(승인된 대본만)'}
       </div>
       {pack && (
@@ -103,10 +103,10 @@ const ReelPrompts: React.FC<{ projectId: number; approved: boolean }> = ({ proje
           </div>
           {pack.clips.map((c, i) => (
             <div key={i} className="row small">
-              <b>장면 {i + 1}</b>
+              <b>클립 {i + 1}</b>
               <span className="muted" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.line}</span>
-              <button className="btn small" onClick={() => run(() => copyText(c.framePrompt), `장면 ${i + 1} 첫 프레임 프롬프트 복사`)}>A 첫 프레임</button>
-              <button className="btn small" onClick={() => run(() => copyText(c.videoPrompt), `장면 ${i + 1} 영상 프롬프트 복사`)}>B 영상</button>
+              <button className="btn small" onClick={() => run(() => copyText(c.framePrompt), `클립 ${i + 1} 첫 프레임 프롬프트 복사`)}>A 첫 프레임</button>
+              <button className="btn small" onClick={() => run(() => copyText(c.videoPrompt), `클립 ${i + 1} 영상 프롬프트 복사`)}>B 영상</button>
             </div>
           ))}
         </div>

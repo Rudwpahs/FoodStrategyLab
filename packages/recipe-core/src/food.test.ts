@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, foodProfile, generateTemplateScript, inferFoodKind, ingredientProps } from './index.ts';
+import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientProps } from './index.ts';
 
 const [kimchi, spinach, egg] = SAMPLE_RECIPES as [typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0]];
 
@@ -51,6 +51,21 @@ describe('3D 음식 표현 규칙', () => {
     for (const r of SAMPLE_RECIPES.slice(3)) {
       const errors = checkScript(r, generateTemplateScript(r)).filter((i) => i.level === 'error');
       expect(errors, r.dishName).toEqual([]);
+    }
+  });
+});
+
+describe('생성 AI 클립 묶음', () => {
+  it('약 8초, 대사 2줄 이하로 순서대로 묶는다', () => {
+    for (const r of SAMPLE_RECIPES) {
+      const script = generateTemplateScript(r);
+      const groups = clipGroups(script);
+      expect(groups.flat()).toEqual(script.scenes.map((s) => s.id));
+      for (const g of groups) {
+        expect(g.length).toBeLessThanOrEqual(2);
+        const secs = g.reduce((sum, id) => sum + estimateSceneSeconds(script.scenes.find((s) => s.id === id)!), 0);
+        expect(g.length === 1 || secs <= 8).toBe(true);
+      }
     }
   });
 });

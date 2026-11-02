@@ -6,6 +6,8 @@ import { BURNER, CHEF_POS, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
  * 같은 규칙으로 매 영상을 찍으므로 결과가 일정하다.
  */
 export type ChefAction = 'idle' | 'cook' | 'present' | 'point';
+/** 장면 분위기 조명 (참고 영상처럼 장면마다 색 조명을 바꾼다) */
+export type Mood = 'morning' | 'curious' | 'gloom' | 'fire' | 'fresh' | 'golden';
 
 export interface Shot {
   from: { pos: Vec3; target: Vec3 };
@@ -21,6 +23,7 @@ export interface Shot {
   plated: 'none' | 'done' | 'failed';
   /** 재료 소품 표시: 숨김 / 차례로 등장 / 계속 표시 */
   props: 'hidden' | 'appear' | 'shown';
+  mood: Mood;
 }
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -58,6 +61,7 @@ const PRESENT = {
 
 export function shotFor(type: SceneType, indexOfType: number): Shot {
   const base: Omit<Shot, 'from' | 'to'> = {
+    mood: 'morning',
     fov: 46,
     action: 'idle',
     face: 'camera',
@@ -70,21 +74,21 @@ export function shotFor(type: SceneType, indexOfType: number): Shot {
     case 'intro':
       return { ...base, ...WIDE, props: 'hidden' };
     case 'mistake':
-      return { ...base, ...PRESENT, plated: 'failed', props: 'hidden', action: 'present' };
+      return { ...base, ...PRESENT, mood: 'gloom', plated: 'failed', props: 'hidden', action: 'present' };
     case 'question':
-      return { ...base, ...CHEF_CLOSE, fov: 42, props: 'hidden' };
+      return { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, props: 'hidden' };
     case 'explain':
       return indexOfType % 2 === 0
-        ? { ...base, ...STOVE, action: 'cook', face: 'stove', burnerOn: true, cook: [0.15, 0.45], props: 'hidden' }
-        : { ...base, ...CHEF_CLOSE, fov: 42, action: 'point', burnerOn: true, cook: [0.45, 0.5], props: 'hidden' };
+        ? { ...base, ...STOVE, mood: 'fire', action: 'cook', face: 'stove', burnerOn: true, cook: [0.15, 0.45], props: 'hidden' }
+        : { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, action: 'point', burnerOn: true, cook: [0.45, 0.5], props: 'hidden' };
     case 'ingredients':
-      return { ...base, ...COUNTER, props: 'appear' };
+      return { ...base, ...COUNTER, mood: 'fresh', props: 'appear' };
     case 'steps':
-      return { ...base, ...STOVE, action: 'cook', face: 'stove', burnerOn: true, cook: [0, 1] };
+      return { ...base, ...STOVE, mood: 'fire', action: 'cook', face: 'stove', burnerOn: true, cook: [0, 1] };
     case 'tip':
-      return { ...base, ...PLATE_CLOSE, fov: 40, plated: 'done', cook: [1, 1] };
+      return { ...base, ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1] };
     case 'outro':
-      return { ...base, ...PRESENT, plated: 'done', cook: [1, 1], action: 'present' };
+      return { ...base, ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present' };
   }
 }
 

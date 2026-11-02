@@ -63,3 +63,24 @@ describe('숏폼 자막 묶음', () => {
     w.forEach((x, i) => i > 0 && expect(x.from).toBe(w[i - 1]!.to));
   });
 });
+
+describe('소리 다듬기', () => {
+  it('앞 무음만큼 음성을 건너뛰고, 잰 단어 시간을 장면 기준으로 바꾼다', () => {
+    const t = buildTimeline(script, script.scenes.map(() => 2), [], script.scenes.map(() => ({ trimStart: 0.4, words: [[0.4, 0.9], [1.0, 2.4]] as [number, number][] })));
+    expect(t[0]!.audioTrimFrames).toBe(12);
+    expect(t[0]!.words).toEqual([[0, 15], [18, 60]]);
+  });
+
+  it('팁 장면 뒤에는 짧은 쉼이 있다', () => {
+    const t = buildTimeline(script, script.scenes.map(() => 2));
+    const tip = script.scenes.findIndex((x) => x.type === 'tip');
+    const explain = script.scenes.findIndex((x) => x.type === 'explain');
+    expect(t[tip]!.durationInFrames).toBeGreaterThan(t[explain]!.durationInFrames);
+  });
+
+  it('잰 단어 시간이 어절 수와 맞으면 자막이 그 시간을 따른다', () => {
+    const groups = captionGroups('하나 둘 셋', 90, [[0, 10], [40, 50], [70, 85]]);
+    const words = groups.flatMap((g) => g.words);
+    expect(words.map((w) => w.from)).toEqual([0, 40, 70]);
+  });
+});

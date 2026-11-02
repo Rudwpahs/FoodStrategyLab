@@ -21,7 +21,7 @@ function onFace(x: number, y: number, lift = 0.004): [number, number, number] {
 }
 
 const Mat: React.FC<{ color: string; rough?: number; emissive?: string }> = ({ color, rough = 0.7, emissive }) => (
-  <meshStandardMaterial color={color} roughness={rough} emissive={emissive ?? '#000000'} emissiveIntensity={emissive ? 0.5 : 0} />
+  <meshStandardMaterial color={color} roughness={rough} emissive={emissive ?? '#000000'} emissiveIntensity={emissive ? 0.5 : 0} flatShading />
 );
 
 interface Props {
@@ -85,12 +85,12 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
         ))}
         {/* 몸통 */}
         <mesh position={[0, BODY.cy, 0]} scale={[BODY.rx, BODY.ry, BODY.rz]} castShadow>
-          <sphereGeometry args={[1, 40, 28]} />
+          <sphereGeometry args={[1, 22, 16]} />
           <Mat color={CREAM} rough={0.6} />
         </mesh>
         {/* 앞치마: 몸통 아래쪽 */}
         <mesh position={[0, BODY.cy, 0]} scale={[BODY.rx * 1.012, BODY.ry * 1.012, BODY.rz * 1.012]} castShadow>
-          <sphereGeometry args={[1, 40, 28, 0, Math.PI * 2, Math.PI * 0.6, Math.PI * 0.4]} />
+          <sphereGeometry args={[1, 22, 16, 0, Math.PI * 2, Math.PI * 0.6, Math.PI * 0.4]} />
           <Mat color={COLORS.red} />
         </mesh>
         {/* 앞치마 주머니 + 플라스크 */}
@@ -132,7 +132,7 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
             [0, 0.17, 0.06, 0.1],
           ].map(([x, y, z, r], i) => (
             <mesh key={i} position={[x!, y!, z!]} castShadow>
-              <sphereGeometry args={[r!, 20, 14]} />
+              <sphereGeometry args={[r!, 12, 9]} />
               <Mat color="#FFFFFF" />
             </mesh>
           ))}

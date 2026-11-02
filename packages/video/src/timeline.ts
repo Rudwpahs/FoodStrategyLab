@@ -6,6 +6,8 @@ const PAD_SECONDS = 0.45;
 const MIN_SCENE_SECONDS = 1.8;
 const MIN_INTRO_SECONDS = 2.4;
 const OUTRO_EXTRA_SECONDS = 1.6;
+/** 펀치라인(팁·실수) 뒤에 두는 짧은 쉼 */
+const PUNCH_BEAT_SECONDS = 0.35;
 /** 화면 카드를 읽는 데 필요한 최소 시간 (초당 약 16자, 최대 5초) */
 const READ_CHARS_PER_SECOND = 16;
 const MAX_READ_SECONDS = 5;
@@ -23,6 +25,18 @@ export interface SceneTiming {
   /** 대사가 나오는 구간 (입 모양·자막용) */
   speechFrames: number;
   audioUrl?: string;
+  /** 음성 파일 앞의 무음을 건너뛰는 프레임 수 */
+  audioTrimFrames?: number;
+  /** 실제 음성에서 잰 어절별 [시작, 끝] 프레임 (장면 시작 기준) */
+  words?: [number, number][];
+}
+
+/** 음성 파일 분석 결과 (초 단위) */
+export interface SpeechExtra {
+  /** 말이 시작되는 시각 — 앞 무음을 잘라낸다 */
+  trimStart?: number;
+  /** 어절별 [시작, 끝] (원본 파일 기준 초) */
+  words?: [number, number][];
 }
 
 export interface VideoProps {
@@ -46,13 +60,22 @@ export interface VideoProps {
  * 장면별 음성 길이(초)로 타임라인을 만든다.
  * 음성이 없으면(null) 글자 수로 길이를 추정한다.
  */
-export function buildTimeline(script: Script, speechSeconds: (number | null)[], audioUrls: (string | undefined)[] = [], fps = FPS): SceneTiming[] {
+export function buildTimeline(
+  script: Script,
+  speechSeconds: (number | null)[],
+  audioUrls: (string | undefined)[] = [],
+  extras: (SpeechExtra | undefined)[] = [],
+  fps = FPS,
+): SceneTiming[] {
   let cursor = 0;
   return script.scenes.map((scene, i) => {
     const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - 0.5;
     let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
+    if (scene.type === 'tip' || scene.type === 'mistake') seconds += PUNCH_BEAT_SECONDS;
     const durationInFrames = Math.ceil(seconds * fps);
+    const extra = extras[i];
+    const trim = extra?.trimStart ?? 0;
     const timing: SceneTiming = {
       sceneId: scene.id,
       from: cursor,
@@ -60,6 +83,8 @@ export function buildTimeline(script: Script, speechSeconds: (number | null)[], 
       speechFrames: Math.min(durationInFrames, Math.ceil(speech * fps)),
       audioUrl: audioUrls[i],
     };
+    if (trim > 0) timing.audioTrimFrames = Math.round(trim * fps);
+    if (extra?.words?.length) timing.words = extra.words.map(([a, b]) => [Math.max(0, Math.round((a - trim) * fps)), Math.max(0, Math.round((b - trim) * fps))]);
     cursor += durationInFrames;
     return timing;
   });
@@ -128,9 +153,19 @@ export interface CaptionGroup {
   to: number;
 }
 
-/** 어절별 시간: 글자 수 비율로 대사 구간을 나눈다 (실제 음성 길이에 맞춰짐) */
-export function wordTimings(line: string, speechFrames: number): WordTiming[] {
+/**
+ * 어절별 시간. 실제 음성에서 잰 시간(measured)이 어절 수와 맞으면 그것을 쓰고,
+ * 아니면 글자 수 비율로 대사 구간을 나눈다.
+ */
+export function wordTimings(line: string, speechFrames: number, measured?: [number, number][]): WordTiming[] {
   const words = line.trim().split(/\s+/).filter(Boolean);
+  if (measured && measured.length === words.length) {
+    return words.map((text, i) => ({
+      text,
+      from: i === 0 ? 0 : measured[i]![0],
+      to: i === words.length - 1 ? Math.max(speechFrames, measured[i]![1]) : measured[i + 1]![0],
+    }));
+  }
   const weights = words.map((w) => Math.max(1, w.replace(/[^\p{L}\p{N}]/gu, '').length) + 0.6);
   const total = weights.reduce((a, b) => a + b, 0);
   let cursor = 0;
@@ -146,14 +181,14 @@ export function wordTimings(line: string, speechFrames: number): WordTiming[] {
  * 화면 자막 묶음: 1~3어절씩 (최대 13자), 문장이 끝나면 끊는다.
  * 숏폼 자막 규칙: 짧게, 말하는 단어 강조.
  */
-export function captionGroups(line: string, speechFrames: number, maxWords = 3, maxChars = 13): CaptionGroup[] {
+export function captionGroups(line: string, speechFrames: number, measured?: [number, number][], maxWords = 3, maxChars = 13): CaptionGroup[] {
   const groups: CaptionGroup[] = [];
   let cur: WordTiming[] = [];
   const flush = () => {
     if (cur.length) groups.push({ words: cur, from: cur[0]!.from, to: cur.at(-1)!.to });
     cur = [];
   };
-  for (const w of wordTimings(line, speechFrames)) {
+  for (const w of wordTimings(line, speechFrames, measured)) {
     const chars = [...cur, w].map((x) => x.text).join(' ').length;
     if (cur.length && (cur.length >= maxWords || chars > maxChars)) flush();
     cur.push(w);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
+import { ClipUploads } from '../components/ClipUploads.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
@@ -16,7 +17,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
 
   useEffect(() => {
     if (project.latest) loadPreview();
-  }, [project.latest?.version, project.status, project.photo?.url, project.recipe]);
+  }, [project.latest?.version, project.status, project.photo?.url, project.recipe, project.sceneMedia]);
 
   // 진행 중인 제작 작업 상태를 주기적으로 확인
   useEffect(() => {
@@ -111,6 +112,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             )}
           </div>
         </div>
+        <ClipUploads project={project} setProject={setProject} />
         <div className="card stack">
           <h2>최종 제작</h2>
           {!approved ? (
@@ -164,6 +166,18 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
               <img src={`${render.baseUrl}/thumbnail.png`} alt="썸네일" style={{ width: 200, borderRadius: 10 }} />
               <img src={`${render.baseUrl}/recipe-card.png`} alt="레시피 카드" style={{ width: 200, borderRadius: 10 }} />
             </div>
+            {render.captionChecks.length > 0 && (
+              <div className="stack">
+                <div className="small"><b>자막 확인</b> <span className="muted">자막마다 한 장씩: 얼굴을 가리거나 잘린 자막이 없는지 보세요.</span></div>
+                <div className="row" style={{ gap: 6 }}>
+                  {render.captionChecks.map((f) => (
+                    <a key={f} href={`${render.baseUrl}/caption-check/${f}`} target="_blank" rel="noreferrer">
+                      <img src={`${render.baseUrl}/caption-check/${f}`} alt={f} style={{ width: 72, borderRadius: 6, border: '1px solid var(--line)' }} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="row small">
               {render.files.filter((f) => f !== 'package.zip').map((f) => (
                 <a key={f} href={`${render.baseUrl}/${f}`} download>{f}</a>
