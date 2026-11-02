@@ -6,6 +6,15 @@ const PAD_SECONDS = 0.45;
 const MIN_SCENE_SECONDS = 1.8;
 const MIN_INTRO_SECONDS = 2.4;
 const OUTRO_EXTRA_SECONDS = 1.6;
+/** 화면 카드를 읽는 데 필요한 최소 시간 (초당 약 16자, 최대 5초) */
+const READ_CHARS_PER_SECOND = 16;
+const MAX_READ_SECONDS = 5;
+
+export function readingSeconds(scene: Pick<Script['scenes'][number], 'type' | 'cardItems'>): number {
+  if (scene.type !== 'ingredients' && scene.type !== 'steps') return 0;
+  const chars = (scene.cardItems ?? []).join('').replace(/\s/g, '').length;
+  return Math.min(MAX_READ_SECONDS, 1 + chars / READ_CHARS_PER_SECOND);
+}
 
 export interface SceneTiming {
   sceneId: string;
@@ -32,7 +41,7 @@ export function buildTimeline(script: Script, speechSeconds: (number | null)[], 
   let cursor = 0;
   return script.scenes.map((scene, i) => {
     const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - 0.5;
-    let seconds = Math.max(speech + PAD_SECONDS, scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
+    let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
     const durationInFrames = Math.ceil(seconds * fps);
     const timing: SceneTiming = {

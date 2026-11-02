@@ -22,6 +22,15 @@ describe('타임라인', () => {
   });
 });
 
+describe('카드 읽는 시간', () => {
+  it('재료·순서 카드는 대사가 짧아도 읽을 시간을 준다', () => {
+    const t = buildTimeline(script, script.scenes.map(() => 1));
+    const i = script.scenes.findIndex((s) => s.type === 'ingredients');
+    expect(t[i]!.durationInFrames).toBeGreaterThanOrEqual(3 * 30);
+    expect(t[i]!.durationInFrames).toBeLessThanOrEqual(5 * 30);
+  });
+});
+
 describe('자막', () => {
   it('짧은 쉼표 조각으로 쪼개지 않는다', () => {
     const chunks = splitCaption('준비물은 시금치, 굵은소금, 국간장, 다진 마늘, 참기름!');
