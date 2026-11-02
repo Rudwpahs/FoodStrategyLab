@@ -57,5 +57,9 @@ export function openDb(file: string): Db {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  // 이전 버전 DB에 없는 열 추가
+  const cols = new Set((db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]).map((c) => c.name));
+  if (!cols.has('photo_file')) db.exec("ALTER TABLE projects ADD COLUMN photo_file TEXT NOT NULL DEFAULT ''");
+  if (!cols.has('photo_color')) db.exec("ALTER TABLE projects ADD COLUMN photo_color TEXT NOT NULL DEFAULT ''");
   return db;
 }

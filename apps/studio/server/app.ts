@@ -107,8 +107,45 @@ export function createApp(repo: Repo) {
     const pid = id(req);
     const latest = latestOrThrow(repo, pid);
     const state = repo.versionState(pid);
+    const photo = repo.getPhoto(pid);
     const { timings, voiced } = previewTimeline(latest.script);
-    res.json({ version: latest.version, voiced, props: { script: latest.script, timings, reviewed: state.approvedScriptVersion === latest.version } });
+    res.json({
+      version: latest.version,
+      voiced,
+      props: {
+        script: latest.script,
+        timings,
+        reviewed: state.approvedScriptVersion === latest.version,
+        recipe: repo.getRecipe(pid),
+        photoUrl: photo?.url,
+        photoColor: photo?.color || undefined,
+      },
+    });
+  });
+
+  // 완성 사진: 영상 속 '완성 사진' 카드와 3D 음식 색에 쓴다
+  api.put('/projects/:id/photo', express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '12mb' }), (req, res) => {
+    const pid = id(req);
+    repo.getRecipe(pid);
+    const type = String(req.headers['content-type'] ?? '');
+    const ext = type.includes('png') ? '.png' : type.includes('webp') ? '.webp' : '.jpg';
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'JPG·PNG·WEBP 사진을 올려 주세요.');
+    const color = String(req.query.color ?? '');
+    if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) throw new HttpError(400, '색상 형식이 잘못되었습니다.');
+    const dir = path.join(DATA_DIR, 'photos');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const old of fs.readdirSync(dir).filter((f) => f.startsWith(`${pid}.`))) fs.rmSync(path.join(dir, old));
+    fs.writeFileSync(path.join(dir, `${pid}${ext}`), req.body);
+    repo.setPhoto(pid, `photos/${pid}${ext}`, color);
+    res.json(repo.getProject(pid));
+  });
+
+  api.delete('/projects/:id/photo', (req, res) => {
+    const pid = id(req);
+    const photo = repo.getPhoto(pid);
+    if (photo) fs.rmSync(path.join(DATA_DIR, photo.file), { force: true });
+    repo.setPhoto(pid, '', '');
+    res.json(repo.getProject(pid));
   });
 
   api.get('/projects/:id/blog', (req, res) => {

@@ -69,7 +69,15 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     set('음성 생성', 0.02);
     await generateVoice(script);
     const { timings } = previewTimeline(script, origin);
-    const props: VideoProps = { script, timings, reviewed: true };
+    const photo = repo.getPhoto(projectId);
+    const props: VideoProps = {
+      script,
+      timings,
+      reviewed: true,
+      recipe,
+      photoUrl: photo ? `${origin}${photo.url}` : undefined,
+      photoColor: photo?.color || undefined,
+    };
 
     set('렌더러 준비', 0.08);
     const renderer = await loadRenderer();
@@ -83,12 +91,13 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     });
 
     set('썸네일·레시피 카드', 0.86);
-    const cover = { title: recipe.topic, emotion: coverEmotion(recipe) };
+    const cover = { title: recipe.topic, emotion: 'joy' as const, recipe, photoColor: photo?.color || undefined };
     await renderer.renderStillImage('Cover', cover, path.join(outDir, 'cover.png'));
     await renderer.renderStillImage('SquareThumb', cover, path.join(outDir, 'thumbnail.png'));
     await renderer.renderStillImage('RecipeCard', { recipe, reviewed: true }, path.join(outDir, 'recipe-card.png'));
 
     set('블로그·게시 묶음', 0.95);
+    if (photo) fs.copyFileSync(path.join(DATA_DIR, photo.file), path.join(outDir, `photo${path.extname(photo.file)}`));
     writePackage(outDir, recipe, script, timings, { reviewer: approval.reviewer, reviewedAt: approval.createdAt });
 
     repo.updateRender(renderId, { status: 'done', stage: '완료', progress: 1, finished: true });
@@ -98,10 +107,6 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     repo.updateRender(renderId, { status: 'failed', error: message, finished: true });
     repo.logEvent(projectId, 'error', `제작 실패 (작업 #${renderId}): ${message}`);
   }
-}
-
-function coverEmotion(recipe: RecipeInput) {
-  return recipe.format === 'comedy' ? ('embarrassed' as const) : ('surprised' as const);
 }
 
 export function writePackage(outDir: string, recipe: RecipeInput, script: Script, timings: SceneTiming[], review: { reviewer: string; reviewedAt: string }) {
@@ -117,9 +122,8 @@ export function writePackage(outDir: string, recipe: RecipeInput, script: Script
   };
   for (const [name, text] of Object.entries(texts)) fs.writeFileSync(path.join(outDir, name), text);
   const files: Record<string, Uint8Array | string> = { ...texts };
-  for (const name of ['video.mp4', 'cover.png', 'thumbnail.png', 'recipe-card.png']) {
-    const p = path.join(outDir, name);
-    if (fs.existsSync(p)) files[name] = fs.readFileSync(p);
+  for (const name of fs.readdirSync(outDir)) {
+    if (/\.(mp4|png|jpe?g|webp)$/.test(name)) files[name] = fs.readFileSync(path.join(outDir, name));
   }
   fs.writeFileSync(path.join(outDir, 'package.zip'), buildZip(files));
 }

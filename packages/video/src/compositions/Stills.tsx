@@ -5,6 +5,7 @@ import { Character } from '../components/Character.tsx';
 import { fitSize } from '../components/SceneCard.tsx';
 import { BrandBadge, LabBackground, LogoMark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
+import { KitchenCover } from './KitchenVideo.tsx';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 
 ensureFonts();
@@ -12,11 +13,21 @@ ensureFonts();
 export interface CoverProps {
   title: string;
   emotion: Emotion;
+  /** 있으면 3D 주방 커버로 만든다 */
+  recipe?: RecipeInput;
+  photoColor?: string;
   [key: string]: unknown;
 }
 
 /** 릴스·쇼츠 커버 (1080×1920) */
-export const Cover: React.FC<CoverProps> = ({ title, emotion }) => (
+export const Cover: React.FC<CoverProps> = (props) =>
+  props.recipe ? <KitchenCover title={props.title} recipe={props.recipe} photoColor={props.photoColor} emotion={props.emotion} /> : <FlatCover {...props} />;
+
+/** 정사각 썸네일 (1080×1080) */
+export const SquareThumb: React.FC<CoverProps> = (props) =>
+  props.recipe ? <KitchenCover title={props.title} recipe={props.recipe} photoColor={props.photoColor} emotion={props.emotion} /> : <FlatSquare {...props} />;
+
+const FlatCover: React.FC<CoverProps> = ({ title, emotion }) => (
   <AbsoluteFill>
     <LabBackground />
     <BrandBadge />
@@ -48,8 +59,7 @@ export const Cover: React.FC<CoverProps> = ({ title, emotion }) => (
   </AbsoluteFill>
 );
 
-/** 블로그·피드용 정사각 썸네일 (1080×1080) */
-export const SquareThumb: React.FC<CoverProps> = ({ title, emotion }) => (
+const FlatSquare: React.FC<CoverProps> = ({ title, emotion }) => (
   <AbsoluteFill style={{ background: COLORS.cream, fontFamily: FONT_FAMILY }}>
     <LabBackground counterTop={860} height={1080} />
     <BrandBadge scale={0.8} />

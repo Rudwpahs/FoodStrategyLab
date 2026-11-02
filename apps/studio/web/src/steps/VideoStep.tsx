@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
-import { api, type RenderStatus } from '../api.ts';
+import { api, photoColor, type RenderStatus } from '../api.ts';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
-export const VideoStep: React.FC<StepProps> = ({ project, reload, go }) => {
+export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go }) => {
   const { run, meta } = useApp();
   const [preview, setPreview] = useState<{ props: VideoProps; voiced: boolean } | null>(null);
   const [voicing, setVoicing] = useState(false);
@@ -16,7 +16,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, reload, go }) => {
 
   useEffect(() => {
     if (project.latest) loadPreview();
-  }, [project.latest?.version, project.status]);
+  }, [project.latest?.version, project.status, project.photo?.url, project.recipe]);
 
   // 진행 중인 제작 작업 상태를 주기적으로 확인
   useEffect(() => {
@@ -78,6 +78,39 @@ export const VideoStep: React.FC<StepProps> = ({ project, reload, go }) => {
       </div>
 
       <div className="stack">
+        <div className="card stack">
+          <h2>완성 사진 (선택)</h2>
+          <div className="muted small">실제 완성 요리 사진을 올리면 영상 끝부분에 '완성 사진'으로 나오고, 3D 음식 색도 사진 색에 맞춰집니다.</div>
+          <div className="row">
+            {project.photo && (
+              <>
+                <img src={project.photo.url} alt="완성 사진" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 12, border: '2px solid var(--ink)' }} />
+                {project.photo.color && <span className="swatch"><i style={{ background: project.photo.color }} />{project.photo.color}</span>}
+              </>
+            )}
+            <label className="btn small">
+              {project.photo ? '사진 바꾸기' : '사진 올리기'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  const p = await run(async () => api.uploadPhoto(project.id, file, await photoColor(file)), '완성 사진을 올렸습니다');
+                  if (p) setProject(p);
+                }}
+              />
+            </label>
+            {project.photo && (
+              <button className="btn small ghost" onClick={async () => {
+                const p = await run(() => api.deletePhoto(project.id), '사진을 지웠습니다');
+                if (p) setProject(p);
+              }}>삭제</button>
+            )}
+          </div>
+        </div>
         <div className="card stack">
           <h2>최종 제작</h2>
           {!approved ? (

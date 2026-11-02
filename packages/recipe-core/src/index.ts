@@ -6,3 +6,4 @@ export * from './format.ts';
 export * from './samples.ts';
 export * from './generator/template.ts';
 export * from './generator/prompt.ts';
+export * from './food.ts';

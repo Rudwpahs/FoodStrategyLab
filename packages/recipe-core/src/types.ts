@@ -53,6 +53,8 @@ export const RecipeInputSchema = z.object({
   tips: z.array(z.string().trim().min(1)).default([]),
   commonMistake: z.string().trim().default(''),
   source: z.string().trim().default('이희재 조리 노트'),
+  /** 3D 음식 모양. 'auto'면 요리 이름·재료로 추정 */
+  foodKind: z.enum(['auto', 'pancake', 'egg', 'greens', 'soup', 'rice', 'noodles', 'stirfry', 'generic']).default('auto'),
 });
 export type RecipeInput = z.infer<typeof RecipeInputSchema>;
 

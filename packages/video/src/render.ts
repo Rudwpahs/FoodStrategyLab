@@ -20,15 +20,34 @@ export function getServeUrl(): Promise<string> {
 /** 크롬 경로를 지정하지 않으면 Remotion이 처음 한 번 무료 headless 크롬을 내려받는다. */
 const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || null;
 
+/** 3D(WebGL) 렌더링 방식. GPU가 있는 PC는 'angle', GPU 없는 서버는 'swangle'. */
+type Gl = 'angle' | 'swangle' | 'egl' | 'swiftshader' | 'vulkan' | 'angle-egl';
+let chromiumOptions = { gl: (process.env.REMOTION_GL as Gl | undefined) ?? 'angle' };
+
+/** 'angle'(GPU)이 안 되는 PC면 한 번만 소프트웨어 렌더링('swangle')으로 다시 시도한다. */
+async function withGlFallback<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (process.env.REMOTION_GL || chromiumOptions.gl !== 'angle') throw e;
+    chromiumOptions = { gl: 'swangle' };
+    return fn();
+  }
+}
+
 export interface RenderVideoOptions {
   inputProps: Record<string, unknown>;
   outputLocation: string;
   onProgress?: (progress: number) => void;
 }
 
-export async function renderVideo({ inputProps, outputLocation, onProgress }: RenderVideoOptions): Promise<void> {
+export async function renderVideo(options: RenderVideoOptions): Promise<void> {
+  return withGlFallback(() => renderVideoOnce(options));
+}
+
+async function renderVideoOnce({ inputProps, outputLocation, onProgress }: RenderVideoOptions): Promise<void> {
   const url = await getServeUrl();
-  const composition = await selectComposition({ serveUrl: url, id: 'ShortVideo', inputProps, browserExecutable });
+  const composition = await selectComposition({ serveUrl: url, id: 'ShortVideo', inputProps, browserExecutable, chromiumOptions });
   await renderMedia({
     composition,
     serveUrl: url,
@@ -36,13 +55,18 @@ export async function renderVideo({ inputProps, outputLocation, onProgress }: Re
     outputLocation,
     inputProps,
     browserExecutable,
+    chromiumOptions,
     enforceAudioTrack: true,
     onProgress: ({ progress }) => onProgress?.(progress),
   });
 }
 
-export async function renderStillImage(id: string, inputProps: Record<string, unknown>, output: string): Promise<void> {
+export async function renderStillImage(id: string, inputProps: Record<string, unknown>, output: string, frame = 0): Promise<void> {
+  return withGlFallback(() => renderStillOnce(id, inputProps, output, frame));
+}
+
+async function renderStillOnce(id: string, inputProps: Record<string, unknown>, output: string, frame: number): Promise<void> {
   const url = await getServeUrl();
-  const composition = await selectComposition({ serveUrl: url, id, inputProps, browserExecutable });
-  await renderStill({ composition, serveUrl: url, output, inputProps, browserExecutable });
+  const composition = await selectComposition({ serveUrl: url, id, inputProps, browserExecutable, chromiumOptions });
+  await renderStill({ composition, serveUrl: url, output, inputProps, browserExecutable, chromiumOptions, frame });
 }

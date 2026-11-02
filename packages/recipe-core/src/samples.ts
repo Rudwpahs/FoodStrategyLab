@@ -28,6 +28,7 @@ export const SAMPLE_RECIPES: RecipeInput[] = [
     tips: ['반죽은 부치기 직전에 섞고, 다 부친 전은 겹치지 말고 식힘망에 올리세요.'],
     commonMistake: '반죽을 미리 만들어 두었더니 전이 눅눅해졌어요.',
     source: '이희재 조리 노트 (검수 전 샘플)',
+    foodKind: 'auto',
   },
   {
     topic: '시금치는 왜 데친 뒤 찬물에 헹굴까?',
@@ -51,6 +52,7 @@ export const SAMPLE_RECIPES: RecipeInput[] = [
     tips: ['데치는 시간은 짧게, 헹굴 때는 넉넉한 찬물에 한 번에 식히세요.'],
     commonMistake: '',
     source: '이희재 조리 노트 (검수 전 샘플)',
+    foodKind: 'auto',
   },
   {
     topic: '삶은 달걀 껍질이 잘 안 까지는 이유는?',
@@ -72,5 +74,6 @@ export const SAMPLE_RECIPES: RecipeInput[] = [
     tips: ['삶자마자 얼음물에 담그고, 물속에서 까면 껍질이 훨씬 깔끔하게 벗겨집니다.'],
     commonMistake: '',
     source: '이희재 조리 노트 (검수 전 샘플)',
+    foodKind: 'auto',
   },
 ];

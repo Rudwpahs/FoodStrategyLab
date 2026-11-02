@@ -12,8 +12,9 @@ const sampleVideo: VideoProps = {
   script: sampleScript,
   timings: buildTimeline(sampleScript, sampleScript.scenes.map(() => null)),
   reviewed: false,
+  recipe: sampleRecipe,
 };
-const sampleCover: CoverProps = { title: sampleRecipe.topic, emotion: 'surprised' };
+const sampleCover: CoverProps = { title: sampleRecipe.topic, emotion: 'joy', recipe: sampleRecipe };
 const sampleCard: RecipeCardProps = { recipe: sampleRecipe, reviewed: false };
 
 export const COMPOSITION_IDS = {

@@ -45,6 +45,13 @@ export const api = {
   preview: (id: number) => request<{ version: number; voiced: boolean; props: VideoProps }>('GET', `/projects/${id}/preview`),
   blog: (id: number) =>
     request<{ post: { title: string; markdown: string; html: string; tags: string[] }; social: { instagram: string; youtubeTitle: string; youtubeDescription: string } }>('GET', `/projects/${id}/blog`),
+  uploadPhoto: async (id: number, file: File, color: string) => {
+    const res = await fetch(`/api/projects/${id}/photo?color=${encodeURIComponent(color)}`, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? '사진 업로드 실패');
+    return data as ProjectDetail;
+  },
+  deletePhoto: (id: number) => request<ProjectDetail>('DELETE', `/projects/${id}/photo`),
   startRender: (id: number) => request<{ renderId: number }>('POST', `/projects/${id}/renders`),
   render: (renderId: number) => request<RenderStatus>('GET', `/renders/${renderId}`),
 };
@@ -62,4 +69,25 @@ export async function copyHtml(html: string, fallback: string) {
   } else {
     await copyText(fallback);
   }
+}
+
+/** 사진 가운데 부분의 평균 색 (음식 색으로 사용) */
+export async function photoColor(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = 40;
+  canvas.height = 40;
+  const ctx = canvas.getContext('2d')!;
+  const s = Math.min(bitmap.width, bitmap.height) * 0.5;
+  ctx.drawImage(bitmap, (bitmap.width - s) / 2, (bitmap.height - s) / 2, s, s, 0, 0, 40, 40);
+  const { data } = ctx.getImageData(0, 0, 40, 40);
+  let r = 0, g = 0, b = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i]!;
+    g += data[i + 1]!;
+    b += data[i + 2]!;
+  }
+  const n = data.length / 4;
+  const hex = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
 }

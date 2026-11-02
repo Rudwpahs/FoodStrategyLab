@@ -21,8 +21,8 @@ try {
     const { timings, voiced } = previewTimeline(script, `http://127.0.0.1:${port}`);
     const file = path.join(outDir, `pilot-${i + 1}.mp4`);
     console.log(`[${i + 1}/3] ${recipe.topic} — 음성: ${voiced ? voice.provider : '없음(자막만)'}`);
-    await renderVideo({ inputProps: { script, timings, reviewed: false }, outputLocation: file });
-    await renderStillImage('Cover', { title: recipe.topic, emotion: recipe.format === 'comedy' ? 'embarrassed' : 'surprised' }, path.join(outDir, `pilot-${i + 1}-cover.png`));
+    await renderVideo({ inputProps: { script, timings, reviewed: false, recipe }, outputLocation: file });
+    await renderStillImage('Cover', { title: recipe.topic, emotion: 'joy', recipe }, path.join(outDir, `pilot-${i + 1}-cover.png`));
     console.log(`  → ${path.relative(ROOT, file)}`);
   }
   await renderStillImage('CharacterSheet', {}, path.join(outDir, 'character-sheet.png'));

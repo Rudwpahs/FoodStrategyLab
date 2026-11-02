@@ -7,11 +7,16 @@ import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark, LabBackground } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
 import type { SceneTiming, VideoProps } from '../timeline.ts';
+import { KitchenVideo } from './KitchenVideo.tsx';
 
 ensureFonts();
 
-/** 세로형 숏폼(1080×1920): 장면 데이터를 받아 캐릭터·카드·자막·음성을 조립한다. */
-export const ShortVideo: React.FC<VideoProps> = ({ script, timings, reviewed }) => {
+/** 세로형 숏폼(1080×1920). 레시피가 있으면 3D 주방, 없거나 look='2d'면 2D 카드형으로 만든다. */
+export const ShortVideo: React.FC<VideoProps> = (props) =>
+  props.recipe && props.look !== '2d' ? <KitchenVideo {...props} recipe={props.recipe} /> : <CardVideo {...props} />;
+
+/** 2D 카드형: 장면 데이터를 받아 캐릭터·카드·자막·음성을 조립한다. */
+export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed }) => {
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF4E2' }}>

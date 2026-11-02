@@ -63,8 +63,16 @@ export interface ProjectSummary {
   updatedAt: string;
 }
 
+export interface ProjectPhoto {
+  /** data 폴더 기준 상대 경로 (예: photos/3.jpg) */
+  file: string;
+  url: string;
+  color: string;
+}
+
 export interface ProjectDetail extends ProjectSummary {
   recipe: RecipeInput;
+  photo: ProjectPhoto | null;
   versionState: VersionState;
   latest: ScriptVersion | null;
   versions: Omit<ScriptVersion, 'script'>[];
@@ -136,6 +144,19 @@ export class Repo {
       this.addScriptVersion(id, latest.script, 'edit', '원본 레시피 수정으로 재검수 필요');
     }
     this.logEvent(id, 'recipe', '원본 레시피 수정');
+  }
+
+  getPhoto(id: number): ProjectPhoto | null {
+    const row = this.db.prepare('SELECT photo_file, photo_color, updated_at FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row || !row.photo_file) return null;
+    const file = String(row.photo_file);
+    return { file, url: `/media/${file}?v=${encodeURIComponent(String(row.updated_at))}`, color: String(row.photo_color) };
+  }
+
+  setPhoto(id: number, file: string, color: string) {
+    this.getRecipe(id);
+    this.db.prepare('UPDATE projects SET photo_file = ?, photo_color = ?, updated_at = ? WHERE id = ?').run(file, color, now(), id);
+    this.logEvent(id, 'photo', file ? '완성 사진 등록' : '완성 사진 삭제');
   }
 
   deleteProject(id: number) {
@@ -274,6 +295,6 @@ export class Repo {
       createdAt: String(r.created_at),
     }));
     const approval = versionState.approvedScriptVersion !== null ? this.lastReview(id, versionState.approvedScriptVersion) : null;
-    return { ...base, recipe: this.getRecipe(id), versionState, latest, versions, reviews, renders, events, approval };
+    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), versionState, latest, versions, reviews, renders, events, approval };
   }
 }

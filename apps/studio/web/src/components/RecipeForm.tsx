@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CATEGORIES, CATEGORY_LABELS, FORMATS, FORMAT_LABELS, type RecipeInput } from '@mat-lab/recipe-core';
+import { CATEGORIES, CATEGORY_LABELS, FOOD_KINDS, FOOD_KIND_LABELS, FORMATS, FORMAT_LABELS, inferFoodKind, type RecipeInput } from '@mat-lab/recipe-core';
 
 export const EMPTY_RECIPE: RecipeInput = {
   topic: '',
@@ -12,6 +12,7 @@ export const EMPTY_RECIPE: RecipeInput = {
   tips: [],
   commonMistake: '',
   source: '이희재 조리 노트',
+  foodKind: 'auto',
 };
 
 const lines = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -59,6 +60,13 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
             분류
             <select value={r.category} onChange={(e) => set('category', e.target.value as RecipeInput['category'])}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            3D 음식 모양 <span className="hint">영상 속 조리 장면에 나오는 음식</span>
+            <select value={r.foodKind} onChange={(e) => set('foodKind', e.target.value as RecipeInput['foodKind'])}>
+              <option value="auto">자동 — {FOOD_KIND_LABELS[inferFoodKind({ ...r, steps: lines(steps) })]}</option>
+              {FOOD_KINDS.map((k) => <option key={k} value={k}>{FOOD_KIND_LABELS[k]}</option>)}
             </select>
           </label>
           <label className="field">
