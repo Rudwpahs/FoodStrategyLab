@@ -1,0 +1,26 @@
+{
+  "name": "mat-lab",
+  "private": true,
+  "description": "이희재의 맛 연구소 — AI 캐릭터 콘텐츠 스튜디오 (개인용 프로토타입)",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @mat-lab/studio",
+    "seed": "npm run seed -w @mat-lab/studio",
+    "render:samples": "npm run render:samples -w @mat-lab/studio",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

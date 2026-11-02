@@ -1,0 +1,61 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS script_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  script_json TEXT NOT NULL,
+  source TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, version)
+);
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  script_version INTEGER NOT NULL,
+  reviewer TEXT NOT NULL,
+  checklist_json TEXT NOT NULL,
+  decision TEXT NOT NULL CHECK (decision IN ('approved', 'changes_requested')),
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS renders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  script_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
+  stage TEXT NOT NULL DEFAULT '',
+  progress REAL NOT NULL DEFAULT 0,
+  output_dir TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+`;
+
+export type Db = DatabaseSync;
+
+export function openDb(file: string): Db {
+  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+  db.exec(SCHEMA);
+  return db;
+}

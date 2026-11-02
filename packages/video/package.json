@@ -1,0 +1,26 @@
+{
+  "name": "@mat-lab/video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./render": "./src/render.ts",
+    "./timeline": "./src/timeline.ts"
+  },
+  "scripts": {
+    "studio": "remotion studio src/entry.ts"
+  },
+  "dependencies": {
+    "@mat-lab/recipe-core": "*",
+    "@remotion/bundler": "4.0.540",
+    "@remotion/cli": "4.0.540",
+    "@remotion/fonts": "4.0.540",
+    "@remotion/renderer": "4.0.540",
+    "pretendard": "1.3.9",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.540"
+  },
+  "devDependencies": { "@types/react": "19.3.0", "@types/react-dom": "19.3.0" }
+}

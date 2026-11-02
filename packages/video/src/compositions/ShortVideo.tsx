@@ -1,0 +1,61 @@
+import React, { useMemo } from 'react';
+import { AbsoluteFill, Audio, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import type { Scene } from '@mat-lab/recipe-core';
+import { Character } from '../components/Character.tsx';
+import { Captions } from '../components/Captions.tsx';
+import { SceneCard } from '../components/SceneCard.tsx';
+import { BrandBadge, DraftWatermark, LabBackground } from '../components/Stage.tsx';
+import { ensureFonts } from '../fonts.ts';
+import type { SceneTiming, VideoProps } from '../timeline.ts';
+
+ensureFonts();
+
+/** 세로형 숏폼(1080×1920): 장면 데이터를 받아 캐릭터·카드·자막·음성을 조립한다. */
+export const ShortVideo: React.FC<VideoProps> = ({ script, timings, reviewed }) => {
+  const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#FFF4E2' }}>
+      <LabBackground />
+      {script.scenes.map((scene) => {
+        const timing = byId.get(scene.id);
+        if (!timing) return null;
+        return (
+          <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
+            <SceneLayer scene={scene} timing={timing} topic={script.title} reviewed={reviewed} />
+            {timing.audioUrl ? <Audio src={timing.audioUrl} /> : null}
+          </Sequence>
+        );
+      })}
+      <BrandBadge />
+      {!reviewed && <DraftWatermark />}
+    </AbsoluteFill>
+  );
+};
+
+const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean }> = ({ scene, timing, topic, reviewed }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const talking = frame < timing.speechFrames;
+  const pop = spring({ frame, fps, config: { damping: 11, stiffness: 160 } });
+  const hasBigCard = scene.type === 'ingredients' || scene.type === 'steps';
+  // 카드가 큰 장면에서는 캐릭터를 옆으로 비켜 세운다
+  const x = hasBigCard ? 300 : 540;
+  const size = hasBigCard ? 400 : 540;
+  return (
+    <AbsoluteFill>
+      <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} />
+      <div
+        style={{
+          position: 'absolute',
+          left: x - size / 2,
+          top: 1490 - size * 1.15,
+          transform: `scale(${interpolate(pop, [0, 1], [0.9, 1])})`,
+          transformOrigin: 'bottom center',
+        }}
+      >
+        <Character emotion={scene.emotion} frame={frame} talking={talking} size={size} />
+      </div>
+      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} />
+    </AbsoluteFill>
+  );
+};

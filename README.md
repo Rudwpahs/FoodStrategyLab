@@ -1,70 +1,103 @@
-<div align="center">
+# 이희재의 맛 연구소 — AI 콘텐츠 스튜디오 (프로토타입)
 
-# 🍽️ Food Strategy Lab
+> 요리가 쉬워지는 30초 실험실
 
-### Cost in. Price in. Margin out.
+조리기능장 이희재 연구자의 레시피·조리 지식을 넣으면, 캐릭터 **맛조수**가 진행하는 세로 숏폼 영상(릴스·쇼츠)과 네이버 블로그 원고를 만드는 **개인용 제작 도구**입니다.
 
-메뉴의 원가와 판매가를 넣고 **수익 구조를 빠르게 비교하는 framework-free browser tool**입니다.
+- 대상: 나(개발자)와 어머니(검수자) 두 사람만 사용
+- 비용: **0원** — 유료 API·클라우드 서버 없이 내 PC에서 실행
+- 일정: 최대 4일 프로토타입 ([계획·범위](docs/PROTOTYPE_PLAN.md))
 
-<p>
-  <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-Vanilla-F7DF1E?logo=javascript&logoColor=000">
-  <img alt="Storage" src="https://img.shields.io/badge/storage-localStorage-f59e0b">
-  <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-2ea44f">
-</p>
+## 사용 흐름
 
-[Features](#features) · [Calculation](#calculation) · [Run](#run)
-
-</div>
-
----
-
-서버나 프레임워크 없이 메뉴의 **원가·판매가·마진율·절대 수익**을 한 화면에서 비교하기 위해 만든 작은 실험 도구입니다.
-
-## Features
-
-- 메뉴 이름, 원가, 판매가, 카테고리 입력
-- 메뉴별 마진율 계산
-- 전체 평균 마진율
-- 절대 수익이 가장 큰 메뉴 표시
-- 카테고리 필터
-- 메뉴 삭제 / 샘플 데이터 초기화
-- 브라우저 입력 데이터 저장
-
-## Calculation
-
-### Margin
-
-```text
-마진율(%) = (판매가 - 원가) / 판매가 × 100
+```
+① 콘텐츠 입력 → ② AI 대본 → ③ 이희재 연구자 검수 → ④ 영상 제작 → ⑤ 블로그·내보내기
 ```
 
-### Render flow
+| 단계 | 하는 일 |
+| --- | --- |
+| 1. 콘텐츠 입력 | 주제, 재료·분량, 조리 순서, 핵심 원리, 전문가 팁, 흔한 실수 입력 |
+| 2. AI 대본 | 템플릿으로 즉시 생성(무료) 또는 무료 AI 채팅(ChatGPT·Claude·Gemini 웹)에 프롬프트를 붙여넣고 답을 다시 붙여넣기. 장면별 대사·감정·카드 편집, 버전 기록·복원 |
+| 3. 연구자 검수 | 원본과 대본을 나란히 비교. 원본에 없는 분량, 재료·순서 변경, 안전 표현, "실험 결과" 같은 근거 없는 표현을 자동 표시. 체크리스트 4개를 모두 확인해야 승인 |
+| 4. 영상 제작 | 브라우저 미리보기. **승인된 대본만** 1080×1920 MP4 + 커버·썸네일·레시피 카드로 렌더링 |
+| 5. 블로그·내보내기 | 네이버 블로그 원고(서식째 복사), 릴스·쇼츠 게시 문구, 자막 SRT를 ZIP 한 개로 내려받기 |
 
-```mermaid
-flowchart LR
-    A[localStorage 메뉴] --> B[Category filter]
-    B --> C[각 메뉴 마진율]
-    C --> D[평균 마진율]
-    D --> E[판매가 - 원가 최대 메뉴]
-    E --> F[목록 + 요약 렌더링]
-    F --> G[추가 / 삭제]
-    G --> A
-```
+승인 후 대본이나 원본 레시피를 고치면 승인이 자동으로 풀리고 다시 검수를 받아야 합니다. "검토한"이라는 표현은 승인된 콘텐츠에만 들어갑니다.
 
-> `최고 수익 메뉴`는 **마진율이 가장 높은 메뉴가 아니라 한 개를 팔았을 때 판매가에서 원가를 뺀 금액이 가장 큰 메뉴**입니다.
+## 빠른 시작
 
-## Run
-
-의존성이 없어서 `index.html`을 직접 열 수 있습니다.
+필요한 것: **Node.js 22.13 이상**. (선택) 음성을 넣으려면 **Python 3 + edge-tts**.
 
 ```bash
-python -m http.server 8000
+npm install
 ```
 
-## Stack
+```bash
+npm run seed
+```
 
-`HTML` · `CSS` · Vanilla JavaScript · `localStorage`
+```bash
+npm run dev
+```
 
-## Repository note
+브라우저에서 http://localhost:5178 을 엽니다. `npm run seed`는 파일럿 샘플 3개(김치전·시금치·달걀)를 넣습니다.
 
-현재 GitHub 기본 브랜치는 `agent/food-strategy-lab`이지만 `main`도 같은 프로젝트 상태를 유지하도록 동기화해 두고 있습니다.
+음성(무료 TTS)을 쓰려면 한 번 설치한 뒤 서버를 다시 시작합니다. 설치하지 않으면 자막만 있는 영상이 만들어집니다.
+
+```bash
+pip install edge-tts
+```
+
+처음 영상을 만들 때 Remotion이 무료 렌더링용 크롬(약 100MB)을 한 번 내려받습니다.
+
+### 그 밖의 명령
+
+| 명령 | 설명 |
+| --- | --- |
+| `npm run render:samples` | 파일럿 영상 3개를 "검수 전 미리보기" 워터마크로 `out/pilot/`에 렌더링 |
+| `npm run check` | 타입 검사 + 테스트 |
+| `npm run studio -w @mat-lab/video` | Remotion Studio로 장면·캐릭터를 직접 확인 |
+
+### 설정 (환경 변수, 모두 선택)
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `PORT` | `5178` | 스튜디오 주소 포트 |
+| `MATLAB_DATA_DIR` | `./data` | DB·음성·완성본 저장 폴더 |
+| `TTS_PROVIDER` | `auto` | `auto`(설치돼 있으면 edge-tts) · `edge` · `none` |
+| `TTS_VOICE` | `ko-KR-SunHiNeural` | 캐릭터 목소리 (`edge-tts --list-voices`로 확인) |
+| `TTS_RATE` / `TTS_PITCH` | `+8%` / `+15Hz` | 말 속도·높이 |
+| `REMOTION_BROWSER_EXECUTABLE` | (자동 다운로드) | 이미 있는 크롬/크로미움 경로 |
+
+## 비용 0원 구성
+
+| 영역 | 계획서 제안 | 프로토타입 선택 | 비용 |
+| --- | --- | --- | --- |
+| 대본 생성 | LLM API | 템플릿 생성 + 무료 AI 웹 채팅 복사·붙여넣기 | 0원 |
+| 음성 | TTS API (ElevenLabs 등) | edge-tts (Microsoft Edge 읽어주기 음성) | 0원 |
+| 캐릭터 | 이미지 생성·2D 리깅 | 코드로 그린 SVG 캐릭터, 감정 6종 | 0원 |
+| 영상 조립·인코딩 | Remotion + FFmpeg | Remotion (개인 무료 라이선스, FFmpeg 내장) | 0원 |
+| 웹 관리자 | Next.js | Vite + React + Express (로컬 실행) | 0원 |
+| 데이터 | SQLite | Node 내장 SQLite (`node:sqlite`) | 0원 |
+| 글꼴 | — | Pretendard (OFL, 상업 이용 가능) | 0원 |
+
+### 공개 전에 확인할 것
+
+- **edge-tts**는 Microsoft의 공식 상용 API가 아닙니다. 개인 시험용으로는 무료지만, 수익 채널에 계속 쓰려면 이용 조건을 확인하거나 공식 TTS로 바꾸세요.
+- **Remotion**은 개인·3인 이하 조직은 무료입니다. 외부 고객용 SaaS로 넓히면 유료 라이선스를 다시 검토해야 합니다.
+- **무료 AI 채팅**에 넣는 레시피는 각 서비스의 데이터 정책을 따릅니다.
+- 샘플 3개의 조리 정보는 **검수 전 초안**입니다. 어머니의 확인과 이름·이력 사용 동의를 받은 뒤 공개하세요.
+
+## 구조
+
+```
+apps/studio/            관리 화면 + 로컬 서버
+  server/               Express API, SQLite, TTS, 제작 작업(렌더 큐)
+  web/                  React 화면 (입력·대본·검수·영상·블로그 5단계, 캐릭터 페이지)
+packages/recipe-core/   데이터 모델, 템플릿 대본, AI 프롬프트·파싱, 자동 검사, 승인 규칙
+packages/video/         맛조수 캐릭터(SVG), 장면 카드, 자막, Remotion 영상·이미지 렌더러
+packages/publishing/    블로그 원고, SNS 문구, SRT 자막, ZIP 묶음
+docs/                   프로토타입 계획·범위
+```
+
+작업 데이터는 `data/`(DB, 음성 캐시, 완성본)에 저장되며 git에 올라가지 않습니다. 백업하려면 이 폴더를 복사하세요.
