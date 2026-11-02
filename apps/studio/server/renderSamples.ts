@@ -18,7 +18,7 @@ try {
   for (const [i, recipe] of SAMPLE_RECIPES.entries()) {
     const script = generateTemplateScript(recipe);
     const voice = await generateVoice(script).catch((e: Error) => ({ provider: `none (${e.message})`, generated: 0 }));
-    const { timings, voiced } = previewTimeline(script, `http://127.0.0.1:${port}`);
+    const { timings, voiced } = await previewTimeline(script, `http://127.0.0.1:${port}`);
     const file = path.join(outDir, `pilot-${i + 1}.mp4`);
     console.log(`[${i + 1}/3] ${recipe.topic} — 음성: ${voiced ? voice.provider : '없음(자막만)'}`);
     await renderVideo({ inputProps: { script, timings, reviewed: false, recipe }, outputLocation: file });

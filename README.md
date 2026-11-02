@@ -25,7 +25,9 @@
 | 2. AI 대본 | 템플릿으로 즉시 생성(무료) 또는 무료 AI 채팅(ChatGPT·Claude·Gemini 웹)에 프롬프트를 붙여넣고 답을 다시 붙여넣기. 장면별 대사·감정·카드 편집, 버전 기록·복원 |
 | 3. 연구자 검수 | 원본과 대본을 나란히 비교. 원본에 없는 분량, 재료·순서 변경, 안전 표현, "실험 결과" 같은 근거 없는 표현을 자동 표시. 체크리스트 4개를 모두 확인해야 승인 |
 | 4. 영상 제작 | 3D 주방 영상 브라우저 미리보기, 완성 사진 올리기. **승인된 대본만** 1080×1920 MP4 + 커버·썸네일·레시피 카드로 렌더링 |
-| 5. 블로그·내보내기 | 네이버 블로그 원고(서식째 복사), 릴스·쇼츠 게시 문구, 자막 SRT를 ZIP 한 개로 내려받기 |
+| 5. 블로그·내보내기 | 네이버 블로그 원고(서식째 복사), 릴스·쇼츠 게시 문구, 자막 SRT를 ZIP 한 개로 내려받기. 선택: 생성 AI(ChatGPT 이미지·Gemini 영상)용 프롬프트 팩 |
+
+영상 자막은 숏폼 규칙을 따릅니다. 1~3어절씩 튀어나오고, 말하는 단어는 노란색으로 표시됩니다. 인스타·쇼츠 앱 화면이 가리는 위 220px·아래 420px 안에는 글자를 두지 않습니다.
 
 승인 후 대본이나 원본 레시피를 고치면 승인이 자동으로 풀리고 다시 검수를 받아야 합니다. "검토한"이라는 표현은 승인된 콘텐츠에만 들어갑니다.
 
@@ -47,11 +49,16 @@ npm run dev
 
 브라우저에서 http://localhost:5178 을 엽니다. `npm run seed`는 파일럿 샘플 3개(김치전·시금치·달걀)를 넣습니다.
 
-음성(무료 TTS)을 쓰려면 한 번 설치한 뒤 서버를 다시 시작합니다. 설치하지 않으면 자막만 있는 영상이 만들어집니다.
+### 음성 (둘 중 하나, 모두 무료)
+
+1. **VoiceStudio (추천)** — 내 PC에서 돌아가는 오픈소스 음성 앱([debpalash/VoiceStudio](https://github.com/debpalash/VoiceStudio)). 앱을 켜 두면 스튜디오가 자동으로 찾아 씁니다(`http://127.0.0.1:3900`). 앱의 목소리 디자인으로 맛조수 목소리를 만들고 프로필 이름을 `맛조수`로 저장한 뒤 `VOICESTUDIO_VOICE=맛조수`로 지정하세요. 한국어가 되는 엔진(VoxCPM2, GPT-SoVITS 등)을 고르고, 모델별 이용 조건은 앱의 Model Manager에서 확인하세요. 실제 사람 목소리 복제는 본인 동의가 있을 때만 씁니다.
+2. **edge-tts** — 설치 후 서버를 다시 시작합니다.
 
 ```bash
 pip install edge-tts
 ```
+
+둘 다 없으면 자막만 있는 영상이 만들어집니다.
 
 처음 영상을 만들 때 Remotion이 무료 렌더링용 크롬(약 100MB)을 한 번 내려받습니다. 3D 영상은 PC 성능에 따라 30초 영상 한 편에 몇 분 걸릴 수 있습니다.
 
@@ -69,7 +76,9 @@ pip install edge-tts
 | --- | --- | --- |
 | `PORT` | `5178` | 스튜디오 주소 포트 |
 | `MATLAB_DATA_DIR` | `./data` | DB·음성·완성본 저장 폴더 |
-| `TTS_PROVIDER` | `auto` | `auto`(설치돼 있으면 edge-tts) · `edge` · `none` |
+| `TTS_PROVIDER` | `auto` | `auto`(VoiceStudio → edge-tts → 없음 순) · `voicestudio` · `edge` · `none` |
+| `VOICESTUDIO_URL` | `http://127.0.0.1:3900` | VoiceStudio 로컬 API 주소 |
+| `VOICESTUDIO_VOICE` / `VOICESTUDIO_MODEL` | `default` / `tts-1` | 목소리 프로필 이름 / 엔진 (`tts-1` = 앱에서 고른 엔진) |
 | `TTS_VOICE` | `ko-KR-SunHiNeural` | 캐릭터 목소리 (`edge-tts --list-voices`로 확인) |
 | `TTS_RATE` / `TTS_PITCH` | `+8%` / `+15Hz` | 말 속도·높이 |
 | `REMOTION_BROWSER_EXECUTABLE` | (자동 다운로드) | 이미 있는 크롬/크로미움 경로 |
@@ -80,7 +89,7 @@ pip install edge-tts
 | 영역 | 계획서 제안 | 프로토타입 선택 | 비용 |
 | --- | --- | --- | --- |
 | 대본 생성 | LLM API | 템플릿 생성 + 무료 AI 웹 채팅 복사·붙여넣기 | 0원 |
-| 음성 | TTS API (ElevenLabs 등) | edge-tts (Microsoft Edge 읽어주기 음성) | 0원 |
+| 음성 | TTS API (ElevenLabs 등) | VoiceStudio(로컬) 또는 edge-tts | 0원 |
 | 캐릭터·주방·음식 | 이미지 생성·2D 리깅 | Three.js로 코드로 만든 3D 캐릭터·주방·음식 (감정 6종) | 0원 |
 | 영상 조립·인코딩 | Remotion + FFmpeg | Remotion (개인 무료 라이선스, FFmpeg 내장) | 0원 |
 | 웹 관리자 | Next.js | Vite + React + Express (로컬 실행) | 0원 |
@@ -89,7 +98,7 @@ pip install edge-tts
 
 ### 공개 전에 확인할 것
 
-- **edge-tts**는 Microsoft의 공식 상용 API가 아닙니다. 개인 시험용으로는 무료지만, 수익 채널에 계속 쓰려면 이용 조건을 확인하거나 공식 TTS로 바꾸세요.
+- **edge-tts**는 Microsoft의 공식 상용 API가 아닙니다. 수익 채널에는 VoiceStudio(로컬)로 바꾸는 것을 권합니다. VoiceStudio 앱은 AGPL-3.0이고, 만든 음성의 이용 조건은 엔진(모델)마다 다릅니다.
 - **Remotion**은 개인·3인 이하 조직은 무료입니다. 외부 고객용 SaaS로 넓히면 유료 라이선스를 다시 검토해야 합니다.
 - **무료 AI 채팅**에 넣는 레시피는 각 서비스의 데이터 정책을 따릅니다.
 - 샘플 3개의 조리 정보는 **검수 전 초안**입니다. 어머니의 확인과 이름·이력 사용 동의를 받은 뒤 공개하세요.

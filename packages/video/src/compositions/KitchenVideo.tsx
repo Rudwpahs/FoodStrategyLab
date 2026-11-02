@@ -91,12 +91,12 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
       ) : scene.type === 'ingredients' ? (
         <TitleChip text={scene.cardTitle ?? '준비물'} frame={frame} fps={fps} />
       ) : (
-        <div style={{ position: 'absolute', inset: 0, transform: 'scale(0.8)', transformOrigin: '50% 8%' }}>
+        <div style={{ position: 'absolute', inset: 0, transform: 'translateY(40px) scale(0.8)', transformOrigin: '50% 8%' }}>
           <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} />
         </div>
       )}
       {showPhoto && <PhotoInset url={photoUrl} frame={frame} fps={fps} />}
-      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} />
+      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} punch={scene.type === 'tip' || scene.type === 'mistake'} />
     </AbsoluteFill>
   );
 };
@@ -104,7 +104,7 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
 const TitleChip: React.FC<{ text: string; frame: number; fps: number }> = ({ text, frame, fps }) => {
   const p = spring({ frame, fps, config: { damping: 14 } });
   return (
-    <div style={{ position: 'absolute', top: 250, left: 0, right: 0, display: 'flex', justifyContent: 'center', opacity: p, transform: `translateY(${interpolate(p, [0, 1], [-30, 0])}px)` }}>
+    <div style={{ position: 'absolute', top: 330, left: 0, right: 0, display: 'flex', justifyContent: 'center', opacity: p, transform: `translateY(${interpolate(p, [0, 1], [-30, 0])}px)` }}>
       <div style={{ background: COLORS.mint, border: `5px solid ${COLORS.ink}`, borderRadius: 999, padding: '14px 44px', fontFamily: FONT_FAMILY, fontWeight: 900, fontSize: 56, color: COLORS.ink, boxShadow: `0 8px 0 ${COLORS.ink}` }}>
         {text}
       </div>
@@ -121,7 +121,7 @@ const StepTicker: React.FC<{ scene: Scene; frame: number; duration: number }> = 
   const local = frame - i * per;
   const enter = interpolate(local, [0, 8], [0, 1], { extrapolateRight: 'clamp' });
   return (
-    <div style={{ position: 'absolute', top: 240, left: 60, right: 60, fontFamily: FONT_FAMILY, color: COLORS.ink }}>
+    <div style={{ position: 'absolute', top: 330, left: 60, right: 60, fontFamily: FONT_FAMILY, color: COLORS.ink }}>
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         {items.map((_, k) => (
           <div key={k} style={{ flex: 1, height: 12, borderRadius: 99, background: k <= i ? COLORS.red : 'rgba(43,35,33,0.18)' }} />

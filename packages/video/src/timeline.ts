@@ -113,3 +113,50 @@ export function captionChunks(line: string, speechFrames: number): CaptionChunk[
     return chunk;
   });
 }
+
+export interface WordTiming {
+  text: string;
+  from: number;
+  to: number;
+}
+
+export interface CaptionGroup {
+  words: WordTiming[];
+  from: number;
+  to: number;
+}
+
+/** 어절별 시간: 글자 수 비율로 대사 구간을 나눈다 (실제 음성 길이에 맞춰짐) */
+export function wordTimings(line: string, speechFrames: number): WordTiming[] {
+  const words = line.trim().split(/\s+/).filter(Boolean);
+  const weights = words.map((w) => Math.max(1, w.replace(/[^\p{L}\p{N}]/gu, '').length) + 0.6);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let cursor = 0;
+  return words.map((text, i) => {
+    const len = (weights[i]! / total) * speechFrames;
+    const t = { text, from: Math.round(cursor), to: i === words.length - 1 ? speechFrames : Math.round(cursor + len) };
+    cursor += len;
+    return t;
+  });
+}
+
+/**
+ * 화면 자막 묶음: 1~3어절씩 (최대 13자), 문장이 끝나면 끊는다.
+ * 숏폼 자막 규칙: 짧게, 말하는 단어 강조.
+ */
+export function captionGroups(line: string, speechFrames: number, maxWords = 3, maxChars = 13): CaptionGroup[] {
+  const groups: CaptionGroup[] = [];
+  let cur: WordTiming[] = [];
+  const flush = () => {
+    if (cur.length) groups.push({ words: cur, from: cur[0]!.from, to: cur.at(-1)!.to });
+    cur = [];
+  };
+  for (const w of wordTimings(line, speechFrames)) {
+    const chars = [...cur, w].map((x) => x.text).join(' ').length;
+    if (cur.length && (cur.length >= maxWords || chars > maxChars)) flush();
+    cur.push(w);
+    if (/[.!?…,]$/.test(w.text)) flush();
+  }
+  flush();
+  return groups;
+}

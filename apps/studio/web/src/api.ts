@@ -17,7 +17,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 export interface Meta {
-  tts: { provider: 'edge' | 'none'; voice: string; rate: string; pitch: string };
+  tts: { provider: 'voicestudio' | 'edge' | 'none'; voice: string };
   samples: RecipeInput[];
 }
 
@@ -52,6 +52,8 @@ export const api = {
     return data as ProjectDetail;
   },
   deletePhoto: (id: number) => request<ProjectDetail>('DELETE', `/projects/${id}/photo`),
+  reelPrompts: (id: number) =>
+    request<{ characterSheet: string; environment: string; clips: { file: string; frameFile: string; framePrompt: string; videoPrompt: string; line: string }[]; markdown: string }>('GET', `/projects/${id}/reel-prompts`),
   startRender: (id: number) => request<{ renderId: number }>('POST', `/projects/${id}/renders`),
   render: (renderId: number) => request<RenderStatus>('GET', `/renders/${renderId}`),
 };

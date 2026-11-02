@@ -68,8 +68,49 @@ export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
             )}
             <div className="muted small">게시는 사람이 직접 확인하고 올립니다 (SNS 자동 게시는 후속 단계).</div>
           </div>
+          <ReelPrompts projectId={project.id} approved={reviewed} />
         </div>
       </div>
+    </div>
+  );
+};
+
+type Pack = Awaited<ReturnType<typeof api.reelPrompts>>;
+
+/** 선택: 이미지·영상 생성 AI로 장면을 직접 만들고 싶을 때 쓰는 프롬프트 */
+const ReelPrompts: React.FC<{ projectId: number; approved: boolean }> = ({ projectId, approved }) => {
+  const { run } = useApp();
+  const [pack, setPack] = useState<Pack | null>(null);
+  return (
+    <div className="card stack">
+      <div className="row">
+        <h2 style={{ margin: 0 }}>AI 영상 프롬프트 팩 (선택)</h2>
+        <div className="spacer" />
+        <button className="btn small" disabled={!approved} onClick={async () => setPack((await run(() => api.reelPrompts(projectId))) ?? null)}>
+          {pack ? '다시 만들기' : '만들기'}
+        </button>
+      </div>
+      <div className="muted small">
+        ChatGPT(이미지)·Gemini(영상) 같은 생성 AI로 장면을 직접 만들 때 쓰는 프롬프트입니다. 캐릭터 시트 → 주방 배경 → 장면별 첫 프레임·영상 순서로 복사해 쓰세요.
+        서비스별로 무료 사용량이 다르고 유료일 수 있으며, 생성 영상이 대사·분량을 바꾸면 쓰지 마세요. {approved ? '' : '(승인된 대본만)'}
+      </div>
+      {pack && (
+        <div className="stack">
+          <div className="row">
+            <button className="btn small" onClick={() => run(() => copyText(pack.characterSheet), '캐릭터 시트 프롬프트를 복사했습니다')}>캐릭터 시트 복사</button>
+            <button className="btn small" onClick={() => run(() => copyText(pack.environment), '주방 배경 프롬프트를 복사했습니다')}>주방 배경 복사</button>
+            <button className="btn small" onClick={() => run(() => copyText(pack.markdown), '전체를 복사했습니다')}>전체 복사</button>
+          </div>
+          {pack.clips.map((c, i) => (
+            <div key={i} className="row small">
+              <b>장면 {i + 1}</b>
+              <span className="muted" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.line}</span>
+              <button className="btn small" onClick={() => run(() => copyText(c.framePrompt), `장면 ${i + 1} 첫 프레임 프롬프트 복사`)}>A 첫 프레임</button>
+              <button className="btn small" onClick={() => run(() => copyText(c.videoPrompt), `장면 ${i + 1} 영상 프롬프트 복사`)}>B 영상</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

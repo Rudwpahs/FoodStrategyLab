@@ -7,3 +7,4 @@ export * from './samples.ts';
 export * from './generator/template.ts';
 export * from './generator/prompt.ts';
 export * from './food.ts';
+export * from './reelPrompts.ts';

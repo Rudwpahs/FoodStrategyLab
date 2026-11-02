@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
-import { buildTimeline, captionChunks, splitCaption, totalFrames } from './timeline.ts';
+import { buildTimeline, captionChunks, captionGroups, splitCaption, totalFrames, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
 
@@ -43,5 +43,23 @@ describe('자막', () => {
     expect(chunks[0]!.from).toBe(0);
     expect(chunks.at(-1)!.to).toBe(120);
     chunks.forEach((c) => expect(c.text.length).toBeLessThanOrEqual(22));
+  });
+});
+
+describe('숏폼 자막 묶음', () => {
+  it('1~3어절씩, 13자 이하로 나누고 문장 끝에서 끊는다', () => {
+    const groups = captionGroups('이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문은 시금치예요.', 150);
+    for (const g of groups) {
+      expect(g.words.length).toBeLessThanOrEqual(3);
+      expect(g.words.map((w) => w.text).join(' ').length <= 13 || g.words.length === 1).toBe(true);
+    }
+    expect(groups.some((g) => g.words.at(-1)!.text === '실험!')).toBe(true);
+  });
+
+  it('단어 시간이 겹치지 않고 대사 구간을 모두 덮는다', () => {
+    const w = wordTimings('반죽은 부치기 직전에 섞으세요', 90);
+    expect(w[0]!.from).toBe(0);
+    expect(w.at(-1)!.to).toBe(90);
+    w.forEach((x, i) => i > 0 && expect(x.from).toBe(w[i - 1]!.to));
   });
 });

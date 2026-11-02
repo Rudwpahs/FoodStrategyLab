@@ -65,7 +65,7 @@ export const CharacterPage: React.FC = () => {
           </div>
           <div className="small">
             글꼴: Pretendard (OFL, 상업 이용 가능) · 영상: 1080×1920, 30fps<br />
-            목소리: {meta ? `${meta.tts.voice} (속도 ${meta.tts.rate}, 높이 ${meta.tts.pitch}) — ${meta.tts.provider === 'edge' ? 'edge-tts 사용 중' : 'edge-tts 미설치, 자막만'}` : '…'}
+            목소리: {meta ? meta.tts.voice : '…'}
           </div>
           <div className="muted small">
             캐릭터는 코드로 그린 SVG라 매 영상에서 모양이 바뀌지 않습니다. 측면·3/4 시점 시트와 2D 리깅은 다음 단계 과제입니다.

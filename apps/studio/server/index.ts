@@ -5,7 +5,7 @@ import { createApp } from './app.ts';
 import { DATA_DIR, PORT } from './config.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
-import { ttsProvider } from './tts.ts';
+import { describeVoice, ttsProvider } from './tts.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,9 +26,10 @@ export async function startServer(port = PORT) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { interrupted } = await startServer();
-  const tts = await ttsProvider().catch((e: Error) => `none (${e.message})`);
+  const tts = await ttsProvider().then(describeVoice, (e: Error) => `없음 (${e.message})`);
   console.log(`\n  🧪 이희재의 맛 연구소 스튜디오: http://localhost:${PORT}`);
   console.log(`  데이터 폴더: ${DATA_DIR}`);
-  console.log(`  음성(TTS): ${tts === 'edge' ? 'edge-tts (무료)' : '없음 — 자막만으로 제작 (pip install edge-tts 로 음성 사용 가능)'}`);
+  console.log(`  음성(TTS): ${tts}`);
+  if (tts.startsWith('음성 없음')) console.log('  → VoiceStudio 앱을 켜거나 "pip install edge-tts"를 설치하면 음성이 들어갑니다.');
   if (interrupted) console.log(`  중단된 제작 작업 ${interrupted}개를 실패로 표시했습니다.`);
 }

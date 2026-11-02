@@ -42,7 +42,7 @@ export const BrandBadge: React.FC<{ scale?: number }> = ({ scale = 1 }) => (
   <div
     style={{
       position: 'absolute',
-      top: 120 * scale,
+      top: (scale === 1 ? 232 : 120) * scale,
       left: 56 * scale,
       display: 'flex',
       alignItems: 'center',

@@ -60,7 +60,7 @@ const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; r
       >
         <Character emotion={scene.emotion} frame={frame} talking={talking} size={size} />
       </div>
-      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} />
+      <Captions line={scene.line} frame={frame} speechFrames={Math.max(1, timing.speechFrames)} punch={scene.type === 'tip'} />
     </AbsoluteFill>
   );
 };

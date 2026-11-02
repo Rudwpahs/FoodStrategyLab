@@ -38,7 +38,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
   if (!project.latest) return <div className="card empty">먼저 대본을 만드세요.</div>;
   const approved = project.versionState.approvedScriptVersion === project.latest.version;
   const busy = render?.status === 'queued' || render?.status === 'running';
-  const ttsOn = meta?.tts.provider === 'edge';
+  const ttsOn = meta?.tts.provider === 'edge' || meta?.tts.provider === 'voicestudio';
 
   return (
     <div className="grid2" style={{ gridTemplateColumns: '400px 1fr' }}>
@@ -65,7 +65,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
         <button
           className="btn"
           disabled={!ttsOn || voicing}
-          title={ttsOn ? '' : 'pip install edge-tts 후 서버를 다시 시작하세요'}
+          title={ttsOn ? '' : 'VoiceStudio 앱을 켜거나 pip install edge-tts 후 서버를 다시 시작하세요'}
           onClick={async () => {
             setVoicing(true);
             const r = await run(() => api.voice(project.id), '음성을 만들었습니다');
@@ -73,7 +73,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             if (r) loadPreview();
           }}
         >
-          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 생성 불가 — edge-tts 미설치'}
+          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 도구 없음 — VoiceStudio 또는 edge-tts 필요'}
         </button>
       </div>
 

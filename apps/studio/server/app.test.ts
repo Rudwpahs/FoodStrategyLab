@@ -39,6 +39,7 @@ describe('스튜디오 API 흐름', () => {
     expect(scripted.body.latest.version).toBe(1);
 
     expect((await call('POST', `/projects/${pid}/renders`)).status).toBe(409);
+    expect((await call('GET', `/projects/${pid}/reel-prompts`)).status).toBe(409);
 
     const check = await call('GET', `/projects/${pid}/check`);
     expect(check.body.issues.filter((i: { level: string }) => i.level === 'error')).toEqual([]);
@@ -49,6 +50,11 @@ describe('스튜디오 API 흐름', () => {
     const approved = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
     expect(approved.body.status).toBe('approved');
     expect(approved.body.approval.reviewer).toBe('이희재');
+
+    const pack = await call('GET', `/projects/${pid}/reel-prompts`);
+    expect(pack.body.clips.length).toBe(approved.body.latest.script.scenes.length);
+    expect(pack.body.clips[0].videoPrompt).toContain(approved.body.latest.script.scenes[0].line);
+    expect(pack.body.characterSheet).toContain('MATJOSU');
 
     const blog = await call('GET', `/projects/${pid}/blog`);
     expect(blog.body.social.instagram).toContain('검토한');

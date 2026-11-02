@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { SAMPLE_RECIPES, buildAiPrompt, checkScript, estimateScriptSeconds, generateTemplateScript, parseAiScript } from '@mat-lab/recipe-core';
+import { SAMPLE_RECIPES, buildAiPrompt, buildReelPromptPack, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, parseAiScript } from '@mat-lab/recipe-core';
 import { buildBlogPost, buildSocialCopy } from '@mat-lab/publishing';
-import { DATA_DIR, TTS } from './config.ts';
+import { DATA_DIR } from './config.ts';
 import { generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { HttpError, type Repo } from './repo.ts';
-import { ttsProvider } from './tts.ts';
+import { describeVoice, ttsProvider } from './tts.ts';
 
 const id = (req: Request) => {
   const n = Number(req.params.id);
@@ -29,8 +29,8 @@ export function createApp(repo: Repo) {
   const api = express.Router();
 
   api.get('/meta', async (_req, res) => {
-    const provider = await ttsProvider().catch(() => 'none');
-    res.json({ tts: { provider, voice: TTS.voice, rate: TTS.rate, pitch: TTS.pitch }, samples: SAMPLE_RECIPES });
+    const provider = await ttsProvider().catch(() => 'none' as const);
+    res.json({ tts: { provider, voice: describeVoice(provider) }, samples: SAMPLE_RECIPES });
   });
 
   api.get('/projects', (_req, res) => res.json(repo.listProjects()));
@@ -103,12 +103,12 @@ export function createApp(repo: Repo) {
     res.json(result);
   });
 
-  api.get('/projects/:id/preview', (req, res) => {
+  api.get('/projects/:id/preview', async (req, res) => {
     const pid = id(req);
     const latest = latestOrThrow(repo, pid);
     const state = repo.versionState(pid);
     const photo = repo.getPhoto(pid);
-    const { timings, voiced } = previewTimeline(latest.script);
+    const { timings, voiced } = await previewTimeline(latest.script);
     res.json({
       version: latest.version,
       voiced,
@@ -154,6 +154,14 @@ export function createApp(repo: Repo) {
     const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
     const post = buildBlogPost({ recipe: project.recipe, review });
     res.json({ post, social: buildSocialCopy(project.recipe, Boolean(review), post.tags) });
+  });
+
+  // 선택: 이미지·영상 생성 AI용 프롬프트 팩 (승인된 대본만)
+  api.get('/projects/:id/reel-prompts', (req, res) => {
+    const pid = id(req);
+    const gate = canRender(repo.versionState(pid));
+    if (!gate.ok) throw new HttpError(409, gate.reason);
+    res.json(buildReelPromptPack(repo.getRecipe(pid), latestOrThrow(repo, pid).script));
   });
 
   api.post('/projects/:id/renders', (req, res) => {

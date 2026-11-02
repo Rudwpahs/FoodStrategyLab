@@ -2,22 +2,67 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { TTS } from './config.ts';
+import { ttsSettings } from './config.ts';
 
 /**
- * 비용 0원 음성: edge-tts(파이썬 패키지, 무료)를 호출한다.
- * 설치되어 있지 않으면 음성 없이 자막만으로 영상을 만든다.
+ * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
+ * - voicestudio: 내 PC에서 돌아가는 VoiceStudio 앱의 로컬 API (목소리 디자인·복제 가능)
+ * - edge: edge-tts 파이썬 패키지 (Microsoft Edge 읽어주기 음성)
+ * 둘 다 없으면 음성 없이 자막만으로 영상을 만든다.
  */
-export type TtsProvider = 'edge' | 'none';
+export type TtsProvider = 'voicestudio' | 'edge' | 'none';
 
 let detected: Promise<TtsProvider> | null = null;
 
+/** 설정이 바뀌었을 때 다시 감지하도록 캐시를 지운다 */
+export function resetTtsDetection() {
+  detected = null;
+}
+
+async function voicestudioUp(): Promise<boolean> {
+  const { url, apiKey } = ttsSettings().voicestudio;
+  try {
+    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1500), headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function edgeUp(): Promise<boolean> {
+  return run(ttsSettings().edge.command, ['--help']).then(
+    () => true,
+    () => false,
+  );
+}
+
 export function ttsProvider(): Promise<TtsProvider> {
-  if (TTS.provider === 'none') return Promise.resolve('none');
-  detected ??= run(TTS.command, ['--help'])
-    .then(() => 'edge' as const)
-    .catch(() => (TTS.provider === 'edge' ? Promise.reject(new Error(`${TTS.command} 실행 실패. "pip install edge-tts"로 설치하세요.`)) : ('none' as const)));
+  const choice = ttsSettings().provider;
+  if (choice === 'none') return Promise.resolve('none');
+  detected ??= (async (): Promise<TtsProvider> => {
+    if (choice === 'voicestudio') {
+      if (await voicestudioUp()) return 'voicestudio';
+      throw new Error(`VoiceStudio(${ttsSettings().voicestudio.url})에 연결할 수 없습니다. VoiceStudio 앱을 켜 주세요.`);
+    }
+    if (choice === 'edge') {
+      if (await edgeUp()) return 'edge';
+      throw new Error(`${ttsSettings().edge.command} 실행 실패. "pip install edge-tts"로 설치하세요.`);
+    }
+    if (await voicestudioUp()) return 'voicestudio';
+    if (await edgeUp()) return 'edge';
+    return 'none';
+  })().catch((e) => {
+    detected = null;
+    throw e;
+  });
   return detected;
+}
+
+export function describeVoice(provider: TtsProvider): string {
+  const s = ttsSettings();
+  if (provider === 'voicestudio') return `VoiceStudio · ${s.voicestudio.voice} (${s.voicestudio.model})`;
+  if (provider === 'edge') return `edge-tts · ${s.edge.voice}`;
+  return '음성 없음 (자막만)';
 }
 
 function run(cmd: string, args: string[]): Promise<void> {
@@ -30,26 +75,53 @@ function run(cmd: string, args: string[]): Promise<void> {
   });
 }
 
-export function audioKey(text: string): string {
-  return crypto.createHash('sha1').update([TTS.voice, TTS.rate, TTS.pitch, text].join('|')).digest('hex').slice(0, 16);
+/** 목소리 설정 + 문장으로 캐시 키를 만든다 (설정이 바뀌면 새로 만든다) */
+export function audioKey(text: string, provider: TtsProvider = 'edge'): string {
+  const s = ttsSettings();
+  const voice = provider === 'voicestudio' ? ['vs', s.voicestudio.model, s.voicestudio.voice, s.voicestudio.speed] : [s.edge.voice, s.edge.rate, s.edge.pitch];
+  return crypto.createHash('sha1').update([...voice, text].join('|')).digest('hex').slice(0, 16);
+}
+
+async function voicestudioSpeech(text: string, out: string) {
+  const { url, model, voice, speed, apiKey } = ttsSettings().voicestudio;
+  const res = await fetch(`${url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
+    body: JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`VoiceStudio 음성 생성 실패 (${res.status}): ${detail.slice(0, 200)}`);
+  }
+  fs.writeFileSync(out, Buffer.from(await res.arrayBuffer()));
 }
 
 /** 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초) */
 export async function synthesize(text: string, audioDir: string): Promise<{ file: string; seconds: number }> {
+  const provider = await ttsProvider();
+  if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
-  const file = path.join(audioDir, `${audioKey(text)}.mp3`);
+  const file = path.join(audioDir, `${audioKey(text, provider)}.mp3`);
   if (!fs.existsSync(file)) {
     const tmp = `${file}.tmp`;
-    const args = ['--voice', TTS.voice, `--rate=${TTS.rate}`, `--pitch=${TTS.pitch}`, '--text', text, '--write-media', tmp];
-    if (TTS.proxy) args.push('--proxy', TTS.proxy);
-    await run(TTS.command, args);
+    if (provider === 'voicestudio') {
+      await voicestudioSpeech(text, tmp);
+    } else {
+      const e = ttsSettings().edge;
+      const args = ['--voice', e.voice, `--rate=${e.rate}`, `--pitch=${e.pitch}`, '--text', text, '--write-media', tmp];
+      if (e.proxy) args.push('--proxy', e.proxy);
+      await run(e.command, args);
+    }
     fs.renameSync(tmp, file);
   }
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
 
-export function cachedAudio(text: string, audioDir: string): { file: string; seconds: number } | null {
-  const file = path.join(audioDir, `${audioKey(text)}.mp3`);
+/** 지금 쓰는 음성 도구로 만든 캐시가 있으면 돌려준다 */
+export function cachedAudio(text: string, audioDir: string, provider: TtsProvider): { file: string; seconds: number } | null {
+  if (provider === 'none') return null;
+  const file = path.join(audioDir, `${audioKey(text, provider)}.mp3`);
   if (!fs.existsSync(file)) return null;
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }

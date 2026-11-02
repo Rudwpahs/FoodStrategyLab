@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { canRender, type RecipeInput, type Script } from '@mat-lab/recipe-core';
+import { buildReelPromptPack, canRender, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { buildBlogPost, buildSocialCopy, buildSrt, buildZip } from '@mat-lab/publishing';
 import { buildTimeline, type SceneTiming, type VideoProps } from '@mat-lab/video/timeline';
 import { DATA_DIR } from './config.ts';
@@ -14,8 +14,9 @@ export const RENDER_DIR = path.join(DATA_DIR, 'renders');
 const audioUrl = (file: string, origin = '') => `${origin}/media/audio/${path.basename(file)}`;
 
 /** 캐시된 음성이 있으면 그 길이로, 없으면 추정 길이로 미리보기 타임라인을 만든다. */
-export function previewTimeline(script: Script, origin = ''): { timings: SceneTiming[]; voiced: boolean } {
-  const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR));
+export async function previewTimeline(script: Script, origin = ''): Promise<{ timings: SceneTiming[]; voiced: boolean }> {
+  const provider = await ttsProvider().catch(() => 'none' as const);
+  const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR, provider));
   const voiced = audio.every(Boolean);
   const timings = buildTimeline(
     script,
@@ -31,7 +32,7 @@ export async function generateVoice(script: Script): Promise<{ provider: string;
   if (provider === 'none') return { provider, generated: 0 };
   let generated = 0;
   for (const scene of script.scenes) {
-    if (!cachedAudio(scene.line, AUDIO_DIR)) generated++;
+    if (!cachedAudio(scene.line, AUDIO_DIR, provider)) generated++;
     await synthesize(scene.line, AUDIO_DIR);
   }
   return { provider, generated };
@@ -68,7 +69,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
 
     set('음성 생성', 0.02);
     await generateVoice(script);
-    const { timings } = previewTimeline(script, origin);
+    const { timings } = await previewTimeline(script, origin);
     const photo = repo.getPhoto(projectId);
     const props: VideoProps = {
       script,
@@ -119,6 +120,7 @@ export function writePackage(outDir: string, recipe: RecipeInput, script: Script
     'instagram.txt': social.instagram,
     'youtube.txt': `${social.youtubeTitle}\n\n${social.youtubeDescription}`,
     'script.json': JSON.stringify(script, null, 2),
+    'ai-prompts.md': buildReelPromptPack(recipe, script).markdown,
   };
   for (const [name, text] of Object.entries(texts)) fs.writeFileSync(path.join(outDir, name), text);
   const files: Record<string, Uint8Array | string> = { ...texts };

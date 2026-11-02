@@ -6,12 +6,31 @@ export const ROOT = path.resolve(here, '../../..');
 export const DATA_DIR = path.resolve(process.env.MATLAB_DATA_DIR ?? path.join(ROOT, 'data'));
 export const PORT = Number(process.env.PORT ?? 5178);
 
-export const TTS = {
-  /** 'auto' | 'edge' | 'none' */
-  provider: (process.env.TTS_PROVIDER ?? 'auto') as 'auto' | 'edge' | 'none',
-  command: process.env.EDGE_TTS_CMD ?? 'edge-tts',
-  voice: process.env.TTS_VOICE ?? 'ko-KR-SunHiNeural',
-  rate: process.env.TTS_RATE ?? '+8%',
-  pitch: process.env.TTS_PITCH ?? '+15Hz',
-  proxy: process.env.TTS_PROXY ?? '',
-};
+export type TtsChoice = 'auto' | 'voicestudio' | 'edge' | 'none';
+
+/**
+ * 음성 설정. 매번 환경 변수를 읽는다 (테스트·설정 변경 반영).
+ * auto: VoiceStudio(로컬 앱)가 켜져 있으면 그것을, 아니면 edge-tts, 둘 다 없으면 음성 없음.
+ */
+export function ttsSettings() {
+  const e = process.env;
+  return {
+    provider: (e.TTS_PROVIDER ?? 'auto') as TtsChoice,
+    edge: {
+      command: e.EDGE_TTS_CMD ?? 'edge-tts',
+      voice: e.TTS_VOICE ?? 'ko-KR-SunHiNeural',
+      rate: e.TTS_RATE ?? '+8%',
+      pitch: e.TTS_PITCH ?? '+15Hz',
+      proxy: e.TTS_PROXY ?? '',
+    },
+    voicestudio: {
+      url: (e.VOICESTUDIO_URL ?? 'http://127.0.0.1:3900').replace(/\/$/, ''),
+      /** 'tts-1'은 VoiceStudio 앱에서 고른 엔진을 뜻한다 */
+      model: e.VOICESTUDIO_MODEL ?? 'tts-1',
+      /** 앱에서 만든 목소리 프로필 이름 (예: 맛조수) */
+      voice: e.VOICESTUDIO_VOICE ?? 'default',
+      speed: Number(e.VOICESTUDIO_SPEED ?? '1.05'),
+      apiKey: e.OMNIVOICE_API_KEY ?? '',
+    },
+  };
+}

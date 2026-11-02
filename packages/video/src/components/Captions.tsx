@@ -1,35 +1,51 @@
 import React from 'react';
 import { interpolate } from 'remotion';
-import { captionChunks } from '../timeline.ts';
+import { captionGroups } from '../timeline.ts';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 
-/** 하단 자막. 플랫폼 UI에 가리지 않도록 아래 220px은 비워 둔다. */
-export const Captions: React.FC<{ line: string; frame: number; speechFrames: number }> = ({ line, frame, speechFrames }) => {
-  const chunks = captionChunks(line, speechFrames);
-  const active = chunks.find((c) => frame >= c.from && frame < c.to) ?? (frame >= speechFrames ? chunks.at(-1) : chunks[0]);
+/**
+ * 숏폼 자막: 1~3어절씩 튀어나오고, 지금 말하는 단어는 노란색.
+ * 인스타·쇼츠 앱 UI가 가리는 위 220px·아래 420px을 피해 1500px 위에 놓는다.
+ */
+export const SAFE_BOTTOM = 1480;
+
+export const Captions: React.FC<{ line: string; frame: number; speechFrames: number; punch?: boolean }> = ({ line, frame, speechFrames, punch }) => {
+  const groups = captionGroups(line, speechFrames);
+  const active = groups.find((g) => frame >= g.from && frame < g.to) ?? (frame >= speechFrames ? groups.at(-1) : groups[0]);
   if (!active) return null;
-  const pop = interpolate(frame - active.from, [0, 4], [0.92, 1], { extrapolateRight: 'clamp', extrapolateLeft: 'clamp' });
+  const local = frame - active.from;
+  const isLast = active === groups.at(-1);
+  const big = punch && isLast;
+  // 작게 → 조금 크게 → 보통 (마지막 강조 문장은 더 크게, 살짝 흔들림)
+  const scale = interpolate(local, [0, 3, 7], [0.82, big ? 1.16 : 1.07, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const wobble = big ? Math.sin(local / 2.2) * Math.max(0, 1 - local / 14) * 4 : 0;
   return (
-    <div style={{ position: 'absolute', left: 50, right: 50, top: 1540, display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'absolute', left: 40, right: 40, bottom: 1920 - SAFE_BOTTOM, display: 'flex', justifyContent: 'center' }}>
       <div
         style={{
-          transform: `scale(${pop})`,
-          background: COLORS.white,
-          color: COLORS.ink,
-          border: `6px solid ${COLORS.ink}`,
-          borderRadius: 30,
-          padding: '18px 36px',
+          transform: `scale(${scale}) rotate(${wobble}deg)`,
           fontFamily: FONT_FAMILY,
-          fontWeight: 850,
-          fontSize: 60,
-          lineHeight: 1.3,
-          letterSpacing: -1.5,
+          fontWeight: 920,
+          fontSize: big ? 92 : 80,
+          lineHeight: 1.15,
+          letterSpacing: -2,
           textAlign: 'center',
           wordBreak: 'keep-all',
-          maxWidth: 940,
+          WebkitTextStroke: `14px ${COLORS.ink}`,
+          paintOrder: 'stroke fill',
+          textShadow: '0 8px 18px rgba(0,0,0,0.35)',
+          maxWidth: 1000,
         }}
       >
-        {active.text}
+        {active.words.map((w, i) => {
+          const speaking = frame >= w.from && frame < w.to;
+          return (
+            <span key={i} style={{ color: speaking ? COLORS.yellow : COLORS.white }}>
+              {w.text}
+              {i < active.words.length - 1 ? ' ' : ''}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
