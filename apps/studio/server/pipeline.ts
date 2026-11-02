@@ -78,6 +78,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
       recipe,
       photoUrl: photo ? `${origin}${photo.url}` : undefined,
       photoColor: photo?.color || undefined,
+      sceneMedia: Object.fromEntries(Object.entries(repo.getSceneMedia(projectId)).map(([k, m]) => [k, { kind: m.kind, url: `${origin}${m.url}` }])),
     };
 
     set('렌더러 준비', 0.08);

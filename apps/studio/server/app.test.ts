@@ -115,6 +115,21 @@ describe('완성 사진', () => {
   });
 });
 
+describe('장면별 AI 클립', () => {
+  it('장면에 이미지를 올리면 미리보기에 들어가고, 지울 수 있다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5f1d2f40000000049454e44ae426082', 'hex');
+    const up = await fetch(`${base}/projects/${pid}/scenes/s3/media`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png });
+    expect(up.status).toBe(200);
+    const preview = await call('GET', `/projects/${pid}/preview`);
+    expect(preview.body.props.sceneMedia.s3.kind).toBe('image');
+    expect((await fetch(`${base}/projects/${pid}/scenes/..%2Fx/media`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png })).status).toBe(400);
+    const removed = await call('DELETE', `/projects/${pid}/scenes/s3/media`);
+    expect(removed.body.sceneMedia).toEqual({});
+  });
+});
+
 describe('MP3 길이 측정', () => {
   it('MPEG2 Layer III 24kHz 48kbps 프레임을 센다', () => {
     // 프레임 헤더 FF F3 64 C4: MPEG2, Layer III, 48kbps, 24kHz → 프레임 144바이트, 0.024초

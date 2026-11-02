@@ -70,9 +70,13 @@ export interface ProjectPhoto {
   color: string;
 }
 
+/** 장면별로 올린 생성 AI 클립·이미지 (장면 id → 파일) */
+export type SceneMedia = Record<string, { file: string; url: string; kind: 'video' | 'image' }>;
+
 export interface ProjectDetail extends ProjectSummary {
   recipe: RecipeInput;
   photo: ProjectPhoto | null;
+  sceneMedia: SceneMedia;
   versionState: VersionState;
   latest: ScriptVersion | null;
   versions: Omit<ScriptVersion, 'script'>[];
@@ -157,6 +161,31 @@ export class Repo {
     this.getRecipe(id);
     this.db.prepare('UPDATE projects SET photo_file = ?, photo_color = ?, updated_at = ? WHERE id = ?').run(file, color, now(), id);
     this.logEvent(id, 'photo', file ? '완성 사진 등록' : '완성 사진 삭제');
+  }
+
+  getSceneMedia(id: number): SceneMedia {
+    const rows = this.db.prepare('SELECT scene_id, file, kind, created_at FROM scene_media WHERE project_id = ?').all(id) as Row[];
+    const out: SceneMedia = {};
+    for (const r of rows) {
+      out[String(r.scene_id)] = { file: String(r.file), kind: r.kind as 'video' | 'image', url: `/media/${String(r.file)}?v=${encodeURIComponent(String(r.created_at))}` };
+    }
+    return out;
+  }
+
+  setSceneMedia(id: number, sceneId: string, file: string, kind: 'video' | 'image') {
+    this.getRecipe(id);
+    this.db
+      .prepare('INSERT INTO scene_media (project_id, scene_id, file, kind, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id, scene_id) DO UPDATE SET file = excluded.file, kind = excluded.kind, created_at = excluded.created_at')
+      .run(id, sceneId, file, kind, now());
+    this.db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
+    this.logEvent(id, 'media', `장면 ${sceneId}에 ${kind === 'video' ? 'AI 클립' : '이미지'} 등록`);
+  }
+
+  deleteSceneMedia(id: number, sceneId: string): string | null {
+    const row = this.db.prepare('SELECT file FROM scene_media WHERE project_id = ? AND scene_id = ?').get(id, sceneId) as Row | undefined;
+    this.db.prepare('DELETE FROM scene_media WHERE project_id = ? AND scene_id = ?').run(id, sceneId);
+    if (row) this.logEvent(id, 'media', `장면 ${sceneId}의 AI 클립 삭제`);
+    return row ? String(row.file) : null;
   }
 
   deleteProject(id: number) {
@@ -295,6 +324,6 @@ export class Repo {
       createdAt: String(r.created_at),
     }));
     const approval = versionState.approvedScriptVersion !== null ? this.lastReview(id, versionState.approvedScriptVersion) : null;
-    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), versionState, latest, versions, reviews, renders, events, approval };
+    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval };
   }
 }

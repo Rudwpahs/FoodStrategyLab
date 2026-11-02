@@ -119,8 +119,35 @@ export function createApp(repo: Repo) {
         recipe: repo.getRecipe(pid),
         photoUrl: photo?.url,
         photoColor: photo?.color || undefined,
+        sceneMedia: repo.getSceneMedia(pid),
       },
     });
+  });
+
+  // 장면별 생성 AI 클립(MP4·WEBM) 또는 첫 프레임 이미지
+  api.put('/projects/:id/scenes/:sceneId/media', express.raw({ type: ['video/mp4', 'video/webm', 'image/jpeg', 'image/png', 'image/webp'], limit: '300mb' }), (req, res) => {
+    const pid = id(req);
+    const sceneId = String(req.params.sceneId);
+    if (!/^[\w-]{1,40}$/.test(sceneId)) throw new HttpError(400, '잘못된 장면 번호입니다.');
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'MP4·WEBM 영상이나 JPG·PNG·WEBP 이미지를 올려 주세요.');
+    const type = String(req.headers['content-type'] ?? '');
+    const kind = type.startsWith('video/') ? 'video' : 'image';
+    const ext = type.includes('webm') ? '.webm' : type.includes('mp4') ? '.mp4' : type.includes('png') ? '.png' : type.includes('webp') ? '.webp' : '.jpg';
+    const dir = path.join(DATA_DIR, 'clips', String(pid));
+    fs.mkdirSync(dir, { recursive: true });
+    const old = repo.deleteSceneMedia(pid, sceneId);
+    if (old) fs.rmSync(path.join(DATA_DIR, old), { force: true });
+    const file = `clips/${pid}/${sceneId}${ext}`;
+    fs.writeFileSync(path.join(DATA_DIR, file), req.body);
+    repo.setSceneMedia(pid, sceneId, file, kind);
+    res.json(repo.getProject(pid));
+  });
+
+  api.delete('/projects/:id/scenes/:sceneId/media', (req, res) => {
+    const pid = id(req);
+    const old = repo.deleteSceneMedia(pid, String(req.params.sceneId));
+    if (old) fs.rmSync(path.join(DATA_DIR, old), { force: true });
+    res.json(repo.getProject(pid));
   });
 
   // 완성 사진: 영상 속 '완성 사진' 카드와 3D 음식 색에 쓴다

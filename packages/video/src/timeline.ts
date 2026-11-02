@@ -35,6 +35,8 @@ export interface VideoProps {
   /** 완성 사진 URL과 사진의 대표 색 (있으면 음식 색에 반영) */
   photoUrl?: string;
   photoColor?: string;
+  /** 장면별 생성 AI 클립·이미지 (있으면 그 장면은 3D 대신 이것을 보여준다) */
+  sceneMedia?: Record<string, { url: string; kind: 'video' | 'image' }>;
   /** 영상 스타일: 3D 주방(기본) 또는 2D 카드형 */
   look?: '3d' | '2d';
   [key: string]: unknown;

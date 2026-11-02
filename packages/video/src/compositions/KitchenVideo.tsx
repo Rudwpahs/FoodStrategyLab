@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Audio, Img, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
 import { Captions } from '../components/Captions.tsx';
 import { SceneCard } from '../components/SceneCard.tsx';
@@ -20,7 +20,7 @@ export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
 }
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, recipe, photoUrl, photoColor }) => {
+export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -68,6 +68,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
+            {sceneMedia[scene.id] && <SceneClip media={sceneMedia[scene.id]!} />}
             <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} photoUrl={photoUrl} />
             {timing.audioUrl ? <Audio src={timing.audioUrl} /> : null}
           </Sequence>
@@ -75,6 +76,29 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
       })}
       <BrandBadge />
       {!reviewed && <DraftWatermark />}
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * 생성 AI로 만든 장면 클립(또는 첫 프레임 이미지)을 3D 장면 대신 보여준다.
+ * 클립 소리는 끈다: 목소리는 검수된 대사로 만든 스튜디오 음성을 쓴다.
+ */
+const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> = ({ media }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  if (media.kind === 'video') {
+    return (
+      <AbsoluteFill style={{ backgroundColor: '#000' }}>
+        <OffthreadVideo src={media.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </AbsoluteFill>
+    );
+  }
+  // 이미지는 천천히 확대 (켄 번스 효과)
+  const zoom = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.08]);
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#000', overflow: 'hidden' }}>
+      <Img src={media.url} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})` }} />
     </AbsoluteFill>
   );
 };

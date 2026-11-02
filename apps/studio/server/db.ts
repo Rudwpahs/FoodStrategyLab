@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS renders (
   created_at TEXT NOT NULL,
   finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS scene_media (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  scene_id TEXT NOT NULL,
+  file TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('video', 'image')),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, scene_id)
+);
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
