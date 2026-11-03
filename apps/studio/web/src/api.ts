@@ -30,6 +30,7 @@ export interface RenderStatus extends RenderRow {
 export interface VoiceInfo {
   voicestudio: { state: 'ok' | 'starting'; url: string; version: string } | { state: 'offline' };
   profiles: { id: string; name: string; kind: string; audioUrl: string | null }[];
+  engines: { active: string; chosen: string | null; available: string[] } | null;
   selected: string;
   provider: 'voicestudio' | 'edge' | 'none';
   describe: string;

@@ -8,7 +8,7 @@ import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { HttpError, type Repo } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
-import { createDesignedVoice, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
+import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 const id = (req: Request) => {
   const n = Number(req.params.id);
@@ -38,8 +38,9 @@ export function createApp(repo: Repo) {
   api.get('/voice', async (_req, res) => {
     const vs = await findVoiceStudio();
     const profiles = vs.state === 'ok' ? await listProfiles(vs.url).catch(() => []) : [];
+    const engines = vs.state === 'ok' ? await engineInfo(vs.url).catch(() => null) : null;
     const provider = await ttsProvider().catch(() => 'none' as const);
-    res.json({ voicestudio: vs, profiles, selected: voicestudioVoice(), provider, describe: describeVoice(provider) });
+    res.json({ voicestudio: vs, profiles, engines, selected: voicestudioVoice(), provider, describe: describeVoice(provider) });
   });
 
   api.put('/voice', (req, res) => {

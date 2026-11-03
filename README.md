@@ -58,9 +58,12 @@ npm run dev
 
 ### 음성: VoiceStudio (무료, 내 PC에서 실행)
 
-1. [VoiceStudio 최신 버전](https://github.com/debpalash/VoiceStudio/releases/latest)에서 내 PC용 설치 파일을 받아 설치하고 앱을 켭니다. Windows는 `.exe`이고, 처음 켤 때 모델을 내려받느라 몇 분 걸립니다.
-2. 스튜디오의 **캐릭터·목소리** 메뉴에서 연결 상태가 `VoiceStudio 연결됨`으로 바뀌면 **맛조수 목소리 자동으로 만들기 → ▶ 들어보기**를 누릅니다.
-3. 마음에 안 들면 VoiceStudio 앱의 목소리 디자인에서 다듬거나 새로 만든 뒤, 스튜디오에서 그 목소리를 고릅니다.
+1. [VoiceStudio 최신 버전](https://github.com/debpalash/VoiceStudio/releases/latest)에서 내 PC용 설치 파일을 받아 설치하고 앱을 켭니다. Windows는 `.exe`이고, 처음 켤 때 몇 분 걸립니다.
+2. VoiceStudio 앱의 **Model Catalogue → TTS**에서 **VoxCPM2**를 설치합니다(Apache-2.0, 한국어·목소리 디자인 지원). VoiceStudio 기본 엔진인 **OmniVoice는 가중치가 비상업 라이선스(CC-BY-NC)**라서, 스튜디오는 채널용으로 이 엔진을 쓰지 않습니다.
+3. 스튜디오의 **캐릭터·목소리** 메뉴에서 연결 상태가 `VoiceStudio 연결됨`으로 바뀌면 **맛조수 목소리 자동으로 만들기 → ▶ 들어보기**를 누릅니다. VoxCPM2 목소리 디자인으로 기준 녹음을 만들고, 그 녹음을 `맛조수` 프로필로 저장하기 때문에 모든 대사가 같은 목소리로 나옵니다.
+4. 마음에 안 들면 한 번 더 만들거나(목소리가 조금씩 달라짐), VoiceStudio 앱에서 직접 다듬은 뒤 스튜디오에서 그 목소리를 고릅니다.
+
+GPU가 없는 PC에서는 대사 한 줄에 수십 초씩 걸립니다(CPU 4코어 기준 실제 길이의 약 20배).
 
 스튜디오는 앱이 쓰는 포트(3900, 막혀 있으면 4900·5900…)를 자동으로 찾습니다. 앱을 나중에 켜도 15초 안에 알아챕니다. 모델별 이용 조건은 앱의 Model Manager에서 확인하고, 실제 사람 목소리 복제는 본인 동의가 있을 때만 씁니다.
 

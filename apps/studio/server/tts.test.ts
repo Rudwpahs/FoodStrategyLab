@@ -28,6 +28,7 @@ beforeAll(async () => {
     };
     if (req.url === '/health') return starting ? json(503, { status: 'starting', version: '9.9' }) : json(200, { status: 'ok', version: '9.9' });
     if (req.url === '/profiles' && req.method === 'GET') return json(200, profiles);
+    if (req.url === '/engines/tts') return json(200, { active: 'omnivoice', backends: [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }] });
     if (req.url === '/design/describe' && req.method === 'POST') {
       req.resume();
       req.on('end', () => json(200, { attrs: { Gender: 'female', Age: 'young adult', Pitch: 'high pitch', Style: 'Auto', EnglishAccent: 'Auto', ChineseDialect: 'Auto' } }));
@@ -56,8 +57,9 @@ beforeAll(async () => {
       let body = '';
       req.on('data', (d) => (body += d));
       req.on('end', () => {
-        requests.push(JSON.parse(body));
-        res.setHeader('content-type', 'audio/mpeg');
+        const parsed = JSON.parse(body);
+        requests.push(parsed);
+        res.setHeader('content-type', parsed.response_format === 'wav' ? 'audio/wav' : 'audio/mpeg');
         res.end(mp3);
       });
       return;
@@ -85,7 +87,8 @@ describe('VoiceStudio 음성', () => {
     expect(await ttsProvider()).toBe('voicestudio');
     const a = await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     expect(a.seconds).toBeCloseTo(1.2, 5);
-    expect(requests[0]).toMatchObject({ voice: 'default', language: 'ko', response_format: 'mp3', input: '이희재의 맛 연구소에서 오늘도 실험!' });
+    // 비상업 OmniVoice가 활성이어도 상업 이용 가능한 VoxCPM2로 요청한다
+    expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: 'default', language: 'ko', response_format: 'mp3', input: '이희재의 맛 연구소에서 오늘도 실험!' });
   });
 
   it('받아쓰기로 어절별 실제 시간을 잰다 (어절 수가 맞을 때만)', async () => {
@@ -102,8 +105,11 @@ describe('VoiceStudio 음성', () => {
     if (vs.state !== 'ok') return;
     const made = await createDesignedVoice(vs.url, '맛조수');
     expect(made.name).toBe('맛조수');
-    expect(designBody).toContain('kind');
-    expect(designBody).toContain('high pitch');
+    // VoxCPM2 목소리 디자인으로 기준 녹음을 만들고, 복제 프로필로 저장
+    expect(requests.at(-1)).toMatchObject({ model: 'voxcpm2', response_format: 'wav' });
+    expect(String((requests.at(-1) as { description: string }).description)).toContain('high pitch');
+    expect(designBody).toContain('clone');
+    expect(designBody).toContain('matjosu-reference.wav');
     expect((await listProfiles(vs.url)).map((p) => p.name)).toContain('맛조수');
     writeVoiceSettings({ voicestudioVoice: '맛조수' });
     expect(voicestudioVoice()).toBe('맛조수');

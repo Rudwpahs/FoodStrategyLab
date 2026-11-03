@@ -46,6 +46,18 @@ export const VoicePanel: React.FC = () => {
       )}
       {vs.state === 'starting' && <div className="issue warning">VoiceStudio가 모델을 불러오는 중입니다. 처음 켤 때는 몇 분 걸릴 수 있습니다.</div>}
 
+      {vs.state === 'ok' && info.engines && !info.engines.chosen && (
+        <div className="issue warning">
+          상업적으로 쓸 수 있는 음성 엔진이 없습니다. VoiceStudio 기본 엔진(OmniVoice)은 비상업 라이선스라 채널용으로 쓰지 않습니다.
+          VoiceStudio 앱의 <b>Model Catalogue</b>에서 <b>VoxCPM2</b>(Apache-2.0, 한국어·목소리 디자인 지원)를 설치해 주세요.
+        </div>
+      )}
+      {vs.state === 'ok' && info.engines?.chosen && (
+        <div className="muted small">
+          음성 엔진: <b>{info.engines.chosen}</b> (상업 이용 가능 라이선스). VoiceStudio 기본 엔진 OmniVoice는 비상업 라이선스라 쓰지 않습니다.
+        </div>
+      )}
+
       {vs.state === 'ok' && (
         <>
           <div className="row">
@@ -79,7 +91,7 @@ export const VoicePanel: React.FC = () => {
                 }
               }}
             >
-              {busy === 'design' ? '만드는 중… (1~2분)' : '맛조수 목소리 자동으로 만들기'}
+              {busy === 'design' ? '만드는 중… (GPU 없으면 몇 분)' : '맛조수 목소리 자동으로 만들기'}
             </button>
             <button
               className="btn primary"
@@ -99,7 +111,7 @@ export const VoicePanel: React.FC = () => {
             <audio ref={audio} controls style={{ height: 36 }} />
           </div>
           <div className="muted small">
-            '자동으로 만들기'는 밝고 높은 톤의 젊은 목소리로 VoiceStudio에 '맛조수' 프로필을 만듭니다. 마음에 안 들면 VoiceStudio 앱의 목소리 디자인에서
+            '자동으로 만들기'는 VoxCPM2 목소리 디자인으로 밝고 높은 톤의 기준 녹음을 만든 뒤, 그 녹음을 '맛조수' 프로필로 저장합니다(모든 대사가 같은 목소리). 마음에 안 들면 VoiceStudio 앱의 목소리 디자인에서
             직접 다듬거나 새로 만든 뒤 여기서 고르세요. 목소리를 바꾸면 영상 단계에서 '음성 생성'을 다시 누르세요.
           </div>
         </>

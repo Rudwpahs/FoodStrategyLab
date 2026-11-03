@@ -62,35 +62,67 @@ export async function listProfiles(url: string): Promise<VoiceProfile[]> {
   return rows.map((r) => ({ id: String(r.id), name: r.name, kind: r.kind ?? '', audioUrl: r.audio_url ? `${url}${r.audio_url}` : null }));
 }
 
-/** 맛조수 목소리 설계: 밝고 높은 톤의 젊은 목소리 */
-export const MASCOT_VOICE_DESCRIPTION = 'young adult female, high pitch, bright cheerful energetic voice';
+/**
+ * 상업적으로 쓸 수 있는 라이선스(Apache-2.0·MIT)의 한국어 가능 엔진, 선호 순서.
+ * VoiceStudio 기본 엔진인 OmniVoice는 가중치가 비상업(CC-BY-NC)이라 쓰지 않는다.
+ */
+export const COMMERCIAL_ENGINES = ['voxcpm2', 'moss-tts-nano', 'confucius4-tts', 'gpt-sovits'] as const;
+export const NONCOMMERCIAL_ENGINES = ['omnivoice', 'omnivoice-gguf', 'omnivoice-subprocess', 'pockettts'];
+
+export interface EngineInfo {
+  active: string;
+  /** 스튜디오가 쓸 엔진 (상업 이용 가능, 설치됨). 없으면 null */
+  chosen: string | null;
+  available: string[];
+}
+
+export async function engineInfo(url: string): Promise<EngineInfo> {
+  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`VoiceStudio 엔진 목록을 불러오지 못했습니다 (${res.status})`);
+  const d = (await res.json()) as { active: string; backends: { id: string; available: boolean }[] };
+  const available = d.backends.filter((b) => b.available).map((b) => b.id);
+  const forced = process.env.VOICESTUDIO_MODEL;
+  const chosen = forced && forced !== 'tts-1' ? forced : (COMMERCIAL_ENGINES.find((e) => available.includes(e)) ?? null);
+  return { active: d.active, chosen, available };
+}
+
+/** 맛조수 목소리 설계: 밝고 높은 톤의 귀여운 젊은 목소리 */
+export const MASCOT_VOICE_DESCRIPTION = 'A cute, bright young female voice, cheerful and energetic, slightly high pitch, friendly cartoon assistant';
+/** 기준 녹음에 쓰는 문장 (프로필에 대본으로 함께 저장) */
+export const MASCOT_REFERENCE_TEXT = '이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?';
 
 /**
- * VoiceStudio의 '목소리 디자인'으로 프로필을 만든다.
- * 설명 문장을 앱의 디자인 항목(성별·나이·높이·스타일)으로 바꾼 뒤 저장한다.
+ * 맛조수 목소리 만들기.
+ * 1) VoxCPM2 '목소리 디자인'으로 설명 문장에서 기준 녹음 한 개를 만들고
+ * 2) 그 녹음을 고정 프로필(복제)로 저장한다 → 모든 대사가 같은 목소리로 나온다.
  */
 export async function createDesignedVoice(url: string, name: string, description = MASCOT_VOICE_DESCRIPTION): Promise<VoiceProfile> {
-  const described = await fetch(`${url}/design/describe`, {
+  const engines = await engineInfo(url);
+  if (!engines.available.includes('voxcpm2')) {
+    throw new Error('목소리 디자인에는 VoxCPM2 엔진이 필요합니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
+  }
+  const speech = await fetch(`${url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers() },
-    body: JSON.stringify({ description }),
-    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ model: 'voxcpm2', voice: 'default', language: 'ko', response_format: 'wav', description, input: MASCOT_REFERENCE_TEXT }),
+    signal: AbortSignal.timeout(1_800_000),
   });
-  if (!described.ok) throw new Error(`목소리 설명을 해석하지 못했습니다 (${described.status})`);
-  const { attrs } = (await described.json()) as { attrs: Record<string, string> };
+  if (!speech.ok) throw new Error(`기준 녹음을 만들지 못했습니다 (${speech.status}): ${(await speech.text().catch(() => '')).slice(0, 200)}`);
+  const wav = Buffer.from(await speech.arrayBuffer());
 
   const form = new FormData();
   form.append('name', name);
-  form.append('kind', 'design');
-  form.append('vd_states', JSON.stringify(attrs));
+  form.append('kind', 'clone');
+  form.append('ref_text', MASCOT_REFERENCE_TEXT);
   form.append('language', 'Auto');
-  const created = await fetch(`${url}/profiles`, { method: 'POST', body: form, headers: headers(), signal: AbortSignal.timeout(180000) });
+  form.append('ref_audio', new Blob([wav], { type: 'audio/wav' }), 'matjosu-reference.wav');
+  const created = await fetch(`${url}/profiles`, { method: 'POST', body: form, headers: headers(), signal: AbortSignal.timeout(300000) });
   if (!created.ok) {
     const detail = await created.text().catch(() => '');
     throw new Error(`목소리를 만들지 못했습니다 (${created.status}): ${detail.slice(0, 200)}`);
   }
   const r = (await created.json()) as { id: string | number; name: string; kind?: string; audio_url?: string | null };
-  return { id: String(r.id), name: r.name, kind: r.kind ?? 'design', audioUrl: r.audio_url ? `${url}${r.audio_url}` : null };
+  return { id: String(r.id), name: r.name, kind: r.kind ?? 'clone', audioUrl: r.audio_url ? `${url}${r.audio_url}` : null };
 }
 
 // ---------- 스튜디오 음성 설정 (data/settings.json) ----------

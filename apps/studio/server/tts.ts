@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ttsSettings } from './config.ts';
-import { findVoiceStudio, readVoiceSettings } from './voicestudio.ts';
+import { engineInfo, findVoiceStudio, readVoiceSettings } from './voicestudio.ts';
 
 /**
  * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
@@ -93,9 +93,12 @@ export function audioKey(text: string, provider: TtsProvider = 'edge'): string {
 }
 
 async function voicestudioSpeech(text: string, out: string) {
-  const { model, speed, apiKey } = ttsSettings().voicestudio;
+  const { speed, apiKey } = ttsSettings().voicestudio;
   const url = await voicestudioUrl();
   if (!url) throw new Error('VoiceStudio에 연결할 수 없습니다. 앱을 켜 주세요.');
+  // 상업 이용 가능한 엔진만 쓴다 (기본 OmniVoice는 비상업 라이선스)
+  const model = (await engineInfo(url)).chosen;
+  if (!model) throw new Error('상업적으로 쓸 수 있는 음성 엔진(VoxCPM2 등)이 설치되어 있지 않습니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
   const voice = voicestudioVoice();
   const res = await fetch(`${url}/v1/audio/speech`, {
     method: 'POST',
