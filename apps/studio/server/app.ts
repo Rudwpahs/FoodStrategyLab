@@ -422,6 +422,15 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     // 승인되지 않은 콘텐츠는 게시(기록)하지 않는다
     if (version === null || state.approvedScriptVersion !== version) throw new HttpError(409, '이희재 연구자의 승인을 받은 최신 콘텐츠만 게시할 수 있어요.');
     const render = repo.getProject(pid).renders.find((r) => r.status === 'done' && r.scriptVersion === version);
+    if (platform === 'naver') {
+      // 고른 블로그 원고에 '답변 대기' 칸이 남았거나 연구자 확인이 없으면 발행 기록을 막는다
+      const style = repo.getBlogStyle(pid);
+      if ((BLOG_STYLES as readonly string[]).includes(style)) {
+        const approval = repo.lastReview(pid, version)!;
+        const post = buildExpertBlog({ recipe: repo.getRecipe(pid), style: style as BlogStyle, notes: repo.getExpertNotes(pid), review: { reviewer: approval.reviewer, reviewedAt: approval.createdAt } });
+        if (!post.ready) throw new HttpError(409, `블로그 원고가 아직 준비되지 않았어요: ${post.blockers.join(' ')}`);
+      }
+    }
     if (platform !== 'naver' && !render) throw new HttpError(409, '승인된 대본으로 만든 영상이 없어요. 영상을 먼저 만들어 주세요.');
     const url = String(body.url ?? '').trim();
     if (status === 'published' && !PLATFORM_URL[platform].test(url)) throw new HttpError(400, '게시물 주소를 확인해 주세요. (예: 인스타그램 https://www.instagram.com/reel/…)');

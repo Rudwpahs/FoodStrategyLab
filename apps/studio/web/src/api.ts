@@ -1,9 +1,10 @@
-import type { HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
+import type { ContentCandidate, HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { VideoProps } from '@mat-lab/video/timeline';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
-import type { ProjectDetail, ProjectSummary, RenderRow } from '../../server/repo.ts';
+import type { ProjectDetail, ProjectSummary, Publication, RenderRow } from '../../server/repo.ts';
+import type { FormatInsight } from '../../server/insights.ts';
 
-export type { ProjectDetail, ProjectSummary, RenderRow };
+export type { FormatInsight, ProjectDetail, ProjectSummary, Publication, RenderRow };
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
@@ -52,6 +53,15 @@ export const api = {
     request<{ styles: Record<StyleId, StyleInfo>; hookInfo: Record<HookType, HookInfo>; hooks: HookCandidate[]; repetition: string | null }>('GET', `/projects/${id}/hooks${style ? `?style=${style}` : ''}`),
   styledScript: (id: number, style: StyleId, hookType?: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/styled`, { style, hookType }),
   changeHook: (id: number, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/hook`, { hookType }),
+  candidates: (id: number, exclude: string[] = []) =>
+    request<{ candidates: ContentCandidate[]; exhausted: boolean; insights: FormatInsight[] }>('GET', `/projects/${id}/candidates${exclude.length ? `?exclude=${encodeURIComponent(exclude.join(','))}` : ''}`),
+  selectCandidate: (id: number, style: StyleId, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/candidates/select`, { style, hookType }),
+  blogCompare: (id: number) =>
+    request<{ options: { style: BlogStyle; info: BlogStyleInfo; post: { title: string; markdown: string; html: string }; pending: ExpertQuestion[]; lint: LintIssue[] }[]; selected: string }>('GET', `/projects/${id}/blog/compare`),
+  setBlogStyle: (id: number, style: BlogStyle | '') => request<ProjectDetail>('PUT', `/projects/${id}/blog-style`, { style }),
+  addPublication: (id: number, body: { platform: Publication['platform']; status?: 'scheduled' | 'published'; url?: string; scheduledAt?: string; note?: string; confirmDuplicate?: boolean }) =>
+    request<Publication>('POST', `/projects/${id}/publications`, body),
+  setMetrics: (pubId: number, metrics: Record<string, number | string>) => request<Publication>('PUT', `/publications/${pubId}/metrics`, metrics),
   templateScript: (id: number) => request<ProjectDetail>('POST', `/projects/${id}/script/template`),
   aiPrompt: (id: number) => request<{ prompt: string }>('GET', `/projects/${id}/ai-prompt`),
   aiScript: (id: number, text: string) => request<ProjectDetail>('POST', `/projects/${id}/script/ai`, { text }),

@@ -2,17 +2,20 @@ import React, { useEffect, useState } from 'react';
 import type { BlogStyle } from '@mat-lab/publishing';
 import { api, copyHtml, copyText } from '../api.ts';
 import { ExpertNotesPanel } from '../components/ExpertNotesPanel.tsx';
+import { PublicationsPanel } from '../components/PublicationsPanel.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
 type Blog = Awaited<ReturnType<typeof api.blog>>;
 
-export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
+export const PublishStep: React.FC<StepProps> = ({ project, go, reload }) => {
   const { run } = useApp();
   const [blog, setBlog] = useState<Blog | null>(null);
-  const [style, setStyle] = useState<BlogStyle | ''>('');
+  // [영상·블로그]에서 고른 문체를 기본으로 보여 준다
+  const [style, setStyle] = useState<BlogStyle | ''>((project.blogStyle as BlogStyle) || '');
   const [tick, setTick] = useState(0);
   const done = project.renders.find((r) => r.status === 'done' && r.scriptVersion === project.latest?.version);
+  const approvedLatest = project.latest !== null && project.versionState.approvedScriptVersion === project.latest.version;
   const reviewed = project.approval !== null;
 
   useEffect(() => {
@@ -91,19 +94,20 @@ export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
           </div>
           <div className="card stack">
             <h2 style={{ margin: 0 }}>게시 묶음</h2>
-            {done ? (
+            {done && approvedLatest ? (
               <div className="row">
                 <a className="btn primary" href={`/api/renders/${done.id}/download`}>ZIP 내려받기 (작업 #{done.id})</a>
                 <span className="muted small">영상·커버·썸네일·레시피 카드·블로그·자막·게시 문구</span>
               </div>
             ) : (
               <div className="row">
-                <span className="muted">최신 대본으로 제작한 완성본이 없습니다.</span>
+                <span className="muted">{done ? '승인 후 내려받을 수 있어요.' : '최신 대본으로 만든 영상이 없습니다.'}</span>
                 <button className="btn small" onClick={() => go('video')}>영상 제작으로 →</button>
               </div>
             )}
-            <div className="muted small">게시는 사람이 직접 확인하고 올립니다 (SNS 자동 게시는 후속 단계).</div>
+            <div className="muted small">묶음에는 영상·커버·썸네일·레시피 카드·고른 블로그 원고·자막·게시 문구가 들어가요.</div>
           </div>
+          <PublicationsPanel project={project} reload={reload} />
           <ReelPrompts projectId={project.id} approved={reviewed} />
         </div>
       </div>

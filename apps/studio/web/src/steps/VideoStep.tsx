@@ -3,6 +3,7 @@ import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
+import { BlogChoice } from '../components/BlogChoice.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
@@ -114,27 +115,26 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
         </div>
         <ClipUploads project={project} setProject={setProject} />
         <div className="card stack">
-          <h2>최종 제작</h2>
+          <h2>영상 만들기</h2>
           {!approved ? (
-            <div className="issue warning">
-              대본 v{project.latest.version}이 아직 승인되지 않았습니다. 승인된 대본만 최종 영상·블로그로 출력할 수 있습니다.
-              <button className="btn small" style={{ marginLeft: 12 }} onClick={() => go('review')}>검수하러 가기</button>
+            <div className="issue info">
+              고른 후보로 <b>검수용 영상</b>을 먼저 만들어요. 이희재 연구자가 실제 영상을 보고 승인하면 같은 영상을 그대로 내보낼 수 있어요.
+              (영상에는 '검토' 같은 문구가 들어가지 않아요. 내려받기·게시는 승인 후에만 돼요.)
             </div>
           ) : (
-            <div className="muted">
-              승인된 대본 v{project.latest.version}으로 세로 영상(1080×1920 MP4), 커버·썸네일, 레시피 카드, 블로그 원고, 자막(SRT), 게시 문구를 한 번에 만듭니다. 내 PC에서 렌더링하므로 비용이 들지 않습니다.
-            </div>
+            <div className="muted">승인된 대본 v{project.latest.version}으로 세로 영상(1080×1920 MP4), 커버·썸네일, 레시피 카드를 만듭니다.</div>
           )}
+          <div className="muted small">내 PC에서 음성과 3D 영상을 만들어요. 그래픽카드가 없으면 20~30분 걸릴 수 있어요. 비용은 들지 않아요.</div>
           <div className="row">
             <button
               className="btn primary"
-              disabled={!approved || busy}
+              disabled={busy}
               onClick={async () => {
-                const r = await run(() => api.startRender(project.id), '제작을 시작했습니다');
+                const r = await run(() => api.startRender(project.id), approved ? '제작을 시작했습니다' : '검수용 영상 제작을 시작했습니다');
                 if (r) reload();
               }}
             >
-              {busy ? '제작 중…' : '영상·블로그 제작 시작'}
+              {busy ? '만드는 중…' : approved ? '영상 만들기' : '검수용 영상 만들기'}
             </button>
           </div>
           {render && (
@@ -157,8 +157,14 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             <div className="row">
               <h2 style={{ margin: 0 }}>완성본 (작업 #{render.id})</h2>
               <div className="spacer" />
-              <a className="btn primary" href={`/api/renders/${render.id}/download`}>게시 묶음 ZIP 내려받기</a>
-              <button className="btn" onClick={() => go('publish')}>블로그·게시 문구 →</button>
+              {approved && render.scriptVersion === project.latest.version ? (
+                <a className="btn primary" href={`/api/renders/${render.id}/download`}>게시 묶음 ZIP 내려받기</a>
+              ) : render.scriptVersion !== project.latest.version ? (
+                <span className="badge review">대본이 바뀌었어요 — 다시 만들어 주세요</span>
+              ) : (
+                <span className="badge review">검수용 · 승인 후 내려받기</span>
+              )}
+              <button className="btn" onClick={() => go(approved ? 'publish' : 'review')}>{approved ? '게시·기록 →' : '검수·승인으로 →'}</button>
             </div>
             <div className="row" style={{ alignItems: 'flex-start' }}>
               <video src={`${render.baseUrl}/video.mp4`} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />
@@ -179,12 +185,13 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
               </div>
             )}
             <div className="row small">
-              {render.files.filter((f) => f !== 'package.zip').map((f) => (
+              {render.files.filter((f) => /\.(mp4|png|jpe?g|webp)$/.test(f)).map((f) => (
                 <a key={f} href={`${render.baseUrl}/${f}`} download>{f}</a>
               ))}
             </div>
           </div>
         )}
+        <BlogChoice project={project} setProject={setProject} />
       </div>
     </div>
   );

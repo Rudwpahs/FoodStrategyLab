@@ -46,11 +46,11 @@ const CATEGORY_STYLE: Record<Category, Partial<Record<StyleId, number>>> = {
 };
 
 /** 이 레시피 자료로 각 연출 유형이 얼마나 잘 만들어지는지 */
-export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): Record<StyleId, { score: number; reason: string }> {
+export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): Record<StyleId, { score: number; reason: string; ready: boolean }> {
   const principle = splitSentences(recipe.principle);
   const hasCause = principle.some((s) => causeEffect(s));
   const sensory = findSensory([recipe.topic, recipe.principle, ...recipe.tips].join(' '));
-  const out = {} as Record<StyleId, { score: number; reason: string }>;
+  const out = {} as Record<StyleId, { score: number; reason: string; ready: boolean }>;
   const base: Record<StyleId, [number, string]> = {
     problem: recipe.commonMistake ? [2, '연구자가 입력한 흔한 실수가 있어요'] : [0.4, '흔한 실수가 입력되지 않았어요'],
     comedy: [1.5, '맛조수 캐릭터를 보여 주기 좋아요'],
@@ -61,13 +61,15 @@ export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): R
   };
   for (const id of STYLE_IDS) {
     let [score, reason] = base[id];
+    // 꼭 필요한 자료(실수·이야기·식감 표현·원리 문장)가 없으면 후보로 내지 않는다 (제목이 없는 내용을 약속하지 않게)
+    const ready = base[id][0] >= 0.5;
     score += CATEGORY_STYLE[recipe.category][id] ?? 0;
     const repeats = recent.slice(0, 3).filter((r) => r.style === id).length;
     if (repeats >= 2) {
       score -= 1;
       reason += ` · 최근 ${repeats}편이 같은 유형이라 순위를 낮췄어요`;
     }
-    out[id] = { score, reason };
+    out[id] = { score, reason, ready };
   }
   return out;
 }
@@ -96,7 +98,7 @@ export function candidateTitle(recipe: RecipeInput, style: StyleId): string {
 
 function keyScenes(script: Script): ContentCandidate['keyScenes'] {
   const first = script.scenes[0]!;
-  const core = script.scenes.find((s) => s.type === 'explain' || s.visual === 'compare') ?? script.scenes[1]!;
+  const core = script.scenes.find((s) => !s.hook && (s.type === 'explain' || s.visual === 'compare')) ?? script.scenes[1]!;
   const last = script.scenes.at(-1)!;
   const v = (x?: Visual) => (x ? VISUAL_LABELS[x] : undefined);
   return [
@@ -111,13 +113,18 @@ export function contentCandidates(recipe: RecipeInput, opts: CandidateOptions = 
   const count = opts.count ?? 3;
   const exclude = new Set(opts.exclude ?? []);
   const scores = styleScores(recipe, opts.recent);
-  const styles = [...STYLE_IDS].sort((a, b) => scores[b].score - scores[a].score || STYLE_IDS.indexOf(a) - STYLE_IDS.indexOf(b));
+  // 이미 보여 준 연출 유형은 뒤로: "다른 후보 보기"를 누르면 먼저 다른 유형이 나오게
+  const shownStyles = new Set([...exclude].map((k) => k.split(':')[0]));
+  const styles = [...STYLE_IDS].sort(
+    (a, b) => Number(shownStyles.has(a)) - Number(shownStyles.has(b)) || scores[b].score - scores[a].score || STYLE_IDS.indexOf(a) - STYLE_IDS.indexOf(b),
+  );
   const usedHooks = new Set<HookType>();
   const usedVisuals = new Set<string>();
   const picked: ContentCandidate[] = [];
 
   for (const style of styles) {
     if (picked.length >= count) break;
+    if (!scores[style].ready) continue;
     const ranked = suggestHooks(recipe, { preferred: STYLE_INFO[style].hooks, recent: opts.recent }).filter((h) => h.available);
     // 연출 유형의 대표 훅을 먼저, 그다음 추천 순서
     const ordered: HookCandidate[] = [

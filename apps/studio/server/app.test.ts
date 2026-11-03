@@ -283,7 +283,12 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     // 예약 기록
     expect((await call('POST', `/projects/${pid}/publications`, { platform: 'youtube', status: 'scheduled', scheduledAt: '2026-11-10T09:00:00+09:00' })).status).toBe(201);
 
-    // 9. 네이버: 반자동 발행 후 주소 등록
+    // 9. 네이버: 고른 원고에 답변 대기 칸이 있으면 발행 기록 불가 → 답변·본인 확인 후 가능
+    const early = await call('POST', `/projects/${pid}/publications`, { platform: 'naver', url: 'https://blog.naver.com/matlab/223456789' });
+    expect(early.status).toBe(409);
+    expect(early.body.error).toContain('블로그');
+    const need = cmp.body.options[0].pending.map((q: { id: string }) => q.id);
+    await call('PUT', `/projects/${pid}/expert-notes`, { answers: Object.fromEntries(need.map((k: string) => [k, '연구자 답변'])), confirmBy: '이희재' });
     expect((await call('POST', `/projects/${pid}/publications`, { platform: 'naver', url: 'https://blog.naver.com/matlab/223456789' })).status).toBe(201);
 
     // 10. 성과 입력 → 연출·훅별 모음

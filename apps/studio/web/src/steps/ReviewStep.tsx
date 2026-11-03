@@ -31,22 +31,41 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
   const errors = issues?.filter((i) => i.level === 'error').length ?? 0;
   const sceneIndex = new Map(latest.script.scenes.map((s, i) => [s.id, i + 1]));
   const r = project.recipe;
+  const render = project.renders.find((x) => x.status === 'done' && x.scriptVersion === latest.version);
+  const hasRender = Boolean(render);
 
   const submit = async (decision: 'approved' | 'changes_requested') => {
-    if (decision === 'approved' && errors > 0 && !confirm(`자동 검사 오류 ${errors}건이 남아 있습니다. 그래도 승인할까요?`)) return;
     const p = await run(
       () => api.review(project.id, { version: latest.version, reviewer, checklist, decision, note }),
-      decision === 'approved' ? '승인했습니다. 이제 최종 제작할 수 있습니다' : '수정 요청을 기록했습니다',
+      decision === 'approved' ? '승인했습니다. 이제 내보내고 게시할 수 있습니다' : '수정 요청을 기록했습니다',
     );
     if (p) {
       setProject(p);
       setNote('');
-      if (decision === 'approved') go('video');
+      if (decision === 'approved') go(hasRender ? 'publish' : 'video');
     }
   };
 
   return (
     <div className="stack">
+      <div className="card stack">
+        <h2 style={{ margin: 0 }}>결과물 보기</h2>
+        <div className="row" style={{ alignItems: 'flex-start' }}>
+          {render ? (
+            <video src={`/media/renders/${render.id}/video.mp4`} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />
+          ) : (
+            <div className="issue warning" style={{ maxWidth: 320 }}>
+              이 대본(v{latest.version})으로 만든 영상이 아직 없어요. 영상을 보고 승인하려면 먼저 검수용 영상을 만드세요.
+              <div><button className="btn small" onClick={() => go('video')}>영상·블로그로 →</button></div>
+            </div>
+          )}
+          <div className="stack small" style={{ flex: 1 }}>
+            <div><b>대본 제목</b> {latest.script.title}</div>
+            <div><b>블로그 원고</b> {project.blogStyle ? `선택됨 (${project.blogStyle})` : '아직 고르지 않음 — 기본 자동 원고로 내보내져요'}</div>
+            <div className="muted">승인하면 이 대본 버전과 위 영상을 내보내고 게시할 수 있어요. 승인 뒤에 대본·원본을 고치면 다시 승인받아야 해요.</div>
+          </div>
+        </div>
+      </div>
       <div className="compare">
         <div className="card">
           <h2>원본 (이희재 조리 노트)</h2>
@@ -61,7 +80,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
         </div>
         <div className="card">
           <h2>
-            AI 대본 v{latest.version} <span className="muted small">예상 {seconds}초</span>
+            대본 v{latest.version} <span className="muted small">예상 {seconds}초</span>
           </h2>
           {latest.script.scenes.map((s, i) => (
             <div className="line" key={s.id}>
@@ -93,7 +112,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
         {approved ? (
           <div className="issue info">
             v{latest.version}은 {project.approval?.reviewer}님이 {new Date(project.approval!.createdAt).toLocaleString('ko-KR')}에 승인했습니다.
-            <button className="btn small" style={{ marginLeft: 12 }} onClick={() => go('video')}>영상 제작으로 →</button>
+            <button className="btn small" style={{ marginLeft: 12 }} onClick={() => go(hasRender ? 'publish' : 'video')}>{hasRender ? '게시·기록으로 →' : '영상 만들기로 →'}</button>
           </div>
         ) : (
           <>
@@ -117,10 +136,16 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
               <button className="btn" onClick={() => go('script')}>대본 고치기</button>
               <div className="spacer" />
               <button className="btn" onClick={() => submit('changes_requested')}>수정 요청</button>
-              <button className="btn primary" disabled={!CHECKLIST_ITEMS.every((c) => checklist[c.key]) || !reviewer.trim()} onClick={() => submit('approved')}>
+              <button
+                className="btn primary"
+                disabled={errors > 0 || !CHECKLIST_ITEMS.every((c) => checklist[c.key]) || !reviewer.trim()}
+                title={errors > 0 ? '원본 레시피와 다른 곳을 먼저 고쳐야 승인할 수 있어요' : ''}
+                onClick={() => submit('approved')}
+              >
                 승인
               </button>
             </div>
+            {errors > 0 && <div className="issue error">원본 레시피와 다른 분량·재료·순서 {errors}건을 고쳐야 승인할 수 있어요. [후보 고르기]에서 대본을 고치세요.</div>}
           </>
         )}
       </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, estimateScriptSeconds, type Scene, type Script } from '@mat-lab/recipe-core';
 import { HookPicker } from '../components/HookPicker.tsx';
+import { CandidatePicker } from '../components/CandidatePicker.tsx';
 import { api, copyText } from '../api.ts';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
@@ -24,6 +25,7 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
   const [note, setNote] = useState('');
   const [aiText, setAiText] = useState('');
   const [showAi, setShowAi] = useState(false);
+  const [pickNotes, setPickNotes] = useState<string[] | null>(null);
 
   useEffect(() => {
     setDraft(project.latest?.script ?? null);
@@ -48,7 +50,24 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
 
   return (
     <div className="stack">
-      <HookPicker project={project} setProject={setProject} dirty={dirty} />
+      <CandidatePicker project={project} setProject={setProject} onPicked={(n) => setPickNotes(n)} />
+      {pickNotes !== null && (
+        <div className="card stack" style={{ background: '#fff8e1' }}>
+          <b>고른 후보로 대본을 만들었어요. 아래에서 고친 뒤 영상·블로그를 만드세요.</b>
+          {pickNotes.map((n) => (
+            <div key={n} className="small">· {n}</div>
+          ))}
+          <div>
+            <button className="btn primary small" onClick={() => go('video')}>영상·블로그 만들기로 →</button>
+          </div>
+        </div>
+      )}
+      <details className="card">
+        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>직접 고르기: 연출 유형과 첫 장면(훅)을 하나씩 정하기</summary>
+        <div style={{ marginTop: 12 }}>
+          <HookPicker project={project} setProject={setProject} dirty={dirty} />
+        </div>
+      </details>
       <div className="card stack">
         <div className="row">
           <h2 style={{ margin: 0 }}>다른 방법으로 대본 만들기</h2>
@@ -176,7 +195,7 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
             >
               새 버전으로 저장
             </button>
-            <button className="btn" disabled={dirty} onClick={() => go('review')}>검수로 →</button>
+            <button className="btn" disabled={dirty} onClick={() => go('video')}>영상·블로그로 →</button>
           </div>
         </div>
       )}

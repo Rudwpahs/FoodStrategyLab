@@ -48,6 +48,11 @@ describe('콘텐츠 후보 3가지', () => {
     const second = contentCandidates(pilot, { exclude: seen });
     expect(second.candidates.length).toBeGreaterThan(0);
     for (const c of second.candidates) expect(seen).not.toContain(c.key);
+    // 두 번째 묶음은 처음에 안 나온 연출 유형부터 보여 준다
+    const firstStyles = first.candidates.map((c) => c.style);
+    expect(firstStyles).not.toContain(second.candidates[0]!.style);
+    // 핵심 장면은 첫 장면(훅)과 다르다
+    for (const c of first.candidates) expect(c.keyScenes[1]!.line).not.toBe(c.keyScenes[0]!.line);
     let all = [...seen, ...second.candidates.map((c) => c.key)];
     let guard = 0;
     let next = second;
@@ -56,6 +61,20 @@ describe('콘텐츠 후보 3가지', () => {
       all = [...all, ...next.candidates.map((c) => c.key)];
     }
     expect(next.exhausted).toBe(true);
+  });
+
+  it('필요한 자료가 없는 연출(이야기 없는 스토리형 등)은 후보로 내지 않는다', () => {
+    const all = [];
+    let exclude: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = contentCandidates(pilot, { exclude });
+      all.push(...r.candidates);
+      exclude = [...exclude, ...r.candidates.map((c) => c.key)];
+      if (r.exhausted) break;
+    }
+    expect(all.some((c) => c.style === 'story')).toBe(false);
+    const withStory = contentCandidates({ ...pilot, story: '정과는 잔칫상에 오르던 과자예요. 꿀에 조려 만들었어요.' }, { exclude: ['problem:mistake', 'comedy:skit', 'experiment:experiment'] });
+    expect(withStory.candidates.some((c) => c.style === 'story')).toBe(true);
   });
 
   it('최근에 같은 연출을 많이 썼으면 그 유형 순위를 낮춘다', () => {
