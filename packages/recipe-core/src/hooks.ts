@@ -284,7 +284,7 @@ const scene = (type: SceneType, emotion: Emotion, line: string, visual?: Visual,
 });
 
 const COMPARE_LABELS = ['건너뛰면', '노트대로 하면'];
-const ILLUSTRATION_NOTE = '좌우 비교는 실제 실험 영상이 아닌 설명용 연출입니다. 화면의 "설명용 연출" 표시를 확인하세요.';
+const ILLUSTRATION_NOTE = '위아래 비교 화면은 실제 실험 영상이 아닌 설명용 연출입니다. 화면의 "설명용 연출" 표시를 확인하세요. 실제 비교 사진·클립을 올리면 더 설득력 있어요.';
 
 const BUILDERS: Record<HookType, Builder> = {
   question: (f) => {

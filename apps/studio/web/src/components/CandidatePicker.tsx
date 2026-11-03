@@ -108,6 +108,8 @@ const CandidateCard: React.FC<{ index: number; candidate: ContentCandidate; proj
           compositionHeight={1920}
           fps={30}
           controls
+          // 0프레임은 맛조수가 등장하기 전이라, 첫 화면을 대표하는 0.7초 지점을 보여 준다
+          initialFrame={Math.min(20, Math.max(0, totalFrames(props.timings) - 1))}
           style={{ width: 200, height: 356, borderRadius: 12, overflow: 'hidden', border: '2px solid var(--ink)' }}
         />
       </div>
