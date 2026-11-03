@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { STYLE_IDS, VISUAL_LABELS, type HookCandidate, type HookType, type StyleId, type StyleInfo } from '@mat-lab/recipe-core';
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
@@ -17,6 +17,8 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
   const [notes, setNotes] = useState<string[]>([]);
   const [showMissing, setShowMissing] = useState(false);
   const [repetition, setRepetition] = useState<string | null>(null);
+  /** 대표 훅을 이미 골라 준 연출 */
+  const defaultedFor = useRef<StyleId | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -25,12 +27,17 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
       setStyles(r.styles);
       setHooks(r.hooks);
       setRepetition(r.repetition);
-      setChosen((c) => (c && r.hooks.some((h) => h.type === c && h.available) ? c : r.hooks.find((h) => h.available)?.type ?? null));
+      // 연출이 바뀐 뒤 처음 받은 후보면 그 연출의 대표 훅을 고른다 (서버 pickHook과 같은 규칙)
+      const signature = r.styles[style].hooks.find((t) => r.hooks.some((h) => h.type === t && h.available)) ?? r.hooks.find((h) => h.available)?.type ?? null;
+      const fresh = defaultedFor.current !== style;
+      defaultedFor.current = style;
+      setChosen((c) => (!fresh && c && r.hooks.some((h) => h.type === c && h.available) ? c : signature));
     });
     return () => {
       alive = false;
     };
   }, [project.id, style, project.recipe]);
+  const pickStyle = (id: StyleId) => setStyle(id);
 
   const available = hooks.filter((h) => h.available);
   const missing = hooks.filter((h) => !h.available);
@@ -66,7 +73,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
               <button
                 key={id}
                 type="button"
-                onClick={() => setStyle(id)}
+                onClick={() => pickStyle(id)}
                 style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: on ? '3px solid #e2533a' : '1px solid #ddd', background: on ? '#fff3ef' : '#fff', cursor: 'pointer' }}
               >
                 <div style={{ fontWeight: 800 }}>{s?.label ?? id}</div>
@@ -93,7 +100,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
                 <input type="radio" name="hook" checked={on} onChange={() => setChosen(h.type)} />
                 <div className="stack" style={{ gap: 4 }}>
                   <div>
-                    <span className="badge">{h.label}</span> <b>“{h.line}”</b>
+                    <span className="badge">{h.label}</span> {info?.hooks[0] === h.type || (info && info.hooks.find((t) => available.some((a) => a.type === t)) === h.type) ? <span className="badge review">이 연출의 대표 훅</span> : null} <b>“{h.line}”</b>
                   </div>
                   <div className="small">첫 화면: {h.scenes[0]?.visual ? `${VISUAL_LABELS[h.scenes[0].visual]} — ` : ''}{h.firstScreen}</div>
                   <div className="small muted">추천 이유: {h.reason}</div>
