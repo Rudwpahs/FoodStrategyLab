@@ -53,7 +53,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     interest: '이유를 알고 싶은 마음',
     fits: '조리 과정에 "왜?"가 있는 단계(데치기, 휴지, 온도)',
     avoid: '답이 너무 뻔하거나 원리 설명이 없는 레시피',
-    firstScreen: '맛조수 얼굴 클로즈업 + 질문 카드',
+    firstScreen: '팬 속 음식 클로즈업 + 질문 카드 (첫 화면에 음식이 보이게)',
     firstLine: '질문 하나만, 짧게. 답은 뒤에서',
     editing: '질문 직후 바로 조리 장면으로 넘어가 답을 찾아가는 구조',
     accuracy: '답(원리)이 원본에 있어야 한다',
@@ -289,7 +289,7 @@ const ILLUSTRATION_NOTE = '좌우 비교는 실제 실험 영상이 아닌 설�
 const BUILDERS: Record<HookType, Builder> = {
   question: (f) => {
     const line = /[?？]$/.test(f.topic) ? f.topic : `${f.dish}, 왜 이렇게 만들까요?`;
-    return { line, firstScreen: HOOK_INFO.question.firstScreen, scenes: [scene('question', 'curious', line, 'react', { title: '오늘의 질문' })], needsReview: [], uses: ['주제'] };
+    return { line, firstScreen: HOOK_INFO.question.firstScreen, scenes: [scene('question', 'curious', line, 'sizzle', { title: '오늘의 질문' })], needsReview: [], uses: ['주제'] };
   },
   'result-first': (f) => {
     const s = f.sensory[0];
@@ -310,7 +310,7 @@ const BUILDERS: Record<HookType, Builder> = {
   myth: (f) => {
     if (!f.misconception) return { missing: '흔한 오해 (사람들이 잘못 아는 점)' };
     const line = `"${firstSentence(f.misconception).replace(/[.!?。]$/, '')}" 이렇게 알고 계셨죠? 사실은 달라요!`;
-    return { line, firstScreen: '흔한 믿음 카드 + 맛조수 의심 표정', scenes: [scene('question', 'curious', line, 'react', { title: '정말일까?' })], needsReview: [], uses: ['흔한 오해'] };
+    return { line, firstScreen: '팬 속 음식 + "정말일까?" 카드', scenes: [scene('question', 'curious', line, 'sizzle', { title: '정말일까?' })], needsReview: [], uses: ['흔한 오해'] };
   },
   compare: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
@@ -365,7 +365,7 @@ const BUILDERS: Record<HookType, Builder> = {
     const pick = f.principle.find((s) => extractQuantities(s).length > 0) ?? f.principle[0];
     if (!pick) return { missing: '핵심 원리' };
     const line = `알고 계셨나요? ${pick}`;
-    return { line, firstScreen: '핵심어·숫자를 크게 보여 주는 카드', scenes: [scene('question', 'surprised', line, 'react', { title: '알고 계셨나요?' })], needsReview: [], uses: ['핵심 원리'] };
+    return { line, firstScreen: '핵심어·숫자를 크게 보여 주는 카드', scenes: [scene('question', 'surprised', line, 'sizzle', { title: '알고 계셨나요?' })], needsReview: [], uses: ['핵심 원리'] };
   },
   sensory: (f) => {
     const s = f.sensory[0];
@@ -480,8 +480,13 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
     reasons.push('시간·보관 팁이 있어요');
   }
   if (type === 'expert-view') {
+    // 관찰(가설): 직함을 앞세운 숏폼은 사례에서 약했고, 구체적인 문제를 푸는 전문가 영상은 강했다 (reels-analysis C08·C10·C14)
+    score -= 0.5;
+    reasons.push('직함을 앞세운 첫 문장은 사례에서 약했어요 — 이름은 팁 카드·서명으로 보여 주는 편을 추천');
+  }
+  if (type === 'myth' && f.misconception) {
     score += 1;
-    reasons.push('첫 문장에 전문가 직함이 나와 이름을 기억시키기 좋아요');
+    reasons.push('"정말 그럴까?" 형 질문이 사례에서 꾸준히 강했어요(관찰)');
   }
   // Instagram 공식 권고: 첫 3초 안에 관심을 끈다 (한국어 음성 약 7자/초 기준)
   const len = compactLength(built.line);

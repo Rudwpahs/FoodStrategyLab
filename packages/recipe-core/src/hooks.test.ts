@@ -140,6 +140,14 @@ describe('연출 유형별 대본', () => {
     }
   });
 
+  it('결과를 보장하는 상투 문구(실패 없는·황금레시피·무조건)를 쓰지 않는다', () => {
+    for (const style of STYLE_IDS) {
+      const { script } = buildStyledScript(walnutFull, { style });
+      const all = script.scenes.map((s) => s.line).join(' ');
+      expect(all, style).not.toMatch(/실패 없|황금|무조건|누구나/);
+    }
+  });
+
   it('첫 장면이 훅이고, 엔딩은 연구자 서명 카드다', () => {
     const { script, hook } = buildStyledScript(walnut, { style: 'experiment' });
     expect(script.scenes[0]!.hook).toBe(true);

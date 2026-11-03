@@ -172,7 +172,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       body.push(brand());
       body.push(explain(0, '원인은 이거예요. ')!);
       body.push(ingredients()!, steps((n, r) => `바른 순서는 딱 ${n}단계${restNote(r)}!`)!, tipScene()!);
-      body.push(signature(`실패 없이 만들고 싶으면 저장! ${BRAND.labName}였어요.`));
+      body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.labName}였어요.`));
       break;
     }
     case 'comedy': {

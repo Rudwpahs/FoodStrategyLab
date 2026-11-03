@@ -39,13 +39,15 @@ export interface RenderVideoOptions {
   inputProps: Record<string, unknown>;
   outputLocation: string;
   onProgress?: (progress: number) => void;
+  /** 일부 구간만 렌더 (확인용) */
+  frameRange?: [number, number];
 }
 
 export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   return withGlFallback(() => renderVideoOnce(options));
 }
 
-async function renderVideoOnce({ inputProps, outputLocation, onProgress }: RenderVideoOptions): Promise<void> {
+async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRange }: RenderVideoOptions): Promise<void> {
   const url = await getServeUrl();
   const composition = await selectComposition({ serveUrl: url, id: 'ShortVideo', inputProps, browserExecutable, chromiumOptions });
   await renderMedia({
@@ -57,6 +59,7 @@ async function renderVideoOnce({ inputProps, outputLocation, onProgress }: Rende
     browserExecutable,
     chromiumOptions,
     enforceAudioTrack: true,
+    ...(frameRange ? { frameRange } : {}),
     onProgress: ({ progress }) => onProgress?.(progress),
   });
 }

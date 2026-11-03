@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { BRAND, clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
 import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
+import { sfxCues, sfxUrl } from '../sfx.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
@@ -33,6 +34,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const failState = compare ? stageAt(script, timings, frame, food.kind, props.length, 'compare-fail') : null;
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
+  const sfx = useMemo(() => sfxCues(script), [script]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
   const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
   const half = Math.round(height / 2);
@@ -101,6 +103,16 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
             <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} photoUrl={photoUrl} captionBottom={captionBottom} />
             <SpeechAudio timing={timing} />
+          </Sequence>
+        );
+      })}
+      {/* 효과음: 코드로 합성한 소리 (훅·실패·공개·서명 순간만, 목소리보다 작게) */}
+      {sfx.map((c) => {
+        const t = byId.get(c.sceneId);
+        if (!t) return null;
+        return (
+          <Sequence key={`sfx-${c.sceneId}`} from={t.from + c.offset} durationInFrames={30} name={`sfx ${c.name}`}>
+            <Audio src={sfxUrl(c.name)} volume={0.32} />
           </Sequence>
         );
       })}
