@@ -6,3 +6,9 @@ dist/
 .DS_Store
 .env
 tmp/
+
+# Android 빌드 결과
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
