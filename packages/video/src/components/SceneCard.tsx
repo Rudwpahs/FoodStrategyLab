@@ -77,9 +77,10 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
       return (
         <div style={{ ...style, textAlign: 'center', top: 300, background: COLORS.cream }}>
           <Label color={COLORS.navy}>{scene.cardTitle ?? '오늘의 질문'}</Label>
-          <div style={{ fontSize: fitSize(topic, 80, 14), fontWeight: 900, lineHeight: 1.22 }}>
+          {/* 훅 장면은 말하는 첫 문장을 그대로 크게 보여 준다 (소리 없이 봐도 이해되도록) */}
+          <div style={{ fontSize: fitSize(scene.hook ? scene.line : topic, 80, 14), fontWeight: 900, lineHeight: 1.22 }}>
             <span style={{ color: COLORS.red }}>Q. </span>
-            {topic}
+            {scene.hook ? scene.line : topic}
           </div>
         </div>
       );

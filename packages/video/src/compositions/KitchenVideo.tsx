@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
 import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
@@ -10,7 +10,7 @@ import { ensureFonts } from '../fonts.ts';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene } from '../three/KitchenScene.tsx';
 import { propPositions } from '../three/layout.ts';
-import { projectToScreen, stageAt } from '../three/stage.ts';
+import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import type { SceneTiming, VideoProps } from '../timeline.ts';
 
 ensureFonts();
@@ -28,19 +28,35 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
   const props = useMemo(() => ingredientProps(recipe), [recipe]);
   const state = stageAt(script, timings, frame, food.kind, props.length);
+  // 비교 장면: 화면을 위(건너뛴 결과)·아래(노트대로 한 결과)로 나눈다 — 설명용 연출
+  const compare = sceneAt(script, timings, frame)?.scene.visual === 'compare';
+  const failState = compare ? stageAt(script, timings, frame, food.kind, props.length, 'compare-fail') : null;
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
-  const captionBottom = state && !clipNow ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
+  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
+  const half = Math.round(height / 2);
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
       {/* 색 보정: 대비·채도를 살짝 올려 영화 같은 느낌 */}
       <AbsoluteFill style={{ filter: 'contrast(1.07) saturate(1.1)' }}>
-        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />}
+        {state && compare && failState ? (
+          <>
+            <div style={{ position: 'absolute', left: 0, top: 0, width, height: half, overflow: 'hidden' }}>
+              <KitchenScene width={width} height={half} frame={frame} state={failState} food={food} props={[]} />
+            </div>
+            <div style={{ position: 'absolute', left: 0, top: half, width, height: height - half, overflow: 'hidden' }}>
+              <KitchenScene width={width} height={height - half} frame={frame} state={state} food={food} props={[]} />
+            </div>
+          </>
+        ) : (
+          state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />
+        )}
       </AbsoluteFill>
       {/* 재료 이름표: 3D 소품 위에 붙는다 */}
       {state &&
+        !compare &&
         props.map((p, i) => {
           const pop = state.propPop[i] ?? 0;
           if (pop < 0.3) return null;
@@ -169,7 +185,11 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
   const showPhoto = photoUrl && (scene.type === 'tip' || scene.type === 'outro');
   return (
     <AbsoluteFill>
-      {scene.type === 'steps' ? (
+      {scene.visual === 'compare' ? (
+        <CompareOverlay scene={scene} frame={frame} fps={fps} />
+      ) : scene.visual === 'signature' ? (
+        <SignatureCard frame={frame} fps={fps} reviewed={reviewed} />
+      ) : scene.type === 'steps' ? (
         <StepTicker scene={scene} frame={frame} duration={timing.durationInFrames} />
       ) : scene.type === 'ingredients' ? (
         <TitleChip text={scene.cardTitle ?? '준비물'} frame={frame} fps={fps} />
@@ -189,6 +209,56 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         bottomY={captionBottom}
       />
     </AbsoluteFill>
+  );
+};
+
+/** 비교 화면 이름표: 위 = 건너뛴 결과, 아래 = 노트대로 한 결과. 실제 실험이 아님을 항상 표시한다. */
+const CompareOverlay: React.FC<{ scene: Scene; frame: number; fps: number }> = ({ scene, frame, fps }) => {
+  const [top, bottom] = [scene.cardItems?.[0] ?? '건너뛰면', scene.cardItems?.[1] ?? '노트대로 하면'];
+  const p = spring({ frame, fps, config: { damping: 14 } });
+  const tag = (text: string, y: number, bg: string, fg: string) => (
+    <div style={{ position: 'absolute', left: 56, top: y, transform: `scale(${p})`, transformOrigin: 'left top', background: bg, color: fg, border: `5px solid ${COLORS.ink}`, borderRadius: 22, padding: '10px 30px', fontFamily: FONT_FAMILY, fontWeight: 900, fontSize: 58, boxShadow: `0 7px 0 ${COLORS.ink}` }}>
+      {text}
+    </div>
+  );
+  return (
+    <AbsoluteFill>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 957, height: 6, background: COLORS.ink }} />
+      {tag(`✕ ${top}`, 340, COLORS.white, COLORS.red)}
+      {tag(`○ ${bottom}`, 1000, COLORS.mint, COLORS.ink)}
+      {scene.cardTitle && (
+        <div style={{ position: 'absolute', left: 60, right: 60, top: 860, display: 'flex', justifyContent: 'center', opacity: p }}>
+          <div style={{ background: COLORS.yellow, border: `5px solid ${COLORS.ink}`, borderRadius: 26, padding: '12px 30px', fontFamily: FONT_FAMILY, fontWeight: 850, fontSize: fitText(scene.cardTitle, 46, 20), color: COLORS.ink, textAlign: 'center', wordBreak: 'keep-all', boxShadow: `0 6px 0 ${COLORS.ink}` }}>
+            {scene.cardTitle}
+          </div>
+        </div>
+      )}
+      <div style={{ position: 'absolute', right: 40, top: 880 - 110, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>
+        설명용 연출
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+const fitText = (text: string, base: number, comfortable: number) => (text.length <= comfortable ? base : Math.max(base * 0.6, base * Math.sqrt(comfortable / text.length)));
+
+/**
+ * 엔딩 서명 카드: 전문가 이름을 매번 길게 소개하지 않고, 끝에 한 번 또렷하게 남긴다.
+ * '검토' 문구는 실제 승인된 대본으로 만든 영상에만 나온다.
+ */
+const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean }> = ({ frame, fps, reviewed }) => {
+  const p = spring({ frame: frame - 4, fps, config: { damping: 13 } });
+  return (
+    <div style={{ position: 'absolute', left: 90, right: 90, top: 280, transform: `translateY(${interpolate(p, [0, 1], [60, 0])}px)`, opacity: p }}>
+      <div style={{ background: COLORS.white, border: `6px solid ${COLORS.ink}`, borderRadius: 40, boxShadow: `0 12px 0 ${COLORS.ink}`, padding: '34px 40px', fontFamily: FONT_FAMILY, color: COLORS.ink, textAlign: 'center' }}>
+        <div style={{ fontSize: 36, fontWeight: 700, opacity: 0.75 }}>
+          {BRAND.researcherTitle} · {BRAND.researcherRole}
+        </div>
+        <div style={{ fontSize: 112, fontWeight: 950, letterSpacing: 6, margin: '6px 0 4px', fontStyle: 'italic' }}>{BRAND.researcher}</div>
+        <div style={{ fontSize: 40, fontWeight: 800, color: COLORS.red }}>{BRAND.labName}</div>
+        <div style={{ marginTop: 18, fontSize: 30, fontWeight: 700, opacity: 0.8 }}>{reviewed ? '이 영상의 조리 정보는 이희재 연구자가 검토했습니다' : '검수 전 초안'}</div>
+      </div>
+    </div>
   );
 };
 

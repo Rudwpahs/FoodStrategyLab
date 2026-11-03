@@ -1,4 +1,4 @@
-import type { Issue, RecipeInput, Script } from '@mat-lab/recipe-core';
+import type { HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { VideoProps } from '@mat-lab/video/timeline';
 import type { ProjectDetail, ProjectSummary, RenderRow } from '../../server/repo.ts';
 
@@ -47,6 +47,10 @@ export const api = {
   create: (recipe: RecipeInput) => request<{ id: number }>('POST', '/projects', { recipe }),
   remove: (id: number) => request<void>('DELETE', `/projects/${id}`),
   updateRecipe: (id: number, recipe: RecipeInput) => request<ProjectDetail>('PUT', `/projects/${id}/recipe`, { recipe }),
+  hooks: (id: number, style?: StyleId) =>
+    request<{ styles: Record<StyleId, StyleInfo>; hookInfo: Record<HookType, HookInfo>; hooks: HookCandidate[] }>('GET', `/projects/${id}/hooks${style ? `?style=${style}` : ''}`),
+  styledScript: (id: number, style: StyleId, hookType?: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/styled`, { style, hookType }),
+  changeHook: (id: number, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/hook`, { hookType }),
   templateScript: (id: number) => request<ProjectDetail>('POST', `/projects/${id}/script/template`),
   aiPrompt: (id: number) => request<{ prompt: string }>('GET', `/projects/${id}/ai-prompt`),
   aiScript: (id: number, text: string) => request<ProjectDetail>('POST', `/projects/${id}/script/ai`, { text }),

@@ -107,8 +107,16 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
           <textarea rows={3} value={tips} onChange={(e) => setTips(e.target.value)} />
         </label>
         <label className="field">
-          흔한 실수 <span className="hint">캐릭터 코미디형에서 맛조수가 저지르는 실수</span>
+          흔한 실수 <span className="hint">연구자가 실제로 자주 보는 실수. 비워 두면 실수 경고·문제 해결 훅은 쓰지 않습니다.</span>
           <input type="text" value={r.commonMistake} onChange={(e) => set('commonMistake', e.target.value)} />
+        </label>
+        <label className="field">
+          흔한 오해 <span className="hint">(선택) 사람들이 잘못 아는 점. 오해 반박·반전 훅에 씁니다.</span>
+          <input type="text" value={r.misconception ?? ''} onChange={(e) => set('misconception', e.target.value)} />
+        </label>
+        <label className="field">
+          음식 이야기 <span className="hint">(선택) 유래나 연구자의 실제 경험. 스토리형 훅에 씁니다. 확인된 내용만 적어 주세요.</span>
+          <textarea rows={2} value={r.story ?? ''} onChange={(e) => set('story', e.target.value)} />
         </label>
       </div>
 

@@ -101,6 +101,43 @@ describe('스튜디오 API 흐름', () => {
   });
 });
 
+describe('훅·연출 선택', () => {
+  const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+
+  it('훅 후보를 이유와 함께 주고, 고른 훅으로 대본을 만들고, 훅만 바꾸면 나머지 장면은 그대로다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
+    const hooks = await call('GET', `/projects/${pid}/hooks?style=experiment`);
+    expect(hooks.status).toBe(200);
+    expect(hooks.body.hooks).toHaveLength(15);
+    expect(hooks.body.hooks[0].reason).toBeTruthy();
+    expect(hooks.body.styles.experiment.label).toBe('요리 과학 실험형');
+
+    const made = await call('POST', `/projects/${pid}/script/styled`, { style: 'experiment', hookType: 'experiment' });
+    expect(made.status).toBe(200);
+    const v1 = made.body.project.latest;
+    expect(v1.script.scenes[0].visual).toBe('compare');
+    expect(made.body.notes.join(' ')).toContain('설명용');
+
+    // 승인 후 훅을 바꾸면 새 버전이 되어 승인이 풀린다
+    await call('POST', `/projects/${pid}/reviews`, { version: v1.version, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    const changed = await call('POST', `/projects/${pid}/script/hook`, { hookType: 'result-first' });
+    expect(changed.status).toBe(200);
+    const v2 = changed.body.project.latest;
+    expect(v2.version).toBe(v1.version + 1);
+    expect(changed.body.project.status).toBe('review');
+    expect(v2.script.scenes[0].visual).toBe('result');
+    expect(v2.script.scenes.slice(1)).toEqual(v1.script.scenes.slice(1));
+  });
+
+  it('자료가 없어 만들 수 없는 훅은 400으로 이유를 알려준다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
+    const r = await call('POST', `/projects/${pid}/script/styled`, { style: 'problem', hookType: 'mistake' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('흔한 실수');
+    expect((await call('POST', `/projects/${pid}/script/styled`, { style: 'nope' })).status).toBe(400);
+  });
+});
+
 describe('완성 사진', () => {
   it('사진을 올리면 미리보기 데이터에 사진과 색이 들어가고, 지울 수 있다', async () => {
     const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[0] })).body.id;

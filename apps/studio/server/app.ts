@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { SAMPLE_RECIPES, buildAiPrompt, buildReelPromptPack, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, parseAiScript } from '@mat-lab/recipe-core';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, suggestHooks } from '@mat-lab/recipe-core';
 import { buildBlogPost, buildSocialCopy } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
@@ -91,6 +91,49 @@ export function createApp(repo: Repo) {
     const pid = id(req);
     repo.addScriptVersion(pid, generateTemplateScript(repo.getRecipe(pid)), 'template');
     res.json(repo.getProject(pid));
+  });
+
+  /** 연출 유형 목록 + 이 레시피로 만들 수 있는 훅 후보 (추천 순서, 이유 포함) */
+  api.get('/projects/:id/hooks', (req, res) => {
+    const pid = id(req);
+    const style = isStyleId(req.query.style) ? req.query.style : undefined;
+    res.json({
+      styles: STYLE_INFO,
+      hookInfo: HOOK_INFO,
+      hooks: suggestHooks(repo.getRecipe(pid), { preferred: style ? STYLE_INFO[style].hooks : undefined }),
+    });
+  });
+
+  /** 연출 유형 + 훅으로 새 대본 (새 버전, 승인 해제) */
+  api.post('/projects/:id/script/styled', (req, res) => {
+    const pid = id(req);
+    const { style, hookType } = req.body ?? {};
+    if (!isStyleId(style)) throw new HttpError(400, '연출 유형을 고르세요.');
+    if (hookType !== undefined && !isHookType(hookType)) throw new HttpError(400, '알 수 없는 훅 유형입니다.');
+    let result;
+    try {
+      result = buildStyledScript(repo.getRecipe(pid), { style, hookType });
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    repo.addScriptVersion(pid, result.script, 'template', `연출: ${STYLE_INFO[style].label} · 훅: ${result.hook.label}`);
+    res.json({ project: repo.getProject(pid), notes: result.notes });
+  });
+
+  /** 지금 대본의 훅(첫 장면)만 바꾼다. 나머지 장면과 음성은 그대로. */
+  api.post('/projects/:id/script/hook', (req, res) => {
+    const pid = id(req);
+    const { hookType } = req.body ?? {};
+    if (!isHookType(hookType)) throw new HttpError(400, '훅 유형을 고르세요.');
+    const latest = latestOrThrow(repo, pid);
+    let result;
+    try {
+      result = applyHook(latest.script, repo.getRecipe(pid), hookType);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    repo.addScriptVersion(pid, result.script, 'edit', `훅 변경: ${result.hook.label}`);
+    res.json({ project: repo.getProject(pid), notes: result.hook.needsReview });
   });
 
   api.get('/projects/:id/ai-prompt', (req, res) => res.json({ prompt: buildAiPrompt(repo.getRecipe(id(req))) }));

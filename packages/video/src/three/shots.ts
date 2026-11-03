@@ -1,4 +1,4 @@
-import type { SceneType } from '@mat-lab/recipe-core';
+import type { Scene, SceneType, Visual } from '@mat-lab/recipe-core';
 import { BURNER, CHEF_POS, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
 
 /**
@@ -91,6 +91,40 @@ export function shotFor(type: SceneType, indexOfType: number): Shot {
       return { ...base, ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present' };
   }
 }
+
+// 훅용 빠른 확대: 캐릭터 얼굴로 더 가까이 다가간다
+const CHEF_PUNCH = {
+  from: { pos: add(CHEF_FACE, [0.5, 0.24, 1.75]), target: add(CHEF_FACE, [0.04, 0.2, 0]) },
+  to: { pos: add(CHEF_FACE, [0.3, 0.2, 1.35]), target: add(CHEF_FACE, [0.04, 0.2, 0]) },
+};
+// 팬 속 음식에 바짝 붙는 조리 클로즈업
+const STOVE_CLOSE = {
+  from: { pos: add(BURNER, [0.32, 0.62, 0.5]), target: add(BURNER, [0.04, 0.16, 0.02]) },
+  to: { pos: add(BURNER, [0.2, 0.52, 0.38]), target: add(BURNER, [0.04, 0.16, 0.02]) },
+};
+
+/** 장면 연출(visual)이 있으면 그 화면을, 없으면 장면 종류의 기본 화면을 쓴다. */
+export function shotForScene(scene: Pick<Scene, 'type' | 'visual'>, indexOfType: number): Shot {
+  const base = shotFor(scene.type, indexOfType);
+  if (!scene.visual) return base;
+  return { ...base, ...VISUAL_SHOTS[scene.visual](base) };
+}
+
+const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>> = {
+  result: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 38, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
+  fail: () => ({ ...PRESENT, mood: 'gloom', plated: 'failed', props: 'hidden', action: 'present', face: 'camera' }),
+  // 비교 장면은 화면을 위아래로 나눠 두 접시를 보여 준다 (KitchenVideo). 기본 상태는 '노트대로 한' 쪽.
+  compare: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
+  sizzle: (b) => ({ ...STOVE_CLOSE, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6], props: 'hidden' }),
+  react: () => ({ ...CHEF_PUNCH, mood: 'curious', fov: 38, props: 'hidden', face: 'camera' }),
+  signature: () => ({ ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present', face: 'camera' }),
+};
+
+/** 비교 화면의 '건너뛴 쪽' 상태 */
+export function compareFailShot(shot: Shot): Shot {
+  return { ...shot, plated: 'failed', mood: 'gloom' };
+}
+
 
 /** 장면 진행률(0~1)에 따른 카메라 위치. 부드럽게 천천히 움직인다. */
 export function cameraAt(shot: Shot, t: number): { pos: Vec3; target: Vec3 } {

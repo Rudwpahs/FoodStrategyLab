@@ -55,6 +55,10 @@ export const RecipeInputSchema = z.object({
   tips: z.array(z.string().trim().min(1)).default([]),
   commonMistake: z.string().trim().default(''),
   source: z.string().trim().default('이희재 조리 노트'),
+  /** 사람들이 흔히 잘못 아는 점 (연구자 입력, 오해 반박·반전 훅에 쓴다) */
+  misconception: z.string().trim().optional(),
+  /** 음식에 얽힌 이야기·유래·추억 (연구자 입력, 스토리 훅에 쓴다) */
+  story: z.string().trim().optional(),
   /** 3D 음식 모양. 'auto'면 요리 이름·재료로 추정 */
   foodKind: z.enum(['auto', 'pancake', 'egg', 'greens', 'soup', 'rice', 'noodles', 'stirfry', 'generic']).default('auto'),
 });
@@ -63,6 +67,24 @@ export type RecipeInput = z.infer<typeof RecipeInputSchema>;
 export const SCENE_TYPES = ['intro', 'question', 'mistake', 'explain', 'ingredients', 'steps', 'tip', 'outro'] as const;
 export const SceneTypeSchema = z.enum(SCENE_TYPES);
 export type SceneType = z.infer<typeof SceneTypeSchema>;
+
+/**
+ * 장면 화면 연출. 비어 있으면 장면 종류(type)에 맞는 기본 화면을 쓴다.
+ * result: 완성 음식 먼저 / fail: 실패한 결과 / compare: 좌우 비교(설명용 연출)
+ * sizzle: 조리 중 클로즈업 / react: 캐릭터 반응 클로즈업 / signature: 전문가 서명 카드
+ */
+export const VISUALS = ['result', 'fail', 'compare', 'sizzle', 'react', 'signature'] as const;
+export const VisualSchema = z.enum(VISUALS);
+export type Visual = z.infer<typeof VisualSchema>;
+
+export const VISUAL_LABELS: Record<Visual, string> = {
+  result: '완성 음식 먼저',
+  fail: '실패한 결과',
+  compare: '좌우 비교 (설명용 연출)',
+  sizzle: '조리 중 클로즈업',
+  react: '맛조수 반응 클로즈업',
+  signature: '이희재 연구자 서명 카드',
+};
 
 export const SceneSchema = z.object({
   id: z.string().min(1),
@@ -73,11 +95,18 @@ export const SceneSchema = z.object({
   /** 화면 카드에 표시할 항목 (재료·단계·노트 등) */
   cardTitle: z.string().trim().optional(),
   cardItems: z.array(z.string().trim()).optional(),
+  /** 화면 연출 (선택) */
+  visual: VisualSchema.optional(),
+  /** 훅(첫 장면) 여부: 훅을 바꿀 때 이 장면만 다시 만든다 */
+  hook: z.boolean().optional(),
 });
 export type Scene = z.infer<typeof SceneSchema>;
 
 export const ScriptSchema = z.object({
   title: z.string().trim().min(1),
+  /** 연출 유형과 훅 유형 (선택, 연출 엔진으로 만든 대본에만 있음) */
+  style: z.string().optional(),
+  hookType: z.string().optional(),
   scenes: z.array(SceneSchema).min(3, '장면은 최소 3개가 필요합니다').max(12, '장면은 최대 12개입니다'),
 });
 export type Script = z.infer<typeof ScriptSchema>;

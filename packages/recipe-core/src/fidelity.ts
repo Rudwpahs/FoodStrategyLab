@@ -73,6 +73,8 @@ export function recipeText(recipe: RecipeInput): string {
     recipe.principle,
     ...recipe.tips,
     recipe.commonMistake,
+    recipe.misconception ?? '',
+    recipe.story ?? '',
   ].join('\n');
 }
 
@@ -169,7 +171,8 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
     }
   }
 
-  const first = script.scenes[0]?.line ?? '';
+  // 훅이 맨 앞에 오는 대본은 두 번째 장면까지를 오프닝으로 본다
+  const first = script.scenes.slice(0, 2).map((s) => s.line).join('\n');
   const last = script.scenes.at(-1)?.line ?? '';
   const all = script.scenes.map((s) => s.line).join('\n');
   if (!first.includes(BRAND.labName)) {

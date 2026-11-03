@@ -4,10 +4,14 @@ export const BRAND = {
   slogan: '요리가 쉬워지는 30초 실험실',
   researcher: '이희재',
   researcherTitle: '조리기능장',
+  /** 서명 카드에 쓰는 두 번째 직함 */
+  researcherRole: '조리외식경영 연구자',
   character: '맛조수',
   openingLine: '이희재의 맛 연구소에서 오늘도 실험!',
   notePhrase: '이희재 연구자의 조리 노트',
   tipPhrase: '조리기능장 이희재의 한 줄 팁',
+  /** 훅이 먼저 나오는 대본에서 두 번째 장면에 쓰는 짧은 브랜드 문구 */
+  shortOpening: '이희재의 맛 연구소, 오늘의 실험!',
 } as const;
 
 /**

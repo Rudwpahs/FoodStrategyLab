@@ -3,7 +3,7 @@ import type { FoodKind, Scene, Script } from '@mat-lab/recipe-core';
 import type { SceneTiming } from '../timeline.ts';
 import type { StageState } from './KitchenScene.tsx';
 import type { Vec3 } from './layout.ts';
-import { cameraAt, shotFor } from './shots.ts';
+import { cameraAt, compareFailShot, shotForScene } from './shots.ts';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -39,12 +39,13 @@ export function sceneAt(script: Script, timings: SceneTiming[], frame: number): 
 }
 
 /** 프레임 → 3D 장면 상태 (카메라·캐릭터·음식·소품). 순수 함수라 테스트할 수 있다. */
-export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, propCount: number): StageState | null {
+export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, propCount: number, variant: 'main' | 'compare-fail' = 'main'): StageState | null {
   const at = sceneAt(script, timings, frame);
   if (!at) return null;
   const { scene, index, local, progress, timing } = at;
   const sameTypeBefore = script.scenes.slice(0, index).filter((s) => s.type === scene.type).length;
-  const shot = shotFor(scene.type, sameTypeBefore);
+  const mainShot = shotForScene(scene, sameTypeBefore);
+  const shot = variant === 'compare-fail' ? compareFailShot(mainShot) : mainShot;
   const cam = cameraAt(shot, progress);
 
   const ingredientsIndex = script.scenes.findIndex((s) => s.type === 'ingredients');
@@ -66,7 +67,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     action: shot.action,
     face: shot.face,
     burnerOn: shot.burnerOn,
-    showFoodInVessel: scene.type === 'explain' || scene.type === 'steps',
+    showFoodInVessel: scene.type === 'steps' || scene.visual === 'sizzle' || (scene.type === 'explain' && !scene.visual),
     cook,
     flip: flip >= 1 ? 0 : flip,
     plated: shot.plated,

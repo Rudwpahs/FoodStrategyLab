@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, estimateScriptSeconds, type Scene, type Script } from '@mat-lab/recipe-core';
+import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, estimateScriptSeconds, type Scene, type Script } from '@mat-lab/recipe-core';
+import { HookPicker } from '../components/HookPicker.tsx';
 import { api, copyText } from '../api.ts';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
@@ -47,9 +48,10 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
 
   return (
     <div className="stack">
+      <HookPicker project={project} setProject={setProject} dirty={dirty} />
       <div className="card stack">
         <div className="row">
-          <h2 style={{ margin: 0 }}>대본 만들기</h2>
+          <h2 style={{ margin: 0 }}>다른 방법으로 대본 만들기</h2>
           <span className="muted small">비용 0원: 템플릿 생성 또는 무료 AI 채팅에 붙여넣기</span>
         </div>
         <div className="row">
@@ -61,7 +63,7 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
               if (p) setProject(p);
             }}
           >
-            템플릿으로 새로 생성
+            기본 템플릿으로 새로 생성
           </button>
           <button className="btn" onClick={() => setShowAi((v) => !v)}>
             AI 대본 붙여넣기 {showAi ? '▲' : '▼'}
@@ -122,6 +124,11 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
                 <select value={s.emotion} onChange={(e) => setScene(i, { emotion: e.target.value as Scene['emotion'] })}>
                   {EMOTIONS.map((e) => <option key={e} value={e}>{EMOTION_LABELS[e]}</option>)}
                 </select>
+                <select value={s.visual ?? ''} onChange={(e) => setScene(i, { visual: (e.target.value || undefined) as Scene['visual'] })} title="장면 화면 연출">
+                  <option value="">기본 화면</option>
+                  {VISUALS.map((v) => <option key={v} value={v}>{VISUAL_LABELS[v]}</option>)}
+                </select>
+                {s.hook && <span className="badge" title="첫 장면(훅). 훅을 바꾸면 이 장면만 다시 만들어요.">첫 장면</span>}
                 <div className="spacer" />
                 <button className="btn small ghost" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
                 <button className="btn small ghost" disabled={i === draft.scenes.length - 1} onClick={() => move(i, 1)}>↓</button>
