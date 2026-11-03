@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { BRAND } from '@mat-lab/recipe-core';
-import { api, type Meta } from './api.ts';
+import { api, type AuthState, type Meta } from './api.ts';
+import { LoginPage } from './pages/LoginPage.tsx';
 import { CharacterPage } from './pages/CharacterPage.tsx';
 import { NewProjectPage } from './pages/NewProjectPage.tsx';
 import { ProjectList } from './pages/ProjectList.tsx';
@@ -13,6 +14,8 @@ interface Ctx {
   /** 비동기 작업을 실행하고 오류를 알림으로 보여준다 */
   run: <T>(fn: () => Promise<T>, success?: string) => Promise<T | undefined>;
   meta: Meta | null;
+  /** 로그인한 사람 (이 컴퓨터 전용 모드면 null) */
+  user: AuthState['user'];
 }
 const AppContext = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppContext);
@@ -35,6 +38,14 @@ export const App: React.FC = () => {
   const hash = useHash();
   const [toast, setToast] = useState<Toast>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const checkAuth = useCallback(() => api.me().then(setAuth).catch(() => setAuth({ mode: 'login', allowed: false, user: null })), []);
+  useEffect(() => {
+    checkAuth();
+    const on = () => checkAuth();
+    addEventListener('matlab:logged-out', on);
+    return () => removeEventListener('matlab:logged-out', on);
+  }, [checkAuth]);
 
   const notify = useCallback((text: string, error = false) => {
     setToast({ text, error });
@@ -56,8 +67,11 @@ export const App: React.FC = () => {
   );
 
   useEffect(() => {
-    api.meta().then(setMeta).catch(() => undefined);
-  }, []);
+    if (auth?.allowed) api.meta().then(setMeta).catch(() => undefined);
+  }, [auth?.allowed]);
+
+  if (!auth) return <div className="empty">불러오는 중…</div>;
+  if (!auth.allowed) return <LoginPage auth={auth} onLoggedIn={checkAuth} />;
 
   const project = hash.match(/^#\/p\/(\d+)/);
   let page: React.ReactNode;
@@ -67,7 +81,7 @@ export const App: React.FC = () => {
   else page = <ProjectList />;
 
   return (
-    <AppContext.Provider value={{ notify, run, meta }}>
+    <AppContext.Provider value={{ notify, run, meta, user: auth.user }}>
       <header className="topbar">
         <a className="brand" href="#/">
           <LogoMark size={34} />
@@ -79,6 +93,18 @@ export const App: React.FC = () => {
           <a href="#/" className={!project && hash === '#/' ? 'active' : ''}>콘텐츠 목록</a>
           <a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}>새 콘텐츠</a>
           <a href="#/character" className={hash.startsWith('#/character') ? 'active' : ''}>캐릭터·목소리</a>
+          {auth.user && (
+            <button
+              className="btn small ghost"
+              title={`${auth.user.displayName} 로그아웃`}
+              onClick={async () => {
+                await api.logout().catch(() => undefined);
+                checkAuth();
+              }}
+            >
+              로그아웃
+            </button>
+          )}
         </nav>
       </header>
       <main>{page}</main>

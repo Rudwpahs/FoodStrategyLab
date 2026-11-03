@@ -1,0 +1,16 @@
+{
+  "name": "이희재의 맛 연구소 스튜디오",
+  "short_name": "맛 연구소",
+  "description": "레시피로 맛조수 릴스와 블로그 원고를 만들고 검수·게시를 기록하는 스튜디오",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFF4E2",
+  "theme_color": "#E2533A",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

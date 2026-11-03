@@ -14,6 +14,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  // 로그인이 풀렸으면 로그인 화면으로
+  if (res.status === 401 && !url.startsWith('/auth/')) window.dispatchEvent(new Event('matlab:logged-out'));
   if (!res.ok) throw new Error(data?.error ?? `요청 실패 (${res.status})`);
   return data as T;
 }
@@ -38,7 +40,16 @@ export interface VoiceInfo {
   describe: string;
 }
 
+export interface AuthState {
+  mode: 'local' | 'login';
+  allowed: boolean;
+  user: { id: number; username: string; displayName: string } | null;
+}
+
 export const api = {
+  me: () => request<AuthState>('GET', '/auth/me'),
+  login: (username: string, password: string) => request<{ user: AuthState['user'] }>('POST', '/auth/login', { username, password }),
+  logout: () => request<{ ok: true }>('POST', '/auth/logout'),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
   designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),

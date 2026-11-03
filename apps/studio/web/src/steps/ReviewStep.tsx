@@ -7,12 +7,12 @@ import type { StepProps } from '../pages/ProjectPage.tsx';
 const LEVEL_LABEL = { error: '오류', warning: '확인 필요', info: '참고' } as const;
 
 export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => {
-  const { run } = useApp();
+  const { run, user } = useApp();
   const latest = project.latest;
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
-  const [reviewer, setReviewer] = useState<string>(BRAND.researcher);
+  const [reviewer, setReviewer] = useState<string>(user?.displayName ?? BRAND.researcher);
   const [note, setNote] = useState('');
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
             <div className="grid2">
               <label className="field">
                 검수자
-                <input type="text" value={reviewer} onChange={(e) => setReviewer(e.target.value)} />
+                <input type="text" value={user ? user.displayName : reviewer} disabled={Boolean(user)} title={user ? '로그인한 사람 이름으로 기록돼요' : ''} onChange={(e) => setReviewer(e.target.value)} />
               </label>
               <label className="field">
                 메모 (수정 요청 사유 등)

@@ -7,6 +7,7 @@ import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExp
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
+import { Auth, authGuard, isDirectLocal, readCookie, sessionCookie } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
@@ -44,6 +45,7 @@ function detachChangedMedia(repo: Repo, pid: number, before: Script | undefined,
 export interface AppDeps {
   /** 영상 제작 시작 (테스트에서는 가짜로 바꿔 실제 렌더를 돌리지 않는다) */
   startRender: typeof startRender;
+  auth?: Auth;
 }
 
 const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
@@ -55,6 +57,26 @@ const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
 export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
+  const auth = deps.auth ?? new Auth(repo.db);
+
+  // ── 로그인 (이 경로만 로그인 없이 열림) ──
+  app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body ?? {};
+    const { token, user } = auth.login(String(username ?? ''), String(password ?? ''), req.socket.remoteAddress ?? '');
+    res.setHeader('Set-Cookie', sessionCookie(req, token));
+    res.json({ user });
+  });
+  app.post('/api/auth/logout', (req, res) => {
+    auth.logout(readCookie(req));
+    res.setHeader('Set-Cookie', sessionCookie(req, '', 0));
+    res.json({ ok: true });
+  });
+  app.get('/api/auth/me', (req, res) => {
+    const local = auth.userCount() === 0;
+    res.json({ mode: local ? 'local' : 'login', allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
+  });
+  // 그 밖의 모든 API·미디어는 로그인 확인
+  app.use(['/api', '/media'], authGuard(auth));
   // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
   app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
   app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
@@ -216,7 +238,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/projects/:id/reviews', (req, res) => {
     const pid = id(req);
     const body = req.body ?? {};
-    repo.addReview(pid, { version: Number(body.version), reviewer: String(body.reviewer ?? ''), checklist: body.checklist, decision: String(body.decision), note: body.note });
+    // 로그인한 경우 검수자는 로그인한 사람 (다른 사람 이름으로 승인하지 못하게)
+    const reviewer = res.locals.user ? String(res.locals.user.displayName) : String(body.reviewer ?? '');
+    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: body.note });
     res.json(repo.getProject(pid));
   });
 
@@ -327,7 +351,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   api.put('/projects/:id/expert-notes', (req, res) => {
     const pid = id(req);
-    res.json({ notes: repo.setExpertNotes(pid, req.body ?? {}) });
+    const body = { ...(req.body ?? {}) };
+    if (res.locals.user && body.confirmBy) body.confirmBy = String(res.locals.user.displayName);
+    res.json({ notes: repo.setExpertNotes(pid, body) });
   });
 
   // 선택: 이미지·영상 생성 AI용 프롬프트 팩 (승인된 대본만)

@@ -156,7 +156,7 @@ function toReview(r: Row): Review {
 }
 
 export class Repo {
-  constructor(private db: Db) {}
+  constructor(readonly db: Db) {}
 
   logEvent(projectId: number, type: string, message: string) {
     this.db.prepare('INSERT INTO events (project_id, type, message, created_at) VALUES (?, ?, ?, ?)').run(projectId, type, message, now());

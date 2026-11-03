@@ -122,3 +122,26 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
   .grid2, .compare { grid-template-columns: 1fr; }
   .chars { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── 휴대폰 화면 ── */
+@media (max-width: 900px) {
+  /* 화면 코드에 직접 적힌 두 칸 배치도 한 칸으로 */
+  .grid2 { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+  .topbar .brand small { display: none; }
+  .topbar nav { margin-left: 0; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .topbar nav a, .topbar nav button { white-space: nowrap; }
+  main { padding: 16px 16px 72px; }
+  h1 { font-size: 22px; }
+  .card { padding: 14px; }
+  .steps { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .steps button { white-space: nowrap; padding: 8px 12px; }
+  .row { flex-wrap: wrap; }
+  input[type='text'], input[type='url'], input[type='number'], textarea, select { max-width: 100%; min-width: 0; }
+  .row > input[type='text'], .row > input[type='url'] { width: 100% !important; }
+  .btn { min-height: 40px; }
+  video { max-width: 100%; }
+  .blog-preview img { max-width: 100%; }
+}
