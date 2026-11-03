@@ -182,9 +182,12 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const showPhoto = photoUrl && (scene.type === 'tip' || scene.type === 'outro');
+  // 결과 선공개 장면에 실제 완성 사진이 있으면 3D 모델 대신 사진을 크게 보여 준다 (실물 증거)
+  const realResult = Boolean(photoUrl) && scene.visual === 'result';
+  const showPhoto = photoUrl && !realResult && (scene.type === 'tip' || scene.type === 'outro');
   return (
     <AbsoluteFill>
+      {realResult && <ResultPhoto url={photoUrl!} frame={frame} duration={timing.durationInFrames} />}
       {scene.visual === 'compare' ? (
         <CompareOverlay scene={scene} frame={frame} fps={fps} />
       ) : scene.visual === 'signature' ? (
@@ -309,6 +312,18 @@ const StepTicker: React.FC<{ scene: Scene; frame: number; duration: number }> = 
         <div style={{ fontSize: items[i]!.length > 26 ? 46 : 54, fontWeight: 800, lineHeight: 1.3, letterSpacing: -1.5 }}>{items[i]}</div>
       </div>
     </div>
+  );
+};
+
+const ResultPhoto: React.FC<{ url: string; frame: number; duration: number }> = ({ url, frame, duration }) => {
+  const zoom = interpolate(frame, [0, Math.max(1, duration)], [1.06, 1.0]);
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#000', overflow: 'hidden' }}>
+      <Img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})` }} />
+      <div style={{ position: 'absolute', right: 40, top: 860, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>
+        실제 완성 사진
+      </div>
+    </AbsoluteFill>
   );
 };
 

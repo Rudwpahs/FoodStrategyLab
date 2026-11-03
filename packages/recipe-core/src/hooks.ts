@@ -336,8 +336,9 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   'problem-solve': (f) => {
     if (!f.mistake) return { missing: '흔한 실수 또는 자주 겪는 실패' };
-    const line = `${firstSentence(f.mistake).replace(/[.!?。]$/, '')}? 해결법 알려 드릴게요!`;
-    return { line, firstScreen: '실패 결과 + 해결 표시', scenes: [scene('mistake', 'disappointed', line, 'fail', { title: '해결법' })], needsReview: [], uses: ['흔한 실수'] };
+    // 실패 내용은 화면 카드로 보여 주고, 말은 짧게 (첫 3초)
+    const line = `${f.dish}, 이런 실패 해결법 알려 드릴게요!`;
+    return { line, firstScreen: '실패 결과 + 실패 내용 카드', scenes: [scene('mistake', 'disappointed', line, 'fail', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   experiment: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };

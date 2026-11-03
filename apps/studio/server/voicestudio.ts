@@ -77,7 +77,8 @@ export interface EngineInfo {
 }
 
 export async function engineInfo(url: string): Promise<EngineInfo> {
-  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(10000) });
+  // 모델을 처음 불러오는 동안에는 응답이 늦을 수 있다
+  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(60000) });
   if (!res.ok) throw new Error(`VoiceStudio 엔진 목록을 불러오지 못했습니다 (${res.status})`);
   const d = (await res.json()) as { active: string; backends: { id: string; available: boolean }[] };
   const available = d.backends.filter((b) => b.available).map((b) => b.id);

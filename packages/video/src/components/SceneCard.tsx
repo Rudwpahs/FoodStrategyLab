@@ -102,7 +102,7 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
           >
             실패!
           </div>
-          <div style={{ fontSize: fitSize(scene.line, 64, 24), fontWeight: 700, lineHeight: 1.35 }}>{stripExclaim(scene.line)}</div>
+          <div style={{ fontSize: fitSize(scene.cardTitle ?? scene.line, 64, 24), fontWeight: 700, lineHeight: 1.35 }}>{stripExclaim(scene.cardTitle ?? scene.line)}</div>
         </div>
       );
     case 'explain': {

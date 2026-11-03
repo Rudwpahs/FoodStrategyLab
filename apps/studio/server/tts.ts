@@ -118,7 +118,8 @@ async function voicestudioSpeech(text: string, out: string) {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
     body: JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' }),
-    signal: AbortSignal.timeout(180_000),
+    // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정)
+    signal: AbortSignal.timeout(Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
