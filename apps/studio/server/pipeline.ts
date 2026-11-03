@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildReelPromptPack, canRender, type RecipeInput, type Script } from '@mat-lab/recipe-core';
-import { buildBlogPost, buildSocialCopy, buildSrt, buildZip } from '@mat-lab/publishing';
+import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
+import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
 import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
 import { DATA_DIR } from './config.ts';
@@ -69,14 +69,18 @@ const loadRenderer = () => (rendererPromise ??= import('@mat-lab/video/render'))
 
 let queue: Promise<unknown> = Promise.resolve();
 
-/** 승인된 최신 대본으로 영상·이미지·블로그·게시 묶음을 만든다. 한 번에 하나씩 처리한다. */
+/**
+ * 최신 대본으로 영상·이미지를 만든다. 한 번에 하나씩 처리한다.
+ * 승인 전에도 '검수용'으로 만들 수 있다: 연구자가 실제 영상을 보고 승인하도록.
+ * 내보내기(ZIP)·게시는 승인된 최신 대본으로 만든 영상만 가능하다 (exportPackage).
+ */
 export function startRender(repo: Repo, projectId: number, origin: string): number {
   const state = repo.versionState(projectId);
-  const gate = canRender(state);
-  if (!gate.ok) throw new HttpError(409, gate.reason);
-  const version = state.latestScriptVersion!;
+  if (state.latestScriptVersion === null) throw new HttpError(409, '대본이 아직 없습니다.');
+  const version = state.latestScriptVersion;
+  const approved = state.approvedScriptVersion === version;
   const renderId = repo.createRender(projectId, version);
-  repo.logEvent(projectId, 'render', `제작 시작 (대본 v${version}, 작업 #${renderId})`);
+  repo.logEvent(projectId, 'render', `${approved ? '제작' : '검수용 제작'} 시작 (대본 v${version}, 작업 #${renderId})`);
   queue = queue.then(() => runRender(repo, projectId, version, renderId, origin));
   return renderId;
 }
@@ -88,8 +92,8 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     fs.mkdirSync(outDir, { recursive: true });
     const recipe = repo.getRecipe(projectId);
     const { script } = repo.getScript(projectId, version);
-    const approval = repo.lastReview(projectId, version);
-    if (approval?.decision !== 'approved') throw new Error('승인이 취소되어 제작을 중단했습니다.');
+    const review = repo.lastReview(projectId, version);
+    const approval = review?.decision === 'approved' ? review : null;
 
     set('음성 생성', 0.02);
     await generateVoice(script);
@@ -98,8 +102,10 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const props: VideoProps = {
       script,
       timings,
-      reviewed: true,
-      reviewer: approval.reviewer,
+      reviewed: Boolean(approval),
+      reviewer: approval?.reviewer,
+      // 승인 전 검수용: 워터마크·상태 문구 없이 (승인 뒤 다시 렌더하지 않아도 되게)
+      cleanDraft: !approval,
       recipe,
       photoUrl: photo ? `${origin}${photo.url}` : undefined,
       photoColor: photo?.color || undefined,
@@ -130,11 +136,11 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const cover = { title: recipe.topic, emotion: 'joy' as const, recipe, photoColor: photo?.color || undefined };
     await renderer.renderStillImage('Cover', cover, path.join(outDir, 'cover.png'));
     await renderer.renderStillImage('SquareThumb', cover, path.join(outDir, 'thumbnail.png'));
-    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: true }, path.join(outDir, 'recipe-card.png'));
+    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
 
-    set('블로그·게시 묶음', 0.95);
     if (photo) fs.copyFileSync(path.join(DATA_DIR, photo.file), path.join(outDir, `photo${path.extname(photo.file)}`));
-    writePackage(outDir, recipe, script, timings, { reviewer: approval.reviewer, reviewedAt: approval.createdAt });
+    // 게시 묶음(ZIP)은 승인 후 내려받을 때 만든다 (그때의 승인·블로그 선택을 반영)
+    fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timings));
 
     repo.updateRender(renderId, { status: 'done', stage: '완료', progress: 1, finished: true });
     repo.logEvent(projectId, 'render', `제작 완료 (작업 #${renderId})`);
@@ -161,9 +167,41 @@ export async function captionCheckFrames(video: string, script: Script, timings:
   return n;
 }
 
-export function writePackage(outDir: string, recipe: RecipeInput, script: Script, timings: SceneTiming[], review: { reviewer: string; reviewedAt: string }) {
-  const post = buildBlogPost({ recipe, review, images: { thumbnail: 'thumbnail.png', recipeCard: 'recipe-card.png' } });
+/** 승인된 최신 대본으로 만든 영상이면 게시 묶음(ZIP)을 만들어 경로를 돌려준다. */
+export function exportPackage(repo: Repo, renderId: number): string {
+  const r = repo.getRender(renderId);
+  if (r.status !== 'done') throw new HttpError(404, '아직 완성된 영상이 없습니다.');
+  const state = repo.versionState(r.projectId);
+  if (state.latestScriptVersion !== r.scriptVersion) throw new HttpError(409, '대본이 바뀌었어요. 최신 대본으로 영상을 다시 만들어 주세요.');
+  if (state.approvedScriptVersion !== r.scriptVersion) throw new HttpError(409, '이희재 연구자의 승인 후에 내보낼 수 있어요.');
+  const approval = repo.lastReview(r.projectId, r.scriptVersion)!;
+  const recipe = repo.getRecipe(r.projectId);
+  const { script } = repo.getScript(r.projectId, r.scriptVersion);
+  const timelineFile = path.join(r.outputDir, 'timeline.json');
+  const timings = fs.existsSync(timelineFile) ? (JSON.parse(fs.readFileSync(timelineFile, 'utf8')) as SceneTiming[]) : [];
+  const style = repo.getBlogStyle(r.projectId);
+  writePackage(r.outputDir, recipe, script, timings, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
+    blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
+    notes: repo.getExpertNotes(r.projectId),
+  });
+  return path.join(r.outputDir, 'package.zip');
+}
+
+export function writePackage(
+  outDir: string,
+  recipe: RecipeInput,
+  script: Script,
+  timings: SceneTiming[],
+  review: { reviewer: string; reviewedAt: string },
+  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes } = {},
+) {
+  const images = { thumbnail: 'thumbnail.png', recipeCard: 'recipe-card.png' };
+  const post = extra.blogStyle
+    ? buildExpertBlog({ recipe, style: extra.blogStyle, notes: extra.notes ?? { answers: {} }, review, images })
+    : buildBlogPost({ recipe, review, images });
   const social = buildSocialCopy(recipe, true, post.tags);
+  // 연출 엔진 대본이면 인스타그램 설명은 첫 대사로 시작한다 (매체에 맞는 표현)
+  if (script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(recipe, script, true, post.tags);
   const texts: Record<string, string> = {
     'blog.md': post.markdown,
     'blog.html': `<!doctype html><meta charset="utf-8"><title>${post.title}</title>\n${post.html}`,

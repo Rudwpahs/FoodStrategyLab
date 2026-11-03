@@ -11,3 +11,4 @@ export * from './reelPrompts.ts';
 export * from './korean.ts';
 export * from './hooks.ts';
 export * from './styles.ts';
+export * from './candidates.ts';

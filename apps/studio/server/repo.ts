@@ -1,5 +1,6 @@
 import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import {
+  checkScript,
   ChecklistSchema,
   RecipeInputSchema,
   ScriptSchema,
@@ -74,6 +75,42 @@ export interface ProjectPhoto {
 /** 장면별로 올린 생성 AI 클립·이미지 (장면 id → 파일) */
 export type SceneMedia = Record<string, { file: string; url: string; kind: 'video' | 'image' }>;
 
+export interface Publication {
+  id: number;
+  projectId: number;
+  renderId: number | null;
+  scriptVersion: number;
+  platform: 'instagram' | 'naver' | 'youtube';
+  status: 'scheduled' | 'published';
+  url: string;
+  scheduledAt: string;
+  publishedAt: string;
+  style: string;
+  hookType: string;
+  metrics: Record<string, number>;
+  note: string;
+  createdAt: string;
+}
+
+function toPublication(r: Row): Publication {
+  return {
+    id: Number(r.id),
+    projectId: Number(r.project_id),
+    renderId: r.render_id === null || r.render_id === undefined ? null : Number(r.render_id),
+    scriptVersion: Number(r.script_version),
+    platform: String(r.platform) as Publication['platform'],
+    status: String(r.status) as Publication['status'],
+    url: String(r.url),
+    scheduledAt: String(r.scheduled_at),
+    publishedAt: String(r.published_at),
+    style: String(r.style),
+    hookType: String(r.hook_type),
+    metrics: JSON.parse(String(r.metrics_json || '{}')) as Record<string, number>,
+    note: String(r.note),
+    createdAt: String(r.created_at),
+  };
+}
+
 export interface ProjectDetail extends ProjectSummary {
   recipe: RecipeInput;
   photo: ProjectPhoto | null;
@@ -85,6 +122,8 @@ export interface ProjectDetail extends ProjectSummary {
   renders: RenderRow[];
   events: { type: string; message: string; createdAt: string }[];
   approval: Review | null;
+  blogStyle: string;
+  publications: Publication[];
 }
 
 type Row = Record<string, unknown>;
@@ -197,6 +236,42 @@ export class Repo {
     return next;
   }
 
+  getBlogStyle(id: number): string {
+    const row = this.db.prepare('SELECT blog_style FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    return String(row.blog_style ?? '');
+  }
+
+  setBlogStyle(id: number, style: string) {
+    this.getRecipe(id);
+    this.db.prepare('UPDATE projects SET blog_style = ?, updated_at = ? WHERE id = ?').run(style, now(), id);
+    this.logEvent(id, 'blog', `블로그 문체 선택: ${style || '기본 자동 원고'}`);
+  }
+
+  listPublications(id: number): Publication[] {
+    return (this.db.prepare('SELECT * FROM publications WHERE project_id = ? ORDER BY id DESC').all(id) as Row[]).map(toPublication);
+  }
+
+  allPublications(): Publication[] {
+    return (this.db.prepare('SELECT * FROM publications ORDER BY id DESC').all() as Row[]).map(toPublication);
+  }
+
+  addPublication(id: number, p: Omit<Publication, 'id' | 'projectId' | 'createdAt' | 'metrics'>): Publication {
+    const res = this.db
+      .prepare('INSERT INTO publications (project_id, render_id, script_version, platform, status, url, scheduled_at, published_at, style, hook_type, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, p.renderId, p.scriptVersion, p.platform, p.status, p.url, p.scheduledAt, p.publishedAt, p.style, p.hookType, p.note, now());
+    this.logEvent(id, 'publish', `${p.platform} ${p.status === 'published' ? '게시 기록' : '예약 기록'}${p.url ? ` (${p.url})` : ''}`);
+    return this.listPublications(id).find((x) => x.id === Number(res.lastInsertRowid))!;
+  }
+
+  setPublicationMetrics(pubId: number, metrics: Record<string, number>): Publication {
+    const row = this.db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId) as Row | undefined;
+    if (!row) throw new HttpError(404, '게시 기록을 찾을 수 없습니다.');
+    this.db.prepare('UPDATE publications SET metrics_json = ? WHERE id = ?').run(JSON.stringify(metrics), pubId);
+    this.logEvent(Number(row.project_id), 'metrics', `성과 입력 (${String(row.platform)})`);
+    return toPublication(this.db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId) as Row);
+  }
+
   getSceneMedia(id: number): SceneMedia {
     const rows = this.db.prepare('SELECT scene_id, file, kind, created_at FROM scene_media WHERE project_id = ?').all(id) as Row[];
     const out: SceneMedia = {};
@@ -280,6 +355,9 @@ export class Repo {
     if (decision === 'approved') {
       const gate = canApprove(checklist, input.reviewer);
       if (!gate.ok) throw new HttpError(400, gate.reason);
+      // 원본 레시피와 다른 분량·재료·순서가 있으면 승인하지 않는다 (확인창으로 넘기지 않음)
+      const errors = checkScript(this.getRecipe(id), latest.script).filter((i) => i.level === 'error');
+      if (errors.length) throw new HttpError(409, `원본 레시피와 다른 곳 ${errors.length}건을 고쳐야 승인할 수 있어요: ${errors[0]!.message}`);
     } else if (!input.reviewer.trim()) {
       throw new HttpError(400, '검수자 이름을 입력하세요.');
     }
@@ -358,6 +436,6 @@ export class Repo {
       createdAt: String(r.created_at),
     }));
     const approval = versionState.approvedScriptVersion !== null ? this.lastReview(id, versionState.approvedScriptVersion) : null;
-    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval };
+    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval, blogStyle: this.getBlogStyle(id), publications: this.listPublications(id) };
   }
 }

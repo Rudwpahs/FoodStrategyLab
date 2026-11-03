@@ -46,6 +46,11 @@ export interface VideoProps {
   reviewed: boolean;
   /** 승인한 사람 (서명 카드 문구용) */
   reviewer?: string;
+  /**
+   * 승인 전 검수용 제작: 워터마크를 굽지 않고, '검토'·'초안' 같은 상태 문구도 넣지 않는다.
+   * (승인 뒤에도 거짓이 되지 않는 영상 → 다시 렌더하지 않아도 된다)
+   */
+  cleanDraft?: boolean;
   /** 원본 레시피 (3D 음식·재료 소품을 만들 때 사용) */
   recipe?: RecipeInput;
   /** 완성 사진 URL과 사진의 대표 색 (있으면 음식 색에 반영) */

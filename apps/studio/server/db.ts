@@ -49,6 +49,23 @@ CREATE TABLE IF NOT EXISTS scene_media (
   created_at TEXT NOT NULL,
   PRIMARY KEY (project_id, scene_id)
 );
+CREATE TABLE IF NOT EXISTS publications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  render_id INTEGER,
+  script_version INTEGER NOT NULL,
+  platform TEXT NOT NULL,
+  status TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  scheduled_at TEXT NOT NULL DEFAULT '',
+  published_at TEXT NOT NULL DEFAULT '',
+  style TEXT NOT NULL DEFAULT '',
+  hook_type TEXT NOT NULL DEFAULT '',
+  metrics_json TEXT NOT NULL DEFAULT '{}',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -70,5 +87,6 @@ export function openDb(file: string): Db {
   if (!cols.has('photo_file')) db.exec("ALTER TABLE projects ADD COLUMN photo_file TEXT NOT NULL DEFAULT ''");
   if (!cols.has('photo_color')) db.exec("ALTER TABLE projects ADD COLUMN photo_color TEXT NOT NULL DEFAULT ''");
   if (!cols.has('expert_notes')) db.exec("ALTER TABLE projects ADD COLUMN expert_notes TEXT NOT NULL DEFAULT '{}'");
+  if (!cols.has('blog_style')) db.exec("ALTER TABLE projects ADD COLUMN blog_style TEXT NOT NULL DEFAULT ''");
   return db;
 }

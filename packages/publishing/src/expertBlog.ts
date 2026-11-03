@@ -187,3 +187,11 @@ export function blogQuantityIssues(recipe: RecipeInput, notes: ExpertNotes, mark
   const body = markdown.split(BRAND.slogan).join('');
   return [...new Set(extractQuantities(body).filter((q) => !allowed.has(q.normalized)).map((q) => q.raw))].map((raw) => `원본·연구자 답변에 없는 분량 "${raw}"`);
 }
+
+/**
+ * 비교할 블로그 문체 후보 2개. 같은 원본 레시피를 쓰되 글의 흐름이 다르다.
+ * 음식 이야기가 있으면 음식문화형을, 없으면 생활 요리 이야기형을 전문가 노트형과 비교한다.
+ */
+export function blogStylePair(recipe: RecipeInput): [BlogStyle, BlogStyle] {
+  return recipe.story || recipe.category === 'tradition' ? ['expert-note', 'culture'] : ['expert-note', 'everyday'];
+}

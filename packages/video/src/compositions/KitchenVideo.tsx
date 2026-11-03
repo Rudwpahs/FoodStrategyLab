@@ -24,7 +24,7 @@ export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
 }
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, reviewer, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
+export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -102,7 +102,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} photoUrl={photoUrl} captionBottom={captionBottom} />
+            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} photoUrl={photoUrl} captionBottom={captionBottom} />
             <SpeechAudio timing={timing} />
           </Sequence>
         );
@@ -118,7 +118,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
         );
       })}
       <BrandBadge />
-      {!reviewed && <DraftWatermark />}
+      {!reviewed && !cleanDraft && <DraftWatermark />}
     </AbsoluteFill>
   );
 };
@@ -185,12 +185,13 @@ const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> =
 };
 
 /** 3D 화면을 가리지 않도록 카드를 작게, 위쪽에 띄운다 */
-const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; photoUrl?: string; captionBottom: number }> = ({
+const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; cleanDraft?: boolean; photoUrl?: string; captionBottom: number }> = ({
   scene,
   timing,
   topic,
   reviewed,
   reviewer,
+  cleanDraft,
   photoUrl,
   captionBottom,
 }) => {
@@ -202,11 +203,11 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
   return (
     <AbsoluteFill>
       {realResult && <ResultPhoto url={photoUrl!} frame={frame} duration={timing.durationInFrames} />}
-      {scene.visual === 'fail' && <IllustrationTag />}
+      {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && <IllustrationTag />}
       {scene.visual === 'compare' ? (
         <CompareOverlay scene={scene} frame={frame} fps={fps} />
       ) : scene.visual === 'signature' ? (
-        <SignatureCard frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
+        <SignatureCard frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} />
       ) : scene.type === 'steps' ? (
         <StepTicker scene={scene} frame={frame} duration={timing.durationInFrames} />
       ) : scene.type === 'ingredients' ? (
@@ -264,7 +265,8 @@ const fitText = (text: string, base: number, comfortable: number) => (text.lengt
  * 엔딩 서명 카드: 전문가 이름을 매번 길게 소개하지 않고, 끝에 한 번 또렷하게 남긴다.
  * '검토' 문구는 실제 승인된 대본으로 만든 영상에만 나온다.
  */
-const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean; reviewer?: string }> = ({ frame, fps, reviewed, reviewer }) => {
+const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean; reviewer?: string; cleanDraft?: boolean }> = ({ frame, fps, reviewed, reviewer, cleanDraft }) => {
+  const note = signatureNote(reviewed, reviewer, cleanDraft);
   const p = spring({ frame: frame - 4, fps, config: { damping: 13 } });
   return (
     <div style={{ position: 'absolute', left: 90, right: 90, top: 280, transform: `translateY(${interpolate(p, [0, 1], [60, 0])}px)`, opacity: p }}>
@@ -274,7 +276,7 @@ const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean; r
         </div>
         <div style={{ fontSize: 112, fontWeight: 950, letterSpacing: 6, margin: '6px 0 4px', fontStyle: 'italic' }}>{BRAND.researcher}</div>
         <div style={{ fontSize: 40, fontWeight: 800, color: COLORS.red }}>{BRAND.labName}</div>
-        <div style={{ marginTop: 18, fontSize: 30, fontWeight: 700, opacity: 0.8 }}>{signatureNote(reviewed, reviewer)}</div>
+        {note && <div style={{ marginTop: 18, fontSize: 30, fontWeight: 700, opacity: 0.8 }}>{note}</div>}
       </div>
     </div>
   );

@@ -97,7 +97,7 @@ export function sfxCues(script: Script): SfxCue[] {
   const cues: SfxCue[] = [];
   const pick = (s: Scene): Omit<SfxCue, 'sceneId'> | null => {
     // 연출 엔진이 붙인 화면 연출·훅에만 넣는다 (기존 템플릿 영상은 소리가 바뀌지 않게)
-    if (s.visual === 'fail') return { name: 'boing', offset: 2 };
+    if (s.visual === 'fail' || s.visual === 'fail-closeup') return { name: 'boing', offset: 2 };
     if (s.hook) return { name: 'whoosh', offset: 0 };
     if (s.visual === 'result' || s.visual === 'compare') return { name: 'ding', offset: 6 };
     if (s.visual === 'signature') return { name: 'pop', offset: 4 };

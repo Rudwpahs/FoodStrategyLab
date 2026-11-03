@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, repetitionWarning, suggestHooks, type Script } from '@mat-lab/recipe-core';
-import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
+import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
-import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
-import { HttpError, type Repo } from './repo.ts';
+import { AUDIO_DIR, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
+import { METRIC_KEYS, formatInsights } from './insights.ts';
+import { HttpError, type Publication, type Repo } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
@@ -40,9 +41,22 @@ function detachChangedMedia(repo: Repo, pid: number, before: Script | undefined,
   return notes;
 }
 
-export function createApp(repo: Repo) {
+export interface AppDeps {
+  /** 영상 제작 시작 (테스트에서는 가짜로 바꿔 실제 렌더를 돌리지 않는다) */
+  startRender: typeof startRender;
+}
+
+const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
+  instagram: /^https:\/\/(www\.)?instagram\.com\/(reel|p)\/[\w-]+/,
+  naver: /^https:\/\/(m\.)?blog\.naver\.com\/[\w-]+\/\d+/,
+  youtube: /^https:\/\/((www\.)?youtube\.com\/shorts\/|youtu\.be\/)[\w-]+/,
+};
+
+export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
+  // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
+  app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
   app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
 
   const api = express.Router();
@@ -296,6 +310,7 @@ export function createApp(repo: Repo) {
     const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
     const post = expert ?? buildBlogPost({ recipe: project.recipe, review });
     const social = buildSocialCopy(project.recipe, Boolean(review), post.tags);
+    if (project.latest?.script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(project.recipe, project.latest.script, Boolean(review), post.tags);
     const consistency = project.latest
       ? checkConsistency({ recipe: project.recipe, script: project.latest.script, blogMarkdown: post.markdown, social: social.instagram, reviewed: Boolean(review), notes })
       : [];
@@ -325,7 +340,7 @@ export function createApp(repo: Repo) {
 
   api.post('/projects/:id/renders', (req, res) => {
     const origin = `${req.protocol}://${req.get('host')}`;
-    res.status(202).json({ renderId: startRender(repo, id(req), origin) });
+    res.status(202).json({ renderId: deps.startRender(repo, id(req), origin) });
   });
 
   api.get('/renders/:id', (req, res) => {
@@ -338,10 +353,112 @@ export function createApp(repo: Repo) {
 
   api.get('/renders/:id/download', (req, res) => {
     const r = repo.getRender(id(req));
-    const file = path.join(r.outputDir, 'package.zip');
-    if (r.status !== 'done' || !fs.existsSync(file)) throw new HttpError(404, '아직 완성된 묶음이 없습니다.');
+    const file = exportPackage(repo, r.id);
     res.download(file, `matlab-${r.projectId}-v${r.scriptVersion}.zip`);
   });
+
+  // ── 콘텐츠 후보 3가지 ──
+  const recentFormats = (pid: number) =>
+    repo
+      .listProjects()
+      .filter((p) => p.id !== pid)
+      .slice(0, 5)
+      .map((p) => repo.latestScript(p.id)?.script)
+      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
+      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
+
+  api.get('/projects/:id/candidates', (req, res) => {
+    const pid = id(req);
+    const exclude = String(req.query.exclude ?? '').split(',').filter(Boolean);
+    res.json({ ...contentCandidates(repo.getRecipe(pid), { exclude, recent: recentFormats(pid) }), insights: formatInsights(repo.allPublications()) });
+  });
+
+  api.post('/projects/:id/candidates/select', (req, res) => {
+    const pid = id(req);
+    const { style, hookType } = req.body ?? {};
+    if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
+    let built;
+    try {
+      built = scriptForCandidate(repo.getRecipe(pid), style, hookType);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, built.script);
+    repo.addScriptVersion(pid, built.script, 'template', `후보 선택: ${built.title} (${STYLE_INFO[style].label} · ${HOOK_INFO[hookType].label})`);
+    res.json({ project: repo.getProject(pid), notes: [...built.notes, ...detached] });
+  });
+
+  // ── 블로그 문체 후보 2개 비교·선택 ──
+  api.get('/projects/:id/blog/compare', (req, res) => {
+    const pid = id(req);
+    const project = repo.getProject(pid);
+    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const notes = repo.getExpertNotes(pid);
+    const dish = project.recipe.dishName || project.recipe.topic;
+    const options = blogStylePair(project.recipe).map((style) => {
+      const post = buildExpertBlog({ recipe: project.recipe, style, notes, review });
+      return { style, info: BLOG_STYLE_INFO[style], post, pending: post.pending, lint: lintBlog(post.markdown, { dish, notes }) };
+    });
+    res.json({ options, selected: project.blogStyle });
+  });
+
+  api.put('/projects/:id/blog-style', (req, res) => {
+    const pid = id(req);
+    const style = String(req.body?.style ?? '');
+    if (style && !(BLOG_STYLES as readonly string[]).includes(style)) throw new HttpError(400, '알 수 없는 글 유형입니다.');
+    repo.setBlogStyle(pid, style);
+    res.json(repo.getProject(pid));
+  });
+
+  // ── 게시 기록·성과 ──
+  api.post('/projects/:id/publications', (req, res) => {
+    const pid = id(req);
+    const body = req.body ?? {};
+    const platform = String(body.platform) as Publication['platform'];
+    if (!(platform in PLATFORM_URL)) throw new HttpError(400, '플랫폼을 고르세요.');
+    const status = body.status === 'scheduled' ? 'scheduled' : 'published';
+    const state = repo.versionState(pid);
+    const version = state.latestScriptVersion;
+    // 승인되지 않은 콘텐츠는 게시(기록)하지 않는다
+    if (version === null || state.approvedScriptVersion !== version) throw new HttpError(409, '이희재 연구자의 승인을 받은 최신 콘텐츠만 게시할 수 있어요.');
+    const render = repo.getProject(pid).renders.find((r) => r.status === 'done' && r.scriptVersion === version);
+    if (platform !== 'naver' && !render) throw new HttpError(409, '승인된 대본으로 만든 영상이 없어요. 영상을 먼저 만들어 주세요.');
+    const url = String(body.url ?? '').trim();
+    if (status === 'published' && !PLATFORM_URL[platform].test(url)) throw new HttpError(400, '게시물 주소를 확인해 주세요. (예: 인스타그램 https://www.instagram.com/reel/…)');
+    const scheduledAt = status === 'scheduled' ? String(body.scheduledAt ?? '') : '';
+    if (status === 'scheduled' && Number.isNaN(Date.parse(scheduledAt))) throw new HttpError(400, '예약 시각을 입력해 주세요.');
+    const dup = repo.listPublications(pid).find((p) => p.platform === platform && p.status === 'published' && p.scriptVersion === version);
+    if (dup && status === 'published' && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 ${platform}에 게시됐어요 (${dup.url}). 다시 기록하려면 확인이 필요해요.`);
+    const script = repo.getScript(pid, version).script;
+    const pub = repo.addPublication(pid, {
+      renderId: render?.id ?? null,
+      scriptVersion: version,
+      platform,
+      status,
+      url,
+      scheduledAt,
+      publishedAt: status === 'published' ? new Date().toISOString() : '',
+      style: script.style ?? '',
+      hookType: script.hookType ?? '',
+      note: String(body.note ?? '').slice(0, 500),
+    });
+    res.status(201).json(pub);
+  });
+
+  api.put('/publications/:id/metrics', (req, res) => {
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    const metrics: Record<string, number> = {};
+    for (const k of METRIC_KEYS) {
+      const v = raw[k];
+      if (v === undefined || v === '' || v === null) continue;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) throw new HttpError(400, `${k} 값이 올바르지 않아요.`);
+      metrics[k] = n;
+    }
+    res.json(repo.setPublicationMetrics(id(req), metrics));
+  });
+
+  api.get('/insights', (_req, res) => res.json(formatInsights(repo.allPublications())));
 
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));

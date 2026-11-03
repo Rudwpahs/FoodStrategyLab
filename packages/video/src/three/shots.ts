@@ -113,6 +113,7 @@ export function shotForScene(scene: Pick<Scene, 'type' | 'visual'>, indexOfType:
 const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>> = {
   result: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 38, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
   fail: () => ({ ...PRESENT, mood: 'gloom', plated: 'failed', props: 'hidden', action: 'present', face: 'camera' }),
+  'fail-closeup': () => ({ ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
   // 비교 장면은 화면을 위아래로 나눠 두 접시를 보여 준다 (KitchenVideo). 기본 상태는 '노트대로 한' 쪽.
   compare: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
   sizzle: (b) => ({ ...STOVE_CLOSE, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6], props: 'hidden' }),

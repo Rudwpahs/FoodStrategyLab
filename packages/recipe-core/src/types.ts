@@ -70,16 +70,17 @@ export type SceneType = z.infer<typeof SceneTypeSchema>;
 
 /**
  * 장면 화면 연출. 비어 있으면 장면 종류(type)에 맞는 기본 화면을 쓴다.
- * result: 완성 음식 먼저 / fail: 실패한 결과 / compare: 좌우 비교(설명용 연출)
+ * result: 완성 음식 먼저 / fail: 맛조수가 든 실패 접시 / fail-closeup: 실패한 음식 클로즈업 / compare: 비교(설명용 연출)
  * sizzle: 조리 중 클로즈업 / react: 캐릭터 반응 클로즈업 / signature: 전문가 서명 카드
  */
-export const VISUALS = ['result', 'fail', 'compare', 'sizzle', 'react', 'signature'] as const;
+export const VISUALS = ['result', 'fail', 'fail-closeup', 'compare', 'sizzle', 'react', 'signature'] as const;
 export const VisualSchema = z.enum(VISUALS);
 export type Visual = z.infer<typeof VisualSchema>;
 
 export const VISUAL_LABELS: Record<Visual, string> = {
   result: '완성 음식 먼저',
-  fail: '실패한 결과',
+  fail: '실패한 결과 (맛조수가 들고 있음)',
+  'fail-closeup': '실패한 음식 클로즈업',
   compare: '좌우 비교 (설명용 연출)',
   sizzle: '조리 중 클로즈업',
   react: '맛조수 반응 클로즈업',

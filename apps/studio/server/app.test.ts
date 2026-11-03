@@ -1,7 +1,11 @@
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
-import { createApp } from './app.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createApp, type AppDeps } from './app.ts';
+import { DATA_DIR } from './config.ts';
+import { HttpError } from './repo.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
 import { mp3DurationSeconds } from './tts.ts';
@@ -10,7 +14,19 @@ let base = '';
 let close: () => void;
 
 beforeAll(async () => {
-  const app = createApp(new Repo(openDb(':memory:')));
+  // 실제 3D 렌더 대신: 렌더 기록을 만들고 바로 완료로 표시하는 가짜 제작기
+  const fakeRender: AppDeps['startRender'] = (repo, pid) => {
+    const state = repo.versionState(pid);
+    if (state.latestScriptVersion === null) throw new HttpError(409, '대본이 아직 없습니다.');
+    const rid = repo.createRender(pid, state.latestScriptVersion);
+    const dir = path.join(DATA_DIR, 'renders', String(rid));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'video.mp4'), 'fake');
+    fs.writeFileSync(path.join(dir, 'timeline.json'), '[]');
+    repo.updateRender(rid, { status: 'done', stage: '완료', progress: 1, outputDir: dir, finished: true });
+    return rid;
+  };
+  const app = createApp(new Repo(openDb(':memory:')), { startRender: fakeRender });
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
@@ -27,7 +43,7 @@ async function call(method: string, url: string, body?: unknown) {
 const allChecked = { ingredients: true, safety: true, noFakeClaims: true, expression: true };
 
 describe('스튜디오 API 흐름', () => {
-  it('입력 → 대본 → 검수 → 승인 전에는 제작 불가 → 승인 후 수정하면 다시 불가', async () => {
+  it('입력 → 대본 → 검수용 영상 → 승인 전에는 내보내기 불가 → 승인 후 수정하면 다시 불가', async () => {
     const created = await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] });
     expect(created.status).toBe(201);
     const pid = created.body.id;
@@ -38,7 +54,10 @@ describe('스튜디오 API 흐름', () => {
     expect(scripted.body.status).toBe('review');
     expect(scripted.body.latest.version).toBe(1);
 
-    expect((await call('POST', `/projects/${pid}/renders`)).status).toBe(409);
+    // 승인 전에도 '검수용 영상'은 만들 수 있지만, 내보내기(ZIP)는 승인 후에만
+    const draft = await call('POST', `/projects/${pid}/renders`);
+    expect(draft.status).toBe(202);
+    expect((await call('GET', `/renders/${draft.body.renderId}/download`)).status).toBe(409);
     expect((await call('GET', `/projects/${pid}/reel-prompts`)).status).toBe(409);
 
     const check = await call('GET', `/projects/${pid}/check`);
@@ -48,7 +67,8 @@ describe('스튜디오 API 흐름', () => {
     expect(missing.status).toBe(400);
 
     const approved = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
-    expect(approved.body.status).toBe('approved');
+    // 검수용 영상이 이미 있으므로 승인과 동시에 '제작 완료' 상태
+    expect(approved.body.status).toBe('rendered');
     expect(approved.body.approval.reviewer).toBe('이희재');
 
     const pack = await call('GET', `/projects/${pid}/reel-prompts`);
@@ -62,12 +82,20 @@ describe('스튜디오 API 흐름', () => {
     const blog = await call('GET', `/projects/${pid}/blog`);
     expect(blog.body.social.instagram).toContain('검토한');
 
+    // 승인 전에 만든 검수용 영상도 같은 버전이 승인되면 내보낼 수 있다 (다시 렌더하지 않음)
+    const zip = await fetch(`${base}/renders/${draft.body.renderId}/download`);
+    expect(zip.status).toBe(200);
+    expect(zip.headers.get('content-type')).toContain('zip');
+    // 렌더 폴더의 묶음 파일은 주소로 직접 받을 수 없다
+    expect((await fetch(`${base.replace('/api', '')}/media/renders/${draft.body.renderId}/package.zip`)).status).toBe(403);
+
     const script = approved.body.latest.script;
     script.scenes[1].line = '수정된 대사입니다.';
     const edited = await call('PUT', `/projects/${pid}/script`, { script });
     expect(edited.body.latest.version).toBe(2);
     expect(edited.body.status).toBe('review');
-    expect((await call('POST', `/projects/${pid}/renders`)).status).toBe(409);
+    // 승인 후 내용이 바뀌면 예전 영상은 내보낼 수 없다
+    expect((await call('GET', `/renders/${draft.body.renderId}/download`)).status).toBe(409);
 
     const stale = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
     expect(stale.status).toBe(409);
@@ -148,7 +176,10 @@ describe('훅·연출 선택', () => {
     const bad = { ...latest.script, scenes: latest.script.scenes.map((s: { id: string; line: string }, i: number) => (i === 2 ? { ...s, line: `${s.line} 180도에서 튀기세요.` } : s)) };
     await call('PUT', `/projects/${pid}/script`, { script: bad, note: 'test' });
     const v = (await call('GET', `/projects/${pid}`)).body.latest.version;
-    await call('POST', `/projects/${pid}/reviews`, { version: v, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    // 원본과 다른 분량이 있으면 승인 자체가 막힌다
+    const blocked = await call('POST', `/projects/${pid}/reviews`, { version: v, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toContain('180도');
     await call('PUT', `/projects/${pid}/expert-notes`, { answers: { 'key-step': '데치기', failure: '딱딱해짐', fix: '불 끄기' }, confirmBy: '이희재' });
     const blog = await call('GET', `/projects/${pid}/blog?style=expert-note`);
     expect(blog.body.consistency.some((c: { level: string }) => c.level === 'error')).toBe(true);
@@ -194,6 +225,80 @@ describe('연구자 답변 블로그', () => {
     // 스타일을 안 고르면 기존 자동 원고
     const auto = await call('GET', `/projects/${pid}/blog`);
     expect(auto.body.expert).toBeNull();
+  });
+});
+
+describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 → 블로그 선택 → 승인 → 게시 기록', () => {
+  const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+  const pilot = { ...walnut, commonMistake: '호두를 데치지 않고 바로 조리면 떫은맛이 남을 수 있어요.' };
+
+  it('호두정과 파일럿 흐름이 끝까지 이어진다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: pilot })).body.id;
+
+    // 1~3. 후보 3개: 연출·훅·첫 화면이 모두 다르다
+    const c = await call('GET', `/projects/${pid}/candidates`);
+    expect(c.body.candidates.map((x: { style: string }) => x.style)).toEqual(['problem', 'comedy', 'experiment']);
+    expect(new Set(c.body.candidates.map((x: { firstVisual: string }) => x.firstVisual)).size).toBe(3);
+    // 다른 후보 보기: 이미 본 것은 빠진다
+    const keys = c.body.candidates.map((x: { key: string }) => x.key);
+    const more = await call('GET', `/projects/${pid}/candidates?exclude=${keys.join(',')}`);
+    for (const x of more.body.candidates) expect(keys).not.toContain(x.key);
+
+    // 4. C(실험형) 선택 → 새 대본 버전
+    const pick = c.body.candidates[2];
+    const sel = await call('POST', `/projects/${pid}/candidates/select`, { style: pick.style, hookType: pick.hookType });
+    expect(sel.body.project.latest.script.title).toBe(pick.title);
+    expect(sel.body.project.latest.script.scenes[0].line).toBe(pick.firstLine);
+    expect(sel.body.project.status).toBe('review');
+
+    // 5. 승인 전 검수용 영상
+    const r = await call('POST', `/projects/${pid}/renders`);
+    expect(r.status).toBe(202);
+
+    // 6. 블로그 문체 후보 2개 비교 → 선택
+    const cmp = await call('GET', `/projects/${pid}/blog/compare`);
+    expect(cmp.body.options).toHaveLength(2);
+    expect(cmp.body.options[0].style).not.toBe(cmp.body.options[1].style);
+    await call('PUT', `/projects/${pid}/blog-style`, { style: cmp.body.options[0].style });
+
+    // 승인 전에는 게시 기록 불가
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://www.instagram.com/reel/abc' })).status).toBe(409);
+
+    // 7. 승인
+    const v = sel.body.project.latest.version;
+    const ok = await call('POST', `/projects/${pid}/reviews`, { version: v, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    expect(ok.body.status).toBe('rendered');
+    // 인스타그램 설명은 후보 첫 대사로 시작하고, 승인 후에만 '검토한'
+    const blog = await call('GET', `/projects/${pid}/blog?style=${cmp.body.options[0].style}`);
+    expect(blog.body.social.instagram.split('\n')[0]).toBe(pick.firstLine);
+    expect(blog.body.social.instagram).toContain('검토한');
+
+    // 8. 인스타그램: 실제 API 연결 전이므로 앱에서 올린 뒤 주소를 기록
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://example.com/x' })).status).toBe(400);
+    const pub = await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://www.instagram.com/reel/abc' });
+    expect(pub.status).toBe(201);
+    expect(pub.body.style).toBe('experiment');
+    // 같은 콘텐츠 중복 게시 기록은 확인 필요
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://www.instagram.com/reel/def' })).status).toBe(409);
+    // 예약 기록
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'youtube', status: 'scheduled', scheduledAt: '2026-11-10T09:00:00+09:00' })).status).toBe(201);
+
+    // 9. 네이버: 반자동 발행 후 주소 등록
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'naver', url: 'https://blog.naver.com/matlab/223456789' })).status).toBe(201);
+
+    // 10. 성과 입력 → 연출·훅별 모음
+    expect((await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 'abc' })).status).toBe(400);
+    await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 35, avgWatchSeconds: 12.5, saves: 20, shares: 10 });
+    const ins = await call('GET', '/insights');
+    const exp = ins.body.find((x: { kind: string; key: string }) => x.kind === 'style' && x.key === 'experiment');
+    expect(exp.medianSavesSharesPerK).toBe(30);
+    expect(exp.enough).toBe(false);
+
+    // 승인 후 내용을 바꾸면 다시 승인 필요 + 게시 기록 불가
+    const latest = (await call('GET', `/projects/${pid}`)).body.latest;
+    const changed = { ...latest.script, scenes: latest.script.scenes.map((s: { line: string }, i: number) => (i === 1 ? { ...s, line: '바뀐 대사' } : s)) };
+    await call('PUT', `/projects/${pid}/script`, { script: changed });
+    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'naver', url: 'https://blog.naver.com/matlab/223456790' })).status).toBe(409);
   });
 });
 

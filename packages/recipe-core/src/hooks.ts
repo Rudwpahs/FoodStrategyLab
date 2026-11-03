@@ -306,7 +306,7 @@ const BUILDERS: Record<HookType, Builder> = {
     if (!f.mistake) return { missing: '흔한 실수 (연구자가 실제로 자주 보는 실수)' };
     // 파일럿에서 실수 문장을 통째로 말하면 약 5초 걸렸다 → 말은 짧게, 실수 내용은 카드로 (첫 3초)
     const line = `잠깐! ${f.dish}, 이렇게 하면 안 돼요!`;
-    return { line, firstScreen: '실패한 결과 + 맛조수 당황 + 실수 내용 카드', scenes: [scene('mistake', 'embarrassed', line, 'fail', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
+    return { line, firstScreen: '실패한 음식 클로즈업 + 실수 내용 카드', scenes: [scene('mistake', 'embarrassed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   myth: (f) => {
     if (!f.misconception) return { missing: '흔한 오해 (사람들이 잘못 아는 점)' };
@@ -339,7 +339,7 @@ const BUILDERS: Record<HookType, Builder> = {
     if (!f.mistake) return { missing: '흔한 실수 또는 자주 겪는 실패' };
     // 실패 내용은 화면 카드로 보여 주고, 말은 짧게 (첫 3초)
     const line = `${f.dish}, 이런 실패 해결법 알려 드릴게요!`;
-    return { line, firstScreen: '실패 결과 + 실패 내용 카드', scenes: [scene('mistake', 'disappointed', line, 'fail', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
+    return { line, firstScreen: '실패한 음식 클로즈업 + 실패 내용 카드', scenes: [scene('mistake', 'disappointed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   experiment: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
