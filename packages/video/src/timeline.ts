@@ -44,6 +44,8 @@ export interface VideoProps {
   timings: SceneTiming[];
   /** 연구자 승인 여부. false면 '검수 전 미리보기' 워터마크를 표시한다. */
   reviewed: boolean;
+  /** 승인한 사람 (서명 카드 문구용) */
+  reviewer?: string;
   /** 원본 레시피 (3D 음식·재료 소품을 만들 때 사용) */
   recipe?: RecipeInput;
   /** 완성 사진 URL과 사진의 대표 색 (있으면 음식 색에 반영) */

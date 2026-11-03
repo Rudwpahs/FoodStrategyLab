@@ -99,6 +99,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
       script,
       timings,
       reviewed: true,
+      reviewer: approval.reviewer,
       recipe,
       photoUrl: photo ? `${origin}${photo.url}` : undefined,
       photoColor: photo?.color || undefined,

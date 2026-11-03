@@ -190,6 +190,27 @@ describe('훅만 바꾸기', () => {
     expect(new Set(next.scenes.map((s) => s.id)).size).toBe(next.scenes.length);
   });
 
+  it('새 훅 장면은 새 번호를 받아, 예전 훅 장면에 올린 클립이 붙지 않는다', () => {
+    const { script } = buildStyledScript(walnut, { style: 'experiment', hookType: 'experiment' });
+    const { script: next } = applyHook(script, walnut, 'result-first');
+    expect(next.scenes[0]!.id).not.toBe(script.scenes[0]!.id);
+    expect(script.scenes.map((s) => s.id)).not.toContain(next.scenes[0]!.id);
+  });
+
+  it('장면이 12개를 넘게 되면 마지막 장면을 버리지 않고 거절한다', () => {
+    const { script } = buildStyledScript(walnut, { style: 'experiment' });
+    const twelve = { ...script, scenes: [...script.scenes.filter((s) => !s.hook), ...Array.from({ length: 12 }, (_, i) => ({ id: `x${i}`, type: 'explain' as const, emotion: 'curious' as const, line: '추가' }))].slice(0, 12) };
+    expect(() => applyHook(twelve, walnut, 'question')).toThrow(/12개/);
+  });
+
+  it('조리 순서가 카드보다 많으면 대사도 "핵심 n단계"라고 말한다 (감각형)', () => {
+    const many = { ...walnut, steps: [...walnut.steps, '추가 단계 1', '추가 단계 2'] };
+    const { script } = buildStyledScript(many, { style: 'sensory' });
+    const steps = script.scenes.find((s) => s.type === 'steps')!;
+    expect(steps.line).not.toMatch(/^\d단계면 끝/);
+    expect(steps.line).toContain('블로그');
+  });
+
   it('만들 수 없는 훅으로는 바꾸지 않는다', () => {
     const { script } = buildStyledScript(walnut, { style: 'experiment' });
     expect(() => applyHook(script, walnut, 'mistake')).toThrow(/흔한 실수/);

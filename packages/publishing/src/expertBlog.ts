@@ -166,7 +166,7 @@ export function buildExpertBlog(input: { recipe: RecipeInput; style: BlogStyle; 
   md.push('## 영상으로 보기', '', '[여기에 릴스·쇼츠 링크를 붙여넣으세요]', '');
   md.push('---', '');
   md.push(review ? `조리 정보 검토: ${BRAND.researcherTitle} ${review.reviewer} (${review.reviewedAt.slice(0, 10)})` : '⚠️ 검수 전 초안입니다. 게시하지 마세요.');
-  if (anyAnswer) md.push(notes.confirmedBy ? `본문의 경험·의견은 ${notes.confirmedBy} 연구자가 직접 답한 내용입니다.` : '⚠️ 연구자 본인 확인 전 답변이 포함되어 있습니다.');
+  if (anyAnswer) md.push(notes.confirmedBy ? `본문의 경험·의견은 연구자 답변을 그대로 옮겼습니다 (확인: ${notes.confirmedBy}, ${(notes.confirmedAt ?? '').slice(0, 10)}).` : '⚠️ 연구자 본인 확인 전 답변이 포함되어 있습니다.');
   md.push('캐릭터 영상은 AI 도구로 만들었습니다.', `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
 
   const markdown = md.join('\n');

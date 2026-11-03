@@ -30,7 +30,8 @@ export function lintBlog(markdown: string, opts: { dish: string; notes?: ExpertN
   for (const sentence of body.split(/(?<=[.!?。])\s+|\n/)) {
     const s = sentence.trim();
     if (!s || !FIRST_PERSON.test(s)) continue;
-    if (!answers.some((a) => a.includes(s) || s.includes(a.trim()))) {
+    // 아주 짧은 답(예: "네")이 아무 문장이나 통과시키지 않게 8자 이상인 답만 비교한다
+    if (!answers.some((a) => a.includes(s) || (a.trim().length >= 8 && s.includes(a.trim())))) {
       issues.push({ level: 'error', message: `연구자 답변에 없는 1인칭 경험 문장이에요: "${s.slice(0, 40)}" — 지어낸 경험일 수 있어요.` });
     }
   }

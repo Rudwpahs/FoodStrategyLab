@@ -202,7 +202,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       break;
     }
     case 'sensory': {
-      body.push(ingredients()!, steps((n) => `${n}단계면 끝!`)!, tipScene()!);
+      body.push(ingredients()!, steps((n, r) => (r > 0 ? `핵심 ${n}단계${restNote(r)}!` : `${n}단계면 끝!`))!, tipScene()!);
       body.push(signature(`${BRAND.labName}, 저장해 두고 만들어 보세요!`));
       break;
     }
@@ -234,22 +234,19 @@ export function applyHook(script: Script, recipe: RecipeInput, type: HookType): 
   if (!hook.available) throw new Error(`${hook.label} 훅을 만들 수 없어요: ${hook.missing}이(가) 필요해요.`);
   let lead = 0;
   while (lead < script.scenes.length && script.scenes[lead]!.hook) lead++;
-  const oldIds = script.scenes.slice(0, lead).map((s) => s.id);
   const rest = script.scenes.slice(lead);
-  const used = new Set(rest.map((s) => s.id));
+  if (hook.scenes.length + rest.length > 12) {
+    throw new Error('장면이 12개를 넘게 돼요. 장면 하나를 지운 뒤 다시 바꿔 주세요.');
+  }
+  // 새 훅 장면은 항상 새 번호를 쓴다: 예전 훅 장면에 올린 클립이 새 훅에 잘못 붙지 않게 (음성은 대사로 찾으므로 그대로 재사용)
+  const used = new Set(script.scenes.map((s) => s.id));
   let n = 1;
   const freshId = () => {
     while (used.has(`h${n}`)) n++;
     used.add(`h${n}`);
     return `h${n}`;
   };
-  const hookScenes = hook.scenes.map((d, i) => {
-    const reuse = oldIds[i];
-    const id = reuse && !used.has(reuse) ? reuse : freshId();
-    used.add(id);
-    return { id, ...d };
-  });
-  const scenes = [...hookScenes, ...rest].slice(0, 12);
+  const scenes = [...hook.scenes.map((d) => ({ id: freshId(), ...d })), ...rest];
   return { script: { ...script, hookType: type, scenes }, hook };
 }
 

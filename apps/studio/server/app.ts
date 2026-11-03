@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, repetitionWarning, suggestHooks } from '@mat-lab/recipe-core';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, repetitionWarning, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
@@ -21,6 +21,24 @@ const latestOrThrow = (repo: Repo, projectId: number) => {
   if (!latest) throw new HttpError(400, '먼저 대본을 만드세요.');
   return latest;
 };
+
+/**
+ * 새 대본에서 내용이 바뀐 장면 번호에 붙어 있던 클립 연결을 푼다 (파일은 지우지 않는다).
+ * 예전 장면용 클립이 다른 장면에 잘못 붙어 나오는 것을 막는다.
+ */
+function detachChangedMedia(repo: Repo, pid: number, before: Script | undefined, after: Script): string[] {
+  const media = repo.getSceneMedia(pid);
+  const notes: string[] = [];
+  for (const sceneId of Object.keys(media)) {
+    const oldLine = before?.scenes.find((s) => s.id === sceneId)?.line;
+    const newLine = after.scenes.find((s) => s.id === sceneId)?.line;
+    if (oldLine !== newLine) {
+      repo.deleteSceneMedia(pid, sceneId);
+      notes.push(`장면 ${sceneId}에 올려 둔 클립은 장면 내용이 바뀌어 연결을 풀었어요. 필요하면 다시 올려 주세요.`);
+    }
+  }
+  return notes;
+}
 
 export function createApp(repo: Repo) {
   const app = express();
@@ -125,8 +143,9 @@ export function createApp(repo: Repo) {
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
+    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, result.script);
     repo.addScriptVersion(pid, result.script, 'template', `연출: ${STYLE_INFO[style].label} · 훅: ${result.hook.label}`);
-    res.json({ project: repo.getProject(pid), notes: result.notes });
+    res.json({ project: repo.getProject(pid), notes: [...result.notes, ...detached] });
   });
 
   /** 지금 대본의 훅(첫 장면)만 바꾼다. 나머지 장면과 음성은 그대로. */
@@ -141,8 +160,9 @@ export function createApp(repo: Repo) {
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
+    const detached = detachChangedMedia(repo, pid, latest.script, result.script);
     repo.addScriptVersion(pid, result.script, 'edit', `훅 변경: ${result.hook.label}`);
-    res.json({ project: repo.getProject(pid), notes: result.hook.needsReview });
+    res.json({ project: repo.getProject(pid), notes: [...result.hook.needsReview, ...detached] });
   });
 
   api.get('/projects/:id/ai-prompt', (req, res) => res.json({ prompt: buildAiPrompt(repo.getRecipe(id(req))) }));
@@ -206,6 +226,7 @@ export function createApp(repo: Repo) {
         script: latest.script,
         timings,
         reviewed: state.approvedScriptVersion === latest.version,
+        reviewer: state.approvedScriptVersion === latest.version ? repo.lastReview(pid, latest.version)?.reviewer : undefined,
         recipe: repo.getRecipe(pid),
         photoUrl: photo?.url,
         photoColor: photo?.color || undefined,
@@ -279,7 +300,10 @@ export function createApp(repo: Repo) {
       ? checkConsistency({ recipe: project.recipe, script: project.latest.script, blogMarkdown: post.markdown, social: social.instagram, reviewed: Boolean(review), notes })
       : [];
     const lint = lintBlog(post.markdown, { dish: project.recipe.dishName || project.recipe.topic, notes });
-    res.json({ post, social, consistency, lint, expert: expert ? { style, pending: expert.pending, ready: expert.ready, blockers: expert.blockers } : null, styles: BLOG_STYLE_INFO });
+    // 빨간 오류(일관성·문체)가 하나라도 있으면 게시 준비가 아니다
+    const errors = consistency.filter((c) => c.level === 'error').length + lint.filter((l) => l.level === 'error').length;
+    const blockers = expert ? [...expert.blockers, ...(errors ? [`고쳐야 할 오류가 ${errors}개 있어요 (아래 빨간 표시).`] : [])] : [];
+    res.json({ post, social, consistency, lint, expert: expert ? { style, pending: expert.pending, ready: blockers.length === 0, blockers } : null, styles: BLOG_STYLE_INFO });
   });
 
   api.get('/projects/:id/expert-notes', (req, res) => {

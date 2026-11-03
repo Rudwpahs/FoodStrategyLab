@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { STYLE_IDS, VISUAL_LABELS, type HookCandidate, type HookType, type StyleId, type StyleInfo } from '@mat-lab/recipe-core';
+import { STYLE_IDS, VISUAL_LABELS, isStyleId, type HookCandidate, type HookType, type StyleId, type StyleInfo } from '@mat-lab/recipe-core';
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
 
@@ -10,7 +10,7 @@ import { useApp } from '../App.tsx';
 export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: ProjectDetail) => void; dirty: boolean }> = ({ project, setProject, dirty }) => {
   const { run } = useApp();
   const current = project.latest?.script;
-  const [style, setStyle] = useState<StyleId>((current?.style as StyleId) ?? 'experiment');
+  const [style, setStyle] = useState<StyleId>(isStyleId(current?.style) ? current!.style as StyleId : 'experiment');
   const [styles, setStyles] = useState<Record<StyleId, StyleInfo> | null>(null);
   const [hooks, setHooks] = useState<HookCandidate[]>([]);
   const [chosen, setChosen] = useState<HookType | null>(null);

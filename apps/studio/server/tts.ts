@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { ttsSettings } from './config.ts';
 import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './voicestudio.ts';
@@ -114,18 +116,40 @@ async function voicestudioSpeech(text: string, out: string) {
   const model = (await engineInfo(url)).chosen;
   if (!model) throw new Error('상업적으로 쓸 수 있는 음성 엔진(VoxCPM2 등)이 설치되어 있지 않습니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
   const voice = voicestudioVoice();
-  const res = await fetch(`${url}/v1/audio/speech`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
-    body: JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' }),
-    // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정)
-    signal: AbortSignal.timeout(Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`VoiceStudio 음성 생성 실패 (${res.status}): ${detail.slice(0, 200)}`);
+  // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
+  // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
+  const timeoutMs = Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000;
+  const res = await postSlow(`${url}/v1/audio/speech`, JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' }), {
+    'content-type': 'application/json',
+    ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+  }, timeoutMs);
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`VoiceStudio 음성 생성 실패 (${res.status}): ${res.body.toString('utf8').slice(0, 200)}`);
   }
-  fs.writeFileSync(out, Buffer.from(await res.arrayBuffer()));
+  fs.writeFileSync(out, res.body);
+}
+
+/** 오래 걸리는 로컬 요청: 전체 시간 제한만 두고 응답 헤더 대기 제한은 두지 않는다 */
+export function postSlow(target: string, body: string, headers: Record<string, string>, timeoutMs: number): Promise<{ status: number; body: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(target);
+    const lib = u.protocol === 'https:' ? https : http;
+    const req = lib.request(u, { method: 'POST', headers: { ...headers, 'content-length': Buffer.byteLength(body) } }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => {
+        clearTimeout(timer);
+        resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) });
+      });
+      res.on('error', reject);
+    });
+    const timer = setTimeout(() => req.destroy(new Error(`VoiceStudio 응답이 ${Math.round(timeoutMs / 60000)}분 안에 오지 않았습니다.`)), timeoutMs);
+    req.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    req.end(body);
+  });
 }
 
 /**

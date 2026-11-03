@@ -129,6 +129,33 @@ describe('훅·연출 선택', () => {
     expect(v2.script.scenes.slice(1)).toEqual(v1.script.scenes.slice(1));
   });
 
+  it('대본을 새로 만들어 장면 내용이 바뀌면, 그 장면에 붙인 클립 연결을 풀고 알려준다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a9f00000000049454e44ae426082', 'hex');
+    const up = await fetch(`${base}/projects/${pid}/scenes/s1/media`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png });
+    expect(up.status).toBe(200);
+    const made = await call('POST', `/projects/${pid}/script/styled`, { style: 'comedy' });
+    expect(made.body.notes.join(' ')).toContain('연결을 풀었어요');
+    expect(made.body.project.sceneMedia.s1).toBeUndefined();
+  });
+
+  it('빨간 오류가 있으면 블로그는 게시 준비가 아니다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const latest = (await call('GET', `/projects/${pid}`)).body.latest;
+    // 대본에 원본에 없는 분량을 넣는다
+    const bad = { ...latest.script, scenes: latest.script.scenes.map((s: { id: string; line: string }, i: number) => (i === 2 ? { ...s, line: `${s.line} 180도에서 튀기세요.` } : s)) };
+    await call('PUT', `/projects/${pid}/script`, { script: bad, note: 'test' });
+    const v = (await call('GET', `/projects/${pid}`)).body.latest.version;
+    await call('POST', `/projects/${pid}/reviews`, { version: v, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    await call('PUT', `/projects/${pid}/expert-notes`, { answers: { 'key-step': '데치기', failure: '딱딱해짐', fix: '불 끄기' }, confirmBy: '이희재' });
+    const blog = await call('GET', `/projects/${pid}/blog?style=expert-note`);
+    expect(blog.body.consistency.some((c: { level: string }) => c.level === 'error')).toBe(true);
+    expect(blog.body.expert.ready).toBe(false);
+    expect(blog.body.expert.blockers.join(' ')).toContain('오류');
+  });
+
   it('자료가 없어 만들 수 없는 훅은 400으로 이유를 알려준다', async () => {
     const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
     const r = await call('POST', `/projects/${pid}/script/styled`, { style: 'problem', hookType: 'mistake' });

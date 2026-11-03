@@ -5,6 +5,7 @@ import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
+import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
@@ -23,7 +24,7 @@ export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
 }
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
+export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, reviewer, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -101,7 +102,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} photoUrl={photoUrl} captionBottom={captionBottom} />
+            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} photoUrl={photoUrl} captionBottom={captionBottom} />
             <SpeechAudio timing={timing} />
           </Sequence>
         );
@@ -184,11 +185,12 @@ const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> =
 };
 
 /** 3D 화면을 가리지 않도록 카드를 작게, 위쪽에 띄운다 */
-const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; photoUrl?: string; captionBottom: number }> = ({
+const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; photoUrl?: string; captionBottom: number }> = ({
   scene,
   timing,
   topic,
   reviewed,
+  reviewer,
   photoUrl,
   captionBottom,
 }) => {
@@ -200,10 +202,11 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
   return (
     <AbsoluteFill>
       {realResult && <ResultPhoto url={photoUrl!} frame={frame} duration={timing.durationInFrames} />}
+      {scene.visual === 'fail' && <IllustrationTag />}
       {scene.visual === 'compare' ? (
         <CompareOverlay scene={scene} frame={frame} fps={fps} />
       ) : scene.visual === 'signature' ? (
-        <SignatureCard frame={frame} fps={fps} reviewed={reviewed} />
+        <SignatureCard frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
       ) : scene.type === 'steps' ? (
         <StepTicker scene={scene} frame={frame} duration={timing.durationInFrames} />
       ) : scene.type === 'ingredients' ? (
@@ -261,7 +264,7 @@ const fitText = (text: string, base: number, comfortable: number) => (text.lengt
  * 엔딩 서명 카드: 전문가 이름을 매번 길게 소개하지 않고, 끝에 한 번 또렷하게 남긴다.
  * '검토' 문구는 실제 승인된 대본으로 만든 영상에만 나온다.
  */
-const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean }> = ({ frame, fps, reviewed }) => {
+const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean; reviewer?: string }> = ({ frame, fps, reviewed, reviewer }) => {
   const p = spring({ frame: frame - 4, fps, config: { damping: 13 } });
   return (
     <div style={{ position: 'absolute', left: 90, right: 90, top: 280, transform: `translateY(${interpolate(p, [0, 1], [60, 0])}px)`, opacity: p }}>
@@ -271,7 +274,7 @@ const SignatureCard: React.FC<{ frame: number; fps: number; reviewed: boolean }>
         </div>
         <div style={{ fontSize: 112, fontWeight: 950, letterSpacing: 6, margin: '6px 0 4px', fontStyle: 'italic' }}>{BRAND.researcher}</div>
         <div style={{ fontSize: 40, fontWeight: 800, color: COLORS.red }}>{BRAND.labName}</div>
-        <div style={{ marginTop: 18, fontSize: 30, fontWeight: 700, opacity: 0.8 }}>{reviewed ? '이 영상의 조리 정보는 이희재 연구자가 검토했습니다' : '검수 전 초안'}</div>
+        <div style={{ marginTop: 18, fontSize: 30, fontWeight: 700, opacity: 0.8 }}>{signatureNote(reviewed, reviewer)}</div>
       </div>
     </div>
   );
@@ -326,6 +329,11 @@ const StepTicker: React.FC<{ scene: Scene; frame: number; duration: number }> = 
     </div>
   );
 };
+
+/** 3D 실패 장면은 실제 조리 결과가 아니므로 "설명용 연출"을 표시한다 */
+const IllustrationTag: React.FC = () => (
+  <div style={{ position: 'absolute', right: 40, top: 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>설명용 연출</div>
+);
 
 const ResultPhoto: React.FC<{ url: string; frame: number; duration: number }> = ({ url, frame, duration }) => {
   const zoom = interpolate(frame, [0, Math.max(1, duration)], [1.06, 1.0]);
