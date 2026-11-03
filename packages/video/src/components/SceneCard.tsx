@@ -12,6 +12,14 @@ interface CardProps {
   reviewed: boolean;
 }
 
+/**
+ * 질문 카드 글: 연출 엔진이 만든 장면(훅·화면 연출)은 말하는 문장을 그대로 보여 주고,
+ * 기존 템플릿 질문 장면은 예전처럼 주제를 보여 준다.
+ */
+export function questionText(scene: Pick<Scene, 'line' | 'hook' | 'visual'>, topic: string): string {
+  return scene.hook || scene.visual ? scene.line : topic;
+}
+
 /** 글자 수에 따라 글자 크기를 줄인다. */
 export function fitSize(text: string, base: number, comfortableChars: number, min = base * 0.55): number {
   const len = text.length;
@@ -78,9 +86,9 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
         <div style={{ ...style, textAlign: 'center', top: 300, background: COLORS.cream }}>
           <Label color={COLORS.navy}>{scene.cardTitle ?? '오늘의 질문'}</Label>
           {/* 훅 장면은 말하는 첫 문장을 그대로 크게 보여 준다 (소리 없이 봐도 이해되도록) */}
-          <div style={{ fontSize: fitSize(scene.hook ? scene.line : topic, 80, 14), fontWeight: 900, lineHeight: 1.22 }}>
+          <div style={{ fontSize: fitSize(questionText(scene, topic), 80, 14), fontWeight: 900, lineHeight: 1.22 }}>
             <span style={{ color: COLORS.red }}>Q. </span>
-            {scene.hook ? scene.line : topic}
+            {questionText(scene, topic)}
           </div>
         </div>
       );
