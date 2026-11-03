@@ -411,6 +411,25 @@ const CATEGORY_AFFINITY: Record<Category, Partial<Record<HookType, number>>> = {
 export interface HookOptions {
   /** 연출 유형이 선호하는 훅 (앞쪽일수록 강하게) */
   preferred?: readonly HookType[];
+  /** 최근 만든 콘텐츠들의 연출·훅 (같은 상황 반복을 피하기 위해) */
+  recent?: RecentFormat[];
+}
+
+export interface RecentFormat {
+  style?: string;
+  hookType?: string;
+}
+
+/**
+ * 같은 연출이 반복되는지 경고한다.
+ * 근거: YouTube 수익화 정책(2025-07)이 "같은 상황·같은 결과가 반복되는 캐릭터 콘텐츠"를 예로 든다.
+ */
+export function repetitionWarning(recent: RecentFormat[], style: string): string | null {
+  const last = recent.slice(0, 3);
+  if (last.length >= 3 && last.every((r) => r.style === style)) {
+    return '최근 3편이 모두 같은 연출 유형이에요. 매번 같은 상황·결과가 반복되면 플랫폼이 반복 콘텐츠로 볼 수 있으니, 다른 유형도 섞어 주세요.';
+  }
+  return null;
 }
 
 const CATEGORY_NAME: Record<Category, string> = { science: '요리 과학', fix: '실패 해결', compare: '재료 비교', tradition: '전통조리' };
@@ -463,13 +482,21 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
     score += 1;
     reasons.push('첫 문장에 전문가 직함이 나와 이름을 기억시키기 좋아요');
   }
+  // Instagram 공식 권고: 첫 3초 안에 관심을 끈다 (한국어 음성 약 7자/초 기준)
   const len = compactLength(built.line);
-  if (len > 45) {
+  const secs = len / 7;
+  if (secs > 6) {
     score -= 2;
-    reasons.push(`첫 문장이 길어요(${len}자) — 줄이면 좋아요`);
-  } else if (len > 32) {
+    reasons.push(`첫 문장이 길어요(약 ${secs.toFixed(1)}초) — 첫 3초 안에 끝나도록 줄이면 좋아요`);
+  } else if (secs > 3.6) {
     score -= 1;
-    reasons.push(`첫 문장이 조금 길어요(${len}자)`);
+    reasons.push(`첫 문장이 3초를 조금 넘어요(약 ${secs.toFixed(1)}초)`);
+  }
+  const recent = opts.recent ?? [];
+  const repeats = recent.filter((r) => r.hookType === type).length;
+  if (repeats >= 2) {
+    score -= 2;
+    reasons.push(`최근 ${recent.length}편 중 ${repeats}편이 같은 훅이에요 — 같은 상황이 반복되면 플랫폼이 '반복 콘텐츠'로 볼 수 있어요`);
   }
   if (built.needsReview.length) score -= 0.5;
   return { type, label: info.label, available: true, ...built, reason: reasons.join(' · ') || '기본 후보', score };

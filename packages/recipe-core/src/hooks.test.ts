@@ -13,6 +13,7 @@ import {
   hookLineIssues,
   josa,
   suggestHooks,
+  repetitionWarning,
   type RecipeInput,
 } from './index.ts';
 
@@ -102,6 +103,25 @@ describe('훅 후보 엔진', () => {
       }
     }
     expect(hookLineIssues(walnut, '180도에서 튀기세요')).toHaveLength(1);
+  });
+});
+
+describe('반복 방지와 첫 3초', () => {
+  it('최근에 같은 훅을 여러 번 썼으면 순위를 낮추고 이유를 말한다', () => {
+    const fresh = hookCandidate(walnut, 'result-first');
+    const tired = hookCandidate(walnut, 'result-first', { recent: [{ hookType: 'result-first' }, { hookType: 'result-first' }, { hookType: 'question' }] });
+    expect(tired.score).toBeLessThan(fresh.score);
+    expect(tired.reason).toContain('반복');
+  });
+
+  it('최근 3편이 같은 연출이면 경고한다', () => {
+    expect(repetitionWarning([{ style: 'comedy' }, { style: 'comedy' }, { style: 'comedy' }], 'comedy')).toContain('반복');
+    expect(repetitionWarning([{ style: 'comedy' }, { style: 'experiment' }, { style: 'comedy' }], 'comedy')).toBeNull();
+  });
+
+  it('첫 문장이 3초를 넘으면 이유와 함께 감점한다', () => {
+    const fact = hookCandidate(walnut, 'surprising-fact');
+    expect(fact.reason).toMatch(/초/);
   });
 });
 

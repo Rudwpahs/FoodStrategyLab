@@ -16,6 +16,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
   const [chosen, setChosen] = useState<HookType | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [showMissing, setShowMissing] = useState(false);
+  const [repetition, setRepetition] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -23,6 +24,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
       if (!alive) return;
       setStyles(r.styles);
       setHooks(r.hooks);
+      setRepetition(r.repetition);
       setChosen((c) => (c && r.hooks.some((h) => h.type === c && h.available) ? c : r.hooks.find((h) => h.available)?.type ?? null));
     });
     return () => {
@@ -73,6 +75,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
             );
           })}
         </div>
+        {repetition && <div className="issue warning" style={{ marginTop: 8 }}>{repetition}</div>}
         {info && (
           <div className="small" style={{ marginTop: 8, background: '#fffaf3', padding: 10, borderRadius: 10 }}>
             흐름: {info.beats.join(' → ')} · 권장 {info.seconds[0]}~{info.seconds[1]}초 (대사 길이에 맞춰 자동 조정)

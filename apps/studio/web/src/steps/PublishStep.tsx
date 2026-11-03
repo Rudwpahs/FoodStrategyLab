@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import type { BlogStyle } from '@mat-lab/publishing';
 import { api, copyHtml, copyText } from '../api.ts';
+import { ExpertNotesPanel } from '../components/ExpertNotesPanel.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
@@ -8,12 +10,14 @@ type Blog = Awaited<ReturnType<typeof api.blog>>;
 export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
   const { run } = useApp();
   const [blog, setBlog] = useState<Blog | null>(null);
+  const [style, setStyle] = useState<BlogStyle | ''>('');
+  const [tick, setTick] = useState(0);
   const done = project.renders.find((r) => r.status === 'done' && r.scriptVersion === project.latest?.version);
   const reviewed = project.approval !== null;
 
   useEffect(() => {
-    run(() => api.blog(project.id)).then((b) => b && setBlog(b));
-  }, [project.updatedAt, project.status]);
+    run(() => api.blog(project.id, style || undefined)).then((b) => b && setBlog(b));
+  }, [project.updatedAt, project.status, style, tick]);
 
   if (!blog) return <div className="empty">불러오는 중…</div>;
 
@@ -29,6 +33,37 @@ export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
             <button className="btn small primary" onClick={() => run(() => copyHtml(blog.post.html, blog.post.markdown), '본문을 서식째 복사했습니다')}>본문 복사</button>
           </div>
           <div className="muted small">네이버 블로그 글쓰기 API가 종료되어, 본문을 복사해 에디터에 붙여넣고 사진(썸네일·레시피 카드)을 직접 올립니다.</div>
+          <label className="field">
+            글 유형
+            <select value={style} onChange={(e) => setStyle(e.target.value as BlogStyle | '')}>
+              <option value="">기본 자동 원고 (레시피만)</option>
+              {Object.entries(blog.styles).map(([k, v]) => (
+                <option key={k} value={k}>{v.label} — {v.summary}</option>
+              ))}
+            </select>
+          </label>
+          {blog.expert && (
+            <div className={`issue ${blog.expert.ready ? 'info' : 'warning'}`}>
+              {blog.expert.ready ? '게시 준비 완료: 연구자 답변과 승인이 모두 확인됐어요.' : `아직 게시하지 마세요 — ${blog.expert.blockers.join(' ')}`}
+            </div>
+          )}
+          {blog.consistency.length > 0 ? (
+            <div className="stack" style={{ gap: 4 }}>
+              {blog.consistency.map((c, i) => (
+                <div key={i} className={`issue ${c.level}`}>[{c.where}] {c.message}</div>
+              ))}
+            </div>
+          ) : (
+            project.latest && <div className="small" style={{ color: '#2f7d55' }}>✓ 영상·블로그·SNS의 재료·분량·순서가 원본과 일치해요</div>
+          )}
+          {blog.lint.length > 0 && (
+            <details>
+              <summary className="small">문체 점검 {blog.lint.length}건 (상투구·반복·지어낸 경험)</summary>
+              {blog.lint.map((l, i) => (
+                <div key={i} className={`issue ${l.level}`}>{l.message}</div>
+              ))}
+            </details>
+          )}
           <div className="blog-preview" dangerouslySetInnerHTML={{ __html: blog.post.html }} />
           <div className="row">
             <button className="btn small" onClick={() => run(() => copyText(blog.post.markdown), '마크다운을 복사했습니다')}>마크다운 복사</button>
@@ -36,6 +71,7 @@ export const PublishStep: React.FC<StepProps> = ({ project, go }) => {
           </div>
         </div>
         <div className="stack">
+          {style && <ExpertNotesPanel projectId={project.id} style={style} onSaved={() => setTick((t) => t + 1)} />}
           <div className="card stack">
             <div className="row">
               <h2 style={{ margin: 0 }}>인스타그램 릴스 문구</h2>

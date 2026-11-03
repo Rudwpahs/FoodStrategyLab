@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, suggestHooks } from '@mat-lab/recipe-core';
-import { buildBlogPost, buildSocialCopy } from '@mat-lab/publishing';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, isHookType, isStyleId, parseAiScript, repetitionWarning, suggestHooks } from '@mat-lab/recipe-core';
+import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { HttpError, type Repo } from './repo.ts';
@@ -97,10 +97,19 @@ export function createApp(repo: Repo) {
   api.get('/projects/:id/hooks', (req, res) => {
     const pid = id(req);
     const style = isStyleId(req.query.style) ? req.query.style : undefined;
+    // 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영
+    const recent = repo
+      .listProjects()
+      .filter((p) => p.id !== pid)
+      .slice(0, 5)
+      .map((p) => repo.latestScript(p.id)?.script)
+      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
+      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
     res.json({
       styles: STYLE_INFO,
       hookInfo: HOOK_INFO,
-      hooks: suggestHooks(repo.getRecipe(pid), { preferred: style ? STYLE_INFO[style].hooks : undefined }),
+      hooks: suggestHooks(repo.getRecipe(pid), { preferred: style ? STYLE_INFO[style].hooks : undefined, recent }),
+      repetition: style ? repetitionWarning(recent, style) : null,
     });
   });
 
@@ -260,8 +269,26 @@ export function createApp(repo: Repo) {
     const pid = id(req);
     const project = repo.getProject(pid);
     const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
-    const post = buildBlogPost({ recipe: project.recipe, review });
-    res.json({ post, social: buildSocialCopy(project.recipe, Boolean(review), post.tags) });
+    const style = (BLOG_STYLES as readonly string[]).includes(String(req.query.style)) ? (String(req.query.style) as BlogStyle) : null;
+    const notes = repo.getExpertNotes(pid);
+    // style이 없으면 기존 자동 원고(A), 있으면 연구자 답변을 반영한 원고(B)
+    const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
+    const post = expert ?? buildBlogPost({ recipe: project.recipe, review });
+    const social = buildSocialCopy(project.recipe, Boolean(review), post.tags);
+    const consistency = project.latest
+      ? checkConsistency({ recipe: project.recipe, script: project.latest.script, blogMarkdown: post.markdown, social: social.instagram, reviewed: Boolean(review), notes })
+      : [];
+    const lint = lintBlog(post.markdown, { dish: project.recipe.dishName || project.recipe.topic, notes });
+    res.json({ post, social, consistency, lint, expert: expert ? { style, pending: expert.pending, ready: expert.ready, blockers: expert.blockers } : null, styles: BLOG_STYLE_INFO });
+  });
+
+  api.get('/projects/:id/expert-notes', (req, res) => {
+    res.json({ notes: repo.getExpertNotes(id(req)), questions: EXPERT_QUESTIONS, styles: BLOG_STYLE_INFO });
+  });
+
+  api.put('/projects/:id/expert-notes', (req, res) => {
+    const pid = id(req);
+    res.json({ notes: repo.setExpertNotes(pid, req.body ?? {}) });
   });
 
   // 선택: 이미지·영상 생성 AI용 프롬프트 팩 (승인된 대본만)

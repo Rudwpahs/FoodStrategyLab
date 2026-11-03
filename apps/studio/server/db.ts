@@ -69,5 +69,6 @@ export function openDb(file: string): Db {
   const cols = new Set((db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]).map((c) => c.name));
   if (!cols.has('photo_file')) db.exec("ALTER TABLE projects ADD COLUMN photo_file TEXT NOT NULL DEFAULT ''");
   if (!cols.has('photo_color')) db.exec("ALTER TABLE projects ADD COLUMN photo_color TEXT NOT NULL DEFAULT ''");
+  if (!cols.has('expert_notes')) db.exec("ALTER TABLE projects ADD COLUMN expert_notes TEXT NOT NULL DEFAULT '{}'");
   return db;
 }

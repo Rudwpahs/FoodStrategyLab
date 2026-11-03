@@ -1,5 +1,6 @@
 import type { HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { VideoProps } from '@mat-lab/video/timeline';
+import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
 import type { ProjectDetail, ProjectSummary, RenderRow } from '../../server/repo.ts';
 
 export type { ProjectDetail, ProjectSummary, RenderRow };
@@ -48,7 +49,7 @@ export const api = {
   remove: (id: number) => request<void>('DELETE', `/projects/${id}`),
   updateRecipe: (id: number, recipe: RecipeInput) => request<ProjectDetail>('PUT', `/projects/${id}/recipe`, { recipe }),
   hooks: (id: number, style?: StyleId) =>
-    request<{ styles: Record<StyleId, StyleInfo>; hookInfo: Record<HookType, HookInfo>; hooks: HookCandidate[] }>('GET', `/projects/${id}/hooks${style ? `?style=${style}` : ''}`),
+    request<{ styles: Record<StyleId, StyleInfo>; hookInfo: Record<HookType, HookInfo>; hooks: HookCandidate[]; repetition: string | null }>('GET', `/projects/${id}/hooks${style ? `?style=${style}` : ''}`),
   styledScript: (id: number, style: StyleId, hookType?: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/styled`, { style, hookType }),
   changeHook: (id: number, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/hook`, { hookType }),
   templateScript: (id: number) => request<ProjectDetail>('POST', `/projects/${id}/script/template`),
@@ -61,8 +62,17 @@ export const api = {
     request<ProjectDetail>('POST', `/projects/${id}/reviews`, body),
   voice: (id: number) => request<{ provider: string; generated: number }>('POST', `/projects/${id}/voice`),
   preview: (id: number) => request<{ version: number; voiced: boolean; props: VideoProps }>('GET', `/projects/${id}/preview`),
-  blog: (id: number) =>
-    request<{ post: { title: string; markdown: string; html: string; tags: string[] }; social: { instagram: string; youtubeTitle: string; youtubeDescription: string } }>('GET', `/projects/${id}/blog`),
+  blog: (id: number, style?: BlogStyle) =>
+    request<{
+      post: { title: string; markdown: string; html: string; tags: string[] };
+      social: { instagram: string; youtubeTitle: string; youtubeDescription: string };
+      consistency: ConsistencyIssue[];
+      lint: LintIssue[];
+      expert: { style: BlogStyle; pending: ExpertQuestion[]; ready: boolean; blockers: string[] } | null;
+      styles: Record<BlogStyle, BlogStyleInfo>;
+    }>('GET', `/projects/${id}/blog${style ? `?style=${style}` : ''}`),
+  expertNotes: (id: number) => request<{ notes: ExpertNotes; questions: ExpertQuestion[]; styles: Record<BlogStyle, BlogStyleInfo> }>('GET', `/projects/${id}/expert-notes`),
+  saveExpertNotes: (id: number, answers: ExpertNotes['answers'], confirmBy?: string) => request<{ notes: ExpertNotes }>('PUT', `/projects/${id}/expert-notes`, { answers, confirmBy }),
   uploadPhoto: async (id: number, file: File, color: string) => {
     const res = await fetch(`/api/projects/${id}/photo?color=${encodeURIComponent(color)}`, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
     const data = await res.json();

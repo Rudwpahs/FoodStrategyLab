@@ -1,3 +1,4 @@
+import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import {
   ChecklistSchema,
   RecipeInputSchema,
@@ -161,6 +162,39 @@ export class Repo {
     this.getRecipe(id);
     this.db.prepare('UPDATE projects SET photo_file = ?, photo_color = ?, updated_at = ? WHERE id = ?').run(file, color, now(), id);
     this.logEvent(id, 'photo', file ? '완성 사진 등록' : '완성 사진 삭제');
+  }
+
+  /** 블로그용 연구자 답변. 답이 바뀌면 '본인 확인'은 풀린다. */
+  getExpertNotes(id: number): ExpertNotes {
+    const row = this.db.prepare('SELECT expert_notes FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    try {
+      const v = JSON.parse(String(row.expert_notes || '{}')) as ExpertNotes;
+      return { answers: v.answers ?? {}, ...(v.confirmedBy ? { confirmedBy: v.confirmedBy, confirmedAt: v.confirmedAt } : {}) };
+    } catch {
+      return { answers: {} };
+    }
+  }
+
+  setExpertNotes(id: number, input: { answers?: unknown; confirmBy?: unknown }): ExpertNotes {
+    const prev = this.getExpertNotes(id);
+    const answers: ExpertNotes['answers'] = {};
+    const raw = (input.answers && typeof input.answers === 'object' ? input.answers : {}) as Record<string, unknown>;
+    for (const key of EXPERT_QUESTION_IDS) {
+      const v = raw[key];
+      if (typeof v === 'string' && v.trim()) {
+        if (v.length > 4000) throw new HttpError(400, '답변은 4000자 이내로 적어 주세요.');
+        answers[key] = v.trim();
+      }
+    }
+    const changed = JSON.stringify(answers) !== JSON.stringify(prev.answers);
+    const by = typeof input.confirmBy === 'string' ? input.confirmBy.trim() : '';
+    const next: ExpertNotes = { answers };
+    if (by) Object.assign(next, { confirmedBy: by, confirmedAt: now() });
+    else if (!changed && prev.confirmedBy) Object.assign(next, { confirmedBy: prev.confirmedBy, confirmedAt: prev.confirmedAt });
+    this.db.prepare('UPDATE projects SET expert_notes = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(next), now(), id);
+    this.logEvent(id, 'notes', by ? `연구자 답변 확인 (${by})` : changed ? '연구자 답변 수정' : '연구자 답변 저장');
+    return next;
   }
 
   getSceneMedia(id: number): SceneMedia {

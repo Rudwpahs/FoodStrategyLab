@@ -138,6 +138,38 @@ describe('훅·연출 선택', () => {
   });
 });
 
+describe('연구자 답변 블로그', () => {
+  const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+
+  it('답변 저장 → 유형별 원고에 반영, 답이 바뀌면 본인 확인이 풀린다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: walnut })).body.id;
+    const q = await call('GET', `/projects/${pid}/expert-notes`);
+    expect(q.body.questions.length).toBeGreaterThanOrEqual(10);
+
+    let blog = await call('GET', `/projects/${pid}/blog?style=expert-note`);
+    expect(blog.body.expert.ready).toBe(false);
+    expect(blog.body.post.markdown).toContain('[연구자 답변 대기]');
+
+    const answers = { 'key-step': '데친 뒤 찬물에 헹구는 단계', failure: '시럽을 오래 졸이면 딱딱해져요', fix: '불을 일찍 끕니다', bogus: '무시' };
+    const saved = await call('PUT', `/projects/${pid}/expert-notes`, { answers, confirmBy: '이희재' });
+    expect(saved.body.notes.confirmedBy).toBe('이희재');
+    expect(saved.body.notes.answers.bogus).toBeUndefined();
+
+    blog = await call('GET', `/projects/${pid}/blog?style=expert-note`);
+    expect(blog.body.post.markdown).toContain('시럽을 오래 졸이면 딱딱해져요');
+    expect(blog.body.expert.pending).toEqual([]);
+    // 대본 승인이 없으므로 아직 게시 준비는 아니다
+    expect(blog.body.expert.blockers.join(' ')).toContain('승인');
+
+    const edited = await call('PUT', `/projects/${pid}/expert-notes`, { answers: { ...answers, fix: '다르게 고침' } });
+    expect(edited.body.notes.confirmedBy).toBeUndefined();
+
+    // 스타일을 안 고르면 기존 자동 원고
+    const auto = await call('GET', `/projects/${pid}/blog`);
+    expect(auto.body.expert).toBeNull();
+  });
+});
+
 describe('완성 사진', () => {
   it('사진을 올리면 미리보기 데이터에 사진과 색이 들어가고, 지울 수 있다', async () => {
     const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[0] })).body.id;
