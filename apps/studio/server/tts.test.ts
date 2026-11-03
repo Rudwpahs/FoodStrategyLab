@@ -13,6 +13,7 @@ frame.set([0xff, 0xf3, 0x64, 0xc4]);
 const mp3 = Buffer.concat(Array.from({ length: 50 }, () => frame));
 
 const requests: Record<string, unknown>[] = [];
+let busyTimes = 0;
 const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: 'default', kind: 'design' }];
 let designBody = '';
 let engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }, { id: 'moss-tts-nano', available: false }];
@@ -59,6 +60,11 @@ beforeAll(async () => {
       req.on('data', (d) => (body += d));
       req.on('end', () => {
         const parsed = JSON.parse(body);
+        if (busyTimes > 0) {
+          busyTimes--;
+          json(429, { error: { message: 'worker pool is saturated, safe to retry' } });
+          return;
+        }
         requests.push(parsed);
         res.setHeader('content-type', parsed.response_format === 'wav' ? 'audio/wav' : 'audio/mpeg');
         res.end(mp3);
@@ -143,6 +149,16 @@ describe('VoiceStudio 음성', () => {
     starting = true;
     expect((await findVoiceStudio()).state).toBe('starting');
     starting = false;
+  });
+
+  it('VoiceStudio가 바쁘면(429) 기다렸다가 다시 요청한다', async () => {
+    process.env.VOICESTUDIO_RETRY_MS = '20';
+    busyTimes = 2;
+    const before = requests.length;
+    const a = await synthesize('바쁠 때 다시 시도하는 문장', audioDir);
+    expect(fs.existsSync(a.file)).toBe(true);
+    expect(requests.length).toBe(before + 1);
+    expect(busyTimes).toBe(0);
   });
 
   it('같은 문장은 캐시를 써서 다시 요청하지 않는다', async () => {

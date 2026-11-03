@@ -119,10 +119,16 @@ async function voicestudioSpeech(text: string, out: string) {
   // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
   // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
   const timeoutMs = Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000;
-  const res = await postSlow(`${url}/v1/audio/speech`, JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' }), {
-    'content-type': 'application/json',
-    ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-  }, timeoutMs);
+  const payload = JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' });
+  const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
+  // VoiceStudio가 다른 음성을 만드는 중이면 429(바쁨, 다시 시도해도 안전)를 준다 → 잠시 기다렸다 다시 요청
+  const retryMs = Number(process.env.VOICESTUDIO_RETRY_MS) || 15_000;
+  let res = await postSlow(`${url}/v1/audio/speech`, payload, headers, timeoutMs);
+  for (let tries = 0; res.status === 429 && tries < 40; tries++) {
+    await new Promise((r) => setTimeout(r, retryMs));
+    res = await postSlow(`${url}/v1/audio/speech`, payload, headers, timeoutMs);
+  }
+  if (res.status === 429) throw new Error('VoiceStudio가 다른 음성을 만드느라 바빠요. 잠시 뒤 다시 시도해 주세요.');
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`VoiceStudio 음성 생성 실패 (${res.status}): ${res.body.toString('utf8').slice(0, 200)}`);
   }
