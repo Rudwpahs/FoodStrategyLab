@@ -84,3 +84,15 @@ describe('소리 다듬기', () => {
     expect(words.map((w) => w.from)).toEqual([0, 40, 70]);
   });
 });
+
+describe('빈 음성 감지', () => {
+  it('소리가 전혀 없는 음성 파일은 silent로 표시한다', async () => {
+    const { speechBounds } = await import('./speech.ts');
+    expect(speechBounds(new Int16Array(16000)).silent).toBe(true);
+    const tone = new Int16Array(16000).map((_, i) => (i > 4000 && i < 12000 ? Math.round(Math.sin(i / 5) * 8000) : 0));
+    const b = speechBounds(tone);
+    expect(b.silent).toBe(false);
+    expect(b.start).toBeGreaterThan(0.2);
+    expect(b.end).toBeLessThan(0.85);
+  });
+});

@@ -36,38 +36,12 @@ export async function decodePcm(file: string): Promise<Int16Array> {
   return new Int16Array(copy.buffer);
 }
 
-export interface SpeechBounds {
-  /** 말이 시작되는 시각(초) */
-  start: number;
-  /** 말이 끝나는 시각(초) */
-  end: number;
-}
-
-/**
- * 10ms 단위 음량으로 말소리 구간을 찾는다.
- * 앞은 0.03초, 뒤는 0.08초 여유를 둬서 숨소리·끝소리가 잘리지 않게 한다.
- */
-export function speechBounds(pcm: Int16Array, rate = RATE, thresholdDb = -42): SpeechBounds {
-  const win = Math.round(rate * 0.01);
-  const total = pcm.length / rate;
-  let first = -1;
-  let last = -1;
-  for (let i = 0, w = 0; i + win <= pcm.length; i += win, w++) {
-    let sum = 0;
-    for (let j = i; j < i + win; j++) sum += pcm[j]! * pcm[j]!;
-    const db = 20 * Math.log10(Math.sqrt(sum / win) / 32768 + 1e-9);
-    if (db > thresholdDb) {
-      if (first === -1) first = w;
-      last = w;
-    }
-  }
-  if (first === -1) return { start: 0, end: total };
-  return { start: Math.max(0, first * 0.01 - 0.03), end: Math.min(total, (last + 1) * 0.01 + 0.08) };
-}
+export { speechBounds, type SpeechBounds } from './speech.ts';
+import { speechBounds, type SpeechBounds } from './speech.ts';
 
 /** 결과를 음성 파일 옆에 저장해 두고 다시 쓴다 */
 export async function cachedSpeechBounds(file: string): Promise<SpeechBounds> {
-  const meta = `${file}.bounds.json`;
+  const meta = `${file}.bounds2.json`;
   if (fs.existsSync(meta)) return JSON.parse(fs.readFileSync(meta, 'utf8')) as SpeechBounds;
   const bounds = speechBounds(await decodePcm(file));
   fs.writeFileSync(meta, JSON.stringify(bounds));

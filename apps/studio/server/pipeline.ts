@@ -6,7 +6,7 @@ import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type 
 import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
-import { cachedAudio, measuredWords, synthesize, ttsProvider } from './tts.ts';
+import { cachedAudio, measuredWords, synthesize, ttsProvider, voiceIdentity } from './tts.ts';
 
 export const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 export const RENDER_DIR = path.join(DATA_DIR, 'renders');
@@ -17,7 +17,8 @@ const audioUrl = (file: string, origin = '') => `${origin}/media/audio/${path.ba
 /** 캐시된 음성이 있으면 그 길이로, 없으면 추정 길이로 미리보기 타임라인을 만든다. */
 export async function previewTimeline(script: Script, origin = ''): Promise<{ timings: SceneTiming[]; voiced: boolean }> {
   const provider = await ttsProvider().catch(() => 'none' as const);
-  const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR, provider));
+  const identity = await voiceIdentity(provider).catch(() => null);
+  const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR, identity));
   const voiced = audio.every(Boolean);
   // 음성 앞뒤 무음을 잘라 실제 말소리 길이로 장면 길이를 맞춘다 (PDF: 무음 자르기)
   const extras: (SpeechExtra | undefined)[] = [];
@@ -28,7 +29,7 @@ export async function previewTimeline(script: Script, origin = ''): Promise<{ ti
       seconds.push(null);
       continue;
     }
-    const bounds = await cachedSpeechBounds(a.file).catch(() => ({ start: 0, end: a.seconds }));
+    const bounds = await cachedSpeechBounds(a.file).catch(() => ({ start: 0, end: a.seconds, silent: false }));
     const words = await measuredWords(a.file, script.scenes[i]!.line).catch(() => undefined);
     extras.push({ trimStart: bounds.start, words });
     seconds.push(Math.max(0.3, bounds.end - bounds.start));
@@ -46,10 +47,17 @@ export async function previewTimeline(script: Script, origin = ''): Promise<{ ti
 export async function generateVoice(script: Script): Promise<{ provider: string; generated: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') return { provider, generated: 0 };
+  const identity = await voiceIdentity(provider);
   let generated = 0;
   for (const scene of script.scenes) {
-    if (!cachedAudio(scene.line, AUDIO_DIR, provider)) generated++;
-    await synthesize(scene.line, AUDIO_DIR);
+    if (!cachedAudio(scene.line, AUDIO_DIR, identity)) generated++;
+    const a = await synthesize(scene.line, AUDIO_DIR);
+    // 빈 음성(소리 없음)은 지우고 알린다: 영상에서 대사가 통째로 빠지는 것을 막는다
+    const bounds = await cachedSpeechBounds(a.file).catch(() => null);
+    if (bounds?.silent) {
+      fs.rmSync(a.file, { force: true });
+      throw new Error(`"${scene.line.slice(0, 20)}…" 대사의 음성이 비어 있습니다. 음성 생성을 다시 눌러 주세요.`);
+    }
   }
   return { provider, generated };
 }

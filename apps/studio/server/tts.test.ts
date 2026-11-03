@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { cachedAudio, measuredWords, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
+import { cachedAudio, measuredWords, resetTtsDetection, synthesize, ttsProvider, voiceIdentity, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 // 가짜 VoiceStudio: MPEG2 Layer III 24kHz 48kbps 프레임 50개 = 1.2초
@@ -15,6 +15,7 @@ const mp3 = Buffer.concat(Array.from({ length: 50 }, () => frame));
 const requests: Record<string, unknown>[] = [];
 const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: 'default', kind: 'design' }];
 let designBody = '';
+let engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }, { id: 'moss-tts-nano', available: false }];
 let starting = false;
 let server: http.Server;
 const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
@@ -28,7 +29,7 @@ beforeAll(async () => {
     };
     if (req.url === '/health') return starting ? json(503, { status: 'starting', version: '9.9' }) : json(200, { status: 'ok', version: '9.9' });
     if (req.url === '/profiles' && req.method === 'GET') return json(200, profiles);
-    if (req.url === '/engines/tts') return json(200, { active: 'omnivoice', backends: [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }] });
+    if (req.url === '/engines/tts') return json(200, { active: 'omnivoice', backends: engines });
     if (req.url === '/design/describe' && req.method === 'POST') {
       req.resume();
       req.on('end', () => json(200, { attrs: { Gender: 'female', Age: 'young adult', Pitch: 'high pitch', Style: 'Auto', EnglishAccent: 'Auto', ChineseDialect: 'Auto' } }));
@@ -117,6 +118,27 @@ describe('VoiceStudio 음성', () => {
     expect(requests.at(-1)).toMatchObject({ voice: '맛조수', input: '맛조수 목소리 시험' });
   });
 
+  it('같은 이름으로 목소리를 다시 만들면 예전 음성을 다시 쓰지 않는다', async () => {
+    writeVoiceSettings({ voicestudioVoice: '맛조수' });
+    await synthesize('다시 만든 목소리 시험', audioDir);
+    const before = requests.length;
+    // 같은 이름, 새 프로필 (VoiceStudio에서 지우고 다시 만든 경우)
+    const i = profiles.findIndex((p) => p.name === '맛조수');
+    profiles.splice(i, 1, { id: 99, name: '맛조수', kind: 'clone' });
+    await synthesize('다시 만든 목소리 시험', audioDir);
+    expect(requests.length).toBe(before + 1);
+  });
+
+  it('쓰는 엔진이 바뀌면 음성을 새로 만든다', async () => {
+    await synthesize('엔진 바뀜 시험', audioDir);
+    const before = requests.length;
+    engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: false }, { id: 'moss-tts-nano', available: true }];
+    await synthesize('엔진 바뀜 시험', audioDir);
+    expect(requests.length).toBe(before + 1);
+    expect(requests.at(-1)).toMatchObject({ model: 'moss-tts-nano' });
+    engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }, { id: 'moss-tts-nano', available: false }];
+  });
+
   it('앱이 준비 중이면 starting으로 알려준다', async () => {
     starting = true;
     expect((await findVoiceStudio()).state).toBe('starting');
@@ -128,7 +150,7 @@ describe('VoiceStudio 음성', () => {
     const before = requests.length;
     await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     expect(requests.length).toBe(before);
-    expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, 'voicestudio')).not.toBeNull();
-    expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, 'edge')).toBeNull();
+    expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, await voiceIdentity('voicestudio'))).not.toBeNull();
+    expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, await voiceIdentity('edge'))).toBeNull();
   });
 });

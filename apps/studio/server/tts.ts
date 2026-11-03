@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ttsSettings } from './config.ts';
-import { engineInfo, findVoiceStudio, readVoiceSettings } from './voicestudio.ts';
+import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './voicestudio.ts';
 
 /**
  * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
@@ -85,11 +85,25 @@ function run(cmd: string, args: string[]): Promise<void> {
   });
 }
 
-/** 목소리 설정 + 문장으로 캐시 키를 만든다 (설정이 바뀌면 새로 만든다) */
-export function audioKey(text: string, provider: TtsProvider = 'edge'): string {
+/**
+ * 지금 쓰는 목소리의 정체: 음성 도구 + 엔진 + 목소리 프로필 ID + 설정.
+ * 같은 이름으로 목소리를 다시 만들거나 엔진이 바뀌면 값이 달라져서, 예전 음성 캐시를 쓰지 않는다.
+ */
+export async function voiceIdentity(provider: TtsProvider): Promise<string | null> {
   const s = ttsSettings();
-  const voice = provider === 'voicestudio' ? ['vs', s.voicestudio.model, voicestudioVoice(), s.voicestudio.speed] : [s.edge.voice, s.edge.rate, s.edge.pitch];
-  return crypto.createHash('sha1').update([...voice, text].join('|')).digest('hex').slice(0, 16);
+  if (provider === 'edge') return ['edge', s.edge.voice, s.edge.rate, s.edge.pitch].join('|');
+  if (provider !== 'voicestudio') return null;
+  const url = await voicestudioUrl();
+  if (!url) return null;
+  const engine = (await engineInfo(url)).chosen ?? 'none';
+  const voice = voicestudioVoice();
+  const profileId = (await listProfiles(url).catch(() => [])).find((p) => p.name === voice)?.id ?? 'builtin';
+  return ['vs', engine, voice, profileId, s.voicestudio.speed].join('|');
+}
+
+/** 목소리 정체 + 문장으로 캐시 파일 이름을 만든다 */
+export function audioKey(text: string, identity: string): string {
+  return crypto.createHash('sha1').update(`${identity}|${text}`).digest('hex').slice(0, 16);
 }
 
 async function voicestudioSpeech(text: string, out: string) {
@@ -149,8 +163,10 @@ export async function measuredWords(file: string, line: string): Promise<[number
 export async function synthesize(text: string, audioDir: string): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
+  const identity = await voiceIdentity(provider);
+  if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
-  const file = path.join(audioDir, `${audioKey(text, provider)}.mp3`);
+  const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
   if (!fs.existsSync(file)) {
     const tmp = `${file}.tmp`;
     if (provider === 'voicestudio') {
@@ -166,10 +182,10 @@ export async function synthesize(text: string, audioDir: string): Promise<{ file
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
 
-/** 지금 쓰는 음성 도구로 만든 캐시가 있으면 돌려준다 */
-export function cachedAudio(text: string, audioDir: string, provider: TtsProvider): { file: string; seconds: number } | null {
-  if (provider === 'none') return null;
-  const file = path.join(audioDir, `${audioKey(text, provider)}.mp3`);
+/** 지금 목소리(identity)로 만든 캐시가 있으면 돌려준다 */
+export function cachedAudio(text: string, audioDir: string, identity: string | null): { file: string; seconds: number } | null {
+  if (!identity) return null;
+  const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
   if (!fs.existsSync(file)) return null;
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
