@@ -304,8 +304,9 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   mistake: (f) => {
     if (!f.mistake) return { missing: '흔한 실수 (연구자가 실제로 자주 보는 실수)' };
-    const line = `잠깐! ${firstSentence(f.mistake)}`;
-    return { line, firstScreen: '실패한 결과 + 맛조수 당황', scenes: [scene('mistake', 'embarrassed', line, 'fail')], needsReview: [], uses: ['흔한 실수'] };
+    // 파일럿에서 실수 문장을 통째로 말하면 약 5초 걸렸다 → 말은 짧게, 실수 내용은 카드로 (첫 3초)
+    const line = `잠깐! ${f.dish}, 이렇게 하면 안 돼요!`;
+    return { line, firstScreen: '실패한 결과 + 맛조수 당황 + 실수 내용 카드', scenes: [scene('mistake', 'embarrassed', line, 'fail', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   myth: (f) => {
     if (!f.misconception) return { missing: '흔한 오해 (사람들이 잘못 아는 점)' };
@@ -342,7 +343,8 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   experiment: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
-    const line = '이 단계, 하면 뭐가 달라질까요? 그림으로 비교해 볼게요!';
+    // 파일럿에서 약 4초 → 말은 질문만. '설명용 연출'은 화면에 표시된다
+    const line = '이 단계, 하면 뭐가 달라질까요?';
     return {
       line,
       firstScreen: `두 조건을 나란히 놓은 비교 화면, 위에 "${f.causeEffect.cause}" 카드 (설명용 연출 표시)`,

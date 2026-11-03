@@ -14,6 +14,7 @@ import {
   josa,
   suggestHooks,
   repetitionWarning,
+  estimateSceneSeconds,
   type RecipeInput,
 } from './index.ts';
 
@@ -117,6 +118,14 @@ describe('반복 방지와 첫 3초', () => {
   it('최근 3편이 같은 연출이면 경고한다', () => {
     expect(repetitionWarning([{ style: 'comedy' }, { style: 'comedy' }, { style: 'comedy' }], 'comedy')).toContain('반복');
     expect(repetitionWarning([{ style: 'comedy' }, { style: 'experiment' }, { style: 'comedy' }], 'comedy')).toBeNull();
+  });
+
+  it('실수·실험 훅은 말을 3초 안쪽으로 줄이고, 실수 내용은 화면 카드로 보여 준다 (파일럿 반영)', () => {
+    for (const t of ['mistake', 'experiment', 'problem-solve'] as const) {
+      const h = hookCandidate(walnutFull, t);
+      expect(estimateSceneSeconds({ line: h.line }), `${t}: ${h.line}`).toBeLessThanOrEqual(4);
+    }
+    expect(hookCandidate(walnutFull, 'mistake').scenes[0]!.cardTitle).toContain('데치지 않고');
   });
 
   it('첫 문장이 3초를 넘으면 이유와 함께 감점한다', () => {
