@@ -49,6 +49,9 @@ export async function startServer(port = PORT) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  // 라이브러리 안에서 놓친 오류(예: 렌더용 크롬 내려받기 실패) 하나로 서버 전체가 꺼지지 않게 한다.
+  // 해당 영상 작업은 자체 오류 처리로 '실패'가 되고, 스튜디오는 계속 동작한다.
+  process.on('unhandledRejection', (e) => console.error('처리되지 않은 오류:', (e as Error)?.message ?? e));
   const { interrupted, snapshots } = await startServer();
   // 클라우드 서버가 꺼질 때 마지막 변경까지 저장소에 복사한다
   if (snapshots) {
