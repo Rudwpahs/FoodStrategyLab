@@ -40,6 +40,22 @@ export interface VoiceInfo {
   describe: string;
 }
 
+export interface InstagramStatus {
+  configured: boolean;
+  connected: boolean;
+  username: string;
+  expiresAt: string;
+  problem: string;
+  redirectUri: string;
+}
+
+export interface InstagramJob {
+  id: string;
+  status: 'uploading' | 'processing' | 'publishing' | 'published' | 'failed';
+  message: string;
+  permalink: string;
+}
+
 export interface AuthState {
   /** login: 계정 있음 · setup: 화면에서 첫 계정 만들기(클라우드) · local: 이 PC 전용 */
   mode: 'local' | 'login' | 'setup';
@@ -51,6 +67,13 @@ export const api = {
   me: () => request<AuthState>('GET', '/auth/me'),
   login: (username: string, password: string) => request<{ user: AuthState['user'] }>('POST', '/auth/login', { username, password }),
   logout: () => request<{ ok: true }>('POST', '/auth/logout'),
+  instagram: () => request<InstagramStatus>('GET', '/instagram'),
+  instagramConnect: () => request<{ url: string }>('POST', '/instagram/connect'),
+  instagramDisconnect: () => request<{ ok: true }>('POST', '/instagram/disconnect'),
+  instagramDraft: (renderId: number) => request<{ caption: string; job: InstagramJob | null }>('GET', `/renders/${renderId}/instagram`),
+  instagramPublish: (renderId: number, caption: string, confirmDuplicate = false) =>
+    request<InstagramJob>('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, confirmDuplicate }),
+  instagramJob: (jobId: string) => request<InstagramJob>('GET', `/instagram/jobs/${jobId}`),
   setup: (input: { code: string; username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),

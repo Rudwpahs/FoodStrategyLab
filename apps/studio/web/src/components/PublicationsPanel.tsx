@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api, type ProjectDetail, type Publication } from '../api.ts';
 import { useApp } from '../App.tsx';
+import { InstagramPublish } from './InstagramPublish.tsx';
 
 const PLATFORM_LABEL: Record<Publication['platform'], string> = { instagram: '인스타그램 릴스', naver: '네이버 블로그', youtube: '유튜브 쇼츠' };
 const METRICS: [string, string][] = [
@@ -15,7 +16,7 @@ const METRICS: [string, string][] = [
 
 /**
  * 게시와 기록. 승인된 최신 콘텐츠만 기록할 수 있다.
- * 인스타그램 공식 API는 Meta 앱 연결 승인 전이라 "연결 안 됨" — 앱에서 직접 올리고 주소를 기록한다.
+ * 인스타그램은 공식 API로 바로 올리거나(연결했을 때), 앱에서 직접 올리고 주소를 기록한다.
  */
 export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () => Promise<void> }> = ({ project, reload }) => {
   const { run } = useApp();
@@ -44,10 +45,8 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>인스타그램 릴스</h2>
-        <div className="issue info">
-          공식 자동·예약 게시: <b>연결 안 됨</b> — Meta 개발자 앱과 어머니 프로페셔널 계정 연결(별도 승인)이 끝나면 여기서 바로 게시돼요.
-          지금은 인스타그램 앱에서 영상을 올린 뒤 게시물 주소를 기록해 주세요.
-        </div>
+        <InstagramPublish renderId={render?.id ?? null} approved={approved} onPublished={reload} />
+        <div className="muted small">인스타그램 앱에서 직접 올렸다면 게시물 주소를 기록해 주세요.</div>
         <div className="row">
           <input type="url" placeholder="https://www.instagram.com/reel/…" value={urls.instagram ?? ''} onChange={(e) => setUrls({ ...urls, instagram: e.target.value })} style={{ flex: 1 }} disabled={!approved} />
           <button className="btn primary small" disabled={!approved || !urls.instagram} onClick={() => record('instagram', 'published')}>게시 기록</button>
@@ -56,7 +55,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
           예약 메모
           <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} disabled={!approved} />
           <button className="btn small" disabled={!approved || !when} onClick={() => record('instagram', 'scheduled')}>예약 기록</button>
-          <span className="muted">(실제 예약 게시는 API 연결 후)</span>
+          <span className="muted">(예약은 메모만 남아요. 실제 게시는 그 시각에 직접 눌러 주세요)</span>
         </div>
       </div>
 

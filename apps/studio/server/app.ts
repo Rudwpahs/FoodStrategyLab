@@ -5,7 +5,8 @@ import { ZodError } from 'zod';
 import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
-import { AUDIO_DIR, cancelRender, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
+import { AUDIO_DIR, approvedRender, cancelRender, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startRender } from './pipeline.ts';
+import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
@@ -46,6 +47,18 @@ export interface AppDeps {
   /** 영상 제작 시작 (테스트에서는 가짜로 바꿔 실제 렌더를 돌리지 않는다) */
   startRender: typeof startRender;
   auth?: Auth;
+  /** 인스타그램 연결 (테스트에서는 가짜 Meta 서버로 바꾼다) */
+  instagram?: Instagram;
+}
+
+const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+/** 인스타그램 로그인 뒤 돌아오는 화면 (외부 브라우저에서 열릴 수 있어 간단한 페이지로 보여 준다) */
+function igResultPage(ok: boolean, message: string): string {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>인스타그램 연결</title>
+<body style="font-family:sans-serif;max-width:420px;margin:48px auto;padding:0 16px;line-height:1.6">
+<h2>${ok ? '✅ 인스타그램 연결 완료' : '⚠️ 인스타그램 연결 실패'}</h2><p>${esc(message)}</p>
+<p>이 창을 닫고 스튜디오(맛 연구소 앱)로 돌아가세요.</p><p><a href="/">스튜디오 열기</a></p></body>`;
 }
 
 const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
@@ -58,10 +71,29 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
   const auth = deps.auth ?? new Auth(repo.db);
+  const ig = deps.instagram ?? new Instagram(repo.db);
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
+  });
+
+  // Meta가 게시할 영상을 내려받는 임시 주소 (추측할 수 없는 열쇠, 2시간 뒤·게시 후 만료). 로그인 없이 열린다.
+  app.get('/public/reels/:file', (req, res, next) => {
+    const file = resolvePublicLink(String(req.params.file).replace(/\.mp4$/, ''));
+    if (!file) return next(new HttpError(404, '없는 주소예요.'));
+    res.sendFile(file, { headers: { 'cache-control': 'no-store' } });
+  });
+  // 인스타그램 로그인에서 돌아오는 곳: 휴대폰 앱 밖(브라우저)에서 열릴 수 있어 로그인 대신 1회용 state로 확인한다
+  app.get('/api/instagram/callback', async (req, res) => {
+    const q = req.query as Record<string, string | undefined>;
+    if (q.error) return res.status(400).send(igResultPage(false, '인스타그램에서 연결을 취소했어요. 스튜디오에서 다시 시도해 주세요.'));
+    try {
+      const { username } = await ig.completeLogin(String(q.code ?? ''), String(q.state ?? ''));
+      res.send(igResultPage(true, `@${username} 계정이 연결됐어요.`));
+    } catch (e) {
+      res.status(e instanceof HttpError ? e.status : 500).send(igResultPage(false, (e as Error).message));
+    }
   });
 
   // ── 로그인 (이 경로만 로그인 없이 열림) ──
@@ -400,6 +432,78 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const checkDir = path.join(r.outputDir, 'caption-check');
     const captionChecks = r.status === 'done' && fs.existsSync(checkDir) ? fs.readdirSync(checkDir).sort() : [];
     res.json({ ...r, files, captionChecks, baseUrl: `/media/renders/${r.id}` });
+  });
+
+  // ── 인스타그램 공식 게시 ──
+  const igRedirect = (req: Request) => `${publicOrigin(req)}/api/instagram/callback`;
+  api.get('/instagram', async (req, res) => {
+    res.json({ ...(await ig.status()), redirectUri: igRedirect(req) });
+  });
+  api.post('/instagram/connect', (req, res) => {
+    res.json({ url: ig.authorizeUrl(igRedirect(req)) });
+  });
+  api.post('/instagram/disconnect', (_req, res) => {
+    ig.disconnect();
+    res.json({ ok: true });
+  });
+  api.get('/instagram/jobs/:job', (req, res) => {
+    const job = getIgJob(String(req.params.job));
+    if (!job) throw new HttpError(404, '게시 작업을 찾을 수 없어요. 서버가 다시 켜졌다면 게시 이력에서 확인해 주세요.');
+    res.json(job);
+  });
+  api.get('/renders/:id/instagram', (req, res) => {
+    const { render } = approvedRender(repo, id(req));
+    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId) });
+  });
+  /**
+   * 실제 게시. 연구자가 승인한 최신 대본의 영상만, 화면에서 '올리기'를 다시 확인했을 때만.
+   * 같은 대본을 이미 올렸으면 따로 확인해야 다시 올린다.
+   */
+  api.post('/renders/:id/instagram', async (req, res) => {
+    const body = req.body ?? {};
+    if (body.confirm !== true) throw new HttpError(400, '실제로 올릴지 확인이 필요해요.');
+    const { render } = approvedRender(repo, id(req));
+    const pid = render.projectId;
+    if (activeIgJob(pid)) throw new HttpError(409, '이미 올리고 있어요. 끝날 때까지 기다려 주세요.');
+    const dup = repo.listPublications(pid).find((p) => p.platform === 'instagram' && p.status === 'published' && p.scriptVersion === render.scriptVersion);
+    if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`);
+    const caption = String(body.caption ?? '').trim();
+    const bad = checkCaption(caption);
+    if (bad) throw new HttpError(400, bad);
+    const origin = publicOrigin(req);
+    if (!origin.startsWith('https://') && process.env.IG_ALLOW_HTTP !== '1') {
+      throw new HttpError(409, '인스타그램은 공개 https 주소의 영상만 가져갈 수 있어요. 클라우드(Modal) 주소에서 올려 주세요.');
+    }
+    const script = repo.getScript(pid, render.scriptVersion).script;
+    const stopKeepAlive = process.env.KEEPALIVE === '1' ? keepAwake(origin) : () => undefined;
+    const job = await ig.startReel({
+      projectId: pid,
+      renderId: render.id,
+      videoFile: path.join(render.outputDir, 'video.mp4'),
+      caption,
+      publicOrigin: origin,
+      onPublished: (permalink) => {
+        stopKeepAlive();
+        repo.addPublication(pid, {
+          renderId: render.id,
+          scriptVersion: render.scriptVersion,
+          platform: 'instagram',
+          status: 'published',
+          url: permalink,
+          scheduledAt: '',
+          publishedAt: new Date().toISOString(),
+          style: script.style ?? '',
+          hookType: script.hookType ?? '',
+          note: '인스타그램 API로 게시',
+        });
+        repo.logEvent(pid, 'publish', `인스타그램 게시 (작업 #${render.id}) ${permalink}`);
+      },
+      onFailed: (message) => {
+        stopKeepAlive();
+        repo.logEvent(pid, 'error', `인스타그램 게시 실패 (작업 #${render.id}): ${message.slice(0, 300)}`);
+      },
+    });
+    res.status(202).json(job);
   });
 
   api.get('/renders/:id/download', (req, res) => {

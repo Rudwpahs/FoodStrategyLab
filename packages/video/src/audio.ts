@@ -50,7 +50,7 @@ export async function cachedSpeechBounds(file: string): Promise<SpeechBounds> {
 
 /** 최종 영상 음량을 -14 LUFS로 맞춘다 (화면은 다시 인코딩하지 않음) */
 export async function normalizeLoudness(input: string, output: string): Promise<void> {
-  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
+  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
 }
 
 /** 영상의 특정 시각 프레임을 작은 이미지로 저장 (자막 확인용) */

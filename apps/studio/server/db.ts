@@ -83,6 +83,17 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 
+-- 인스타그램 연결 (계정 하나). 토큰은 암호화해서만 저장한다.
+CREATE TABLE IF NOT EXISTS instagram_account (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  ig_user_id TEXT NOT NULL,
+  username TEXT NOT NULL DEFAULT '',
+  token_sealed TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  refreshed_at TEXT NOT NULL,
+  connected_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

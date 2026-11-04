@@ -251,12 +251,7 @@ export async function captionCheckFrames(video: string, script: Script, timings:
 
 /** 승인된 최신 대본으로 만든 영상이면 게시 묶음(ZIP)을 만들어 경로를 돌려준다. */
 export function exportPackage(repo: Repo, renderId: number): string {
-  const r = repo.getRender(renderId);
-  if (r.status !== 'done') throw new HttpError(404, '아직 완성된 영상이 없습니다.');
-  const state = repo.versionState(r.projectId);
-  if (state.latestScriptVersion !== r.scriptVersion) throw new HttpError(409, '대본이 바뀌었어요. 최신 대본으로 영상을 다시 만들어 주세요.');
-  if (state.approvedScriptVersion !== r.scriptVersion) throw new HttpError(409, '이희재 연구자의 승인 후에 내보낼 수 있어요.');
-  const approval = repo.lastReview(r.projectId, r.scriptVersion)!;
+  const { render: r, approval } = approvedRender(repo, renderId);
   const recipe = repo.getRecipe(r.projectId);
   const { script } = repo.getScript(r.projectId, r.scriptVersion);
   const timelineFile = path.join(r.outputDir, 'timeline.json');
@@ -269,11 +264,10 @@ export function exportPackage(repo: Repo, renderId: number): string {
   return path.join(r.outputDir, 'package.zip');
 }
 
-export function writePackage(
-  outDir: string,
+/** 블로그 원고와 SNS 문구 (게시 묶음·인스타그램 게시가 같은 문구를 쓴다) */
+export function publishTexts(
   recipe: RecipeInput,
   script: Script,
-  timings: SceneTiming[],
   review: { reviewer: string; reviewedAt: string },
   extra: { blogStyle?: BlogStyle; notes?: ExpertNotes } = {},
 ) {
@@ -284,6 +278,42 @@ export function writePackage(
   const social = buildSocialCopy(recipe, true, post.tags);
   // 연출 엔진 대본이면 인스타그램 설명은 첫 대사로 시작한다 (매체에 맞는 표현)
   if (script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(recipe, script, true, post.tags);
+  return { post, social };
+}
+
+/**
+ * 승인된 최신 대본으로 만든 완성 영상인지 확인한다 (내보내기·인스타그램 게시 공통).
+ * 맞으면 그 영상과 승인 정보를 돌려준다.
+ */
+export function approvedRender(repo: Repo, renderId: number) {
+  const r = repo.getRender(renderId);
+  if (r.status !== 'done') throw new HttpError(404, '아직 완성된 영상이 없습니다.');
+  const state = repo.versionState(r.projectId);
+  if (state.latestScriptVersion !== r.scriptVersion) throw new HttpError(409, '대본이 바뀌었어요. 최신 대본으로 영상을 다시 만들어 주세요.');
+  if (state.approvedScriptVersion !== r.scriptVersion) throw new HttpError(409, '이희재 연구자의 승인 후에 내보낼 수 있어요.');
+  const approval = repo.lastReview(r.projectId, r.scriptVersion)!;
+  return { render: r, approval };
+}
+
+/** 승인된 영상의 인스타그램 설명 글 (게시 묶음의 instagram.txt와 같다) */
+export function instagramText(repo: Repo, renderId: number): string {
+  const { render, approval } = approvedRender(repo, renderId);
+  const style = repo.getBlogStyle(render.projectId);
+  return publishTexts(repo.getRecipe(render.projectId), repo.getScript(render.projectId, render.scriptVersion).script, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
+    blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
+    notes: repo.getExpertNotes(render.projectId),
+  }).social.instagram;
+}
+
+export function writePackage(
+  outDir: string,
+  recipe: RecipeInput,
+  script: Script,
+  timings: SceneTiming[],
+  review: { reviewer: string; reviewedAt: string },
+  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes } = {},
+) {
+  const { post, social } = publishTexts(recipe, script, review, extra);
   const texts: Record<string, string> = {
     'blog.md': post.markdown,
     'blog.html': `<!doctype html><meta charset="utf-8"><title>${post.title}</title>\n${post.html}`,
