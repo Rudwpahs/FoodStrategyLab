@@ -50,11 +50,50 @@ function hasRenderToken(req: Request): boolean {
   return k.length === RENDER_TOKEN.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(RENDER_TOKEN));
 }
 
-/** 로그인 실패 횟수를 셀 사람 구분: 터널·Tailscale 뒤에서는 전달된 실제 주소를 쓴다 */
+/** 클라우드(Modal 등) 앞단 프록시가 붙인 주소·호스트 정보를 믿을지 (TRUST_PROXY=1) */
+const trustProxy = () => process.env.TRUST_PROXY === '1';
+
+/** 로그인 실패 횟수를 셀 사람 구분: 터널·Tailscale·클라우드 프록시 뒤에서는 전달된 실제 주소를 쓴다 */
 export function clientIp(req: Request): string {
   const remote = req.socket.remoteAddress ?? '';
   const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]!.trim();
-  return LOOPBACK.has(remote) && fwd ? fwd : remote;
+  return (LOOPBACK.has(remote) || trustProxy()) && fwd ? fwd : remote;
+}
+
+/** 이 스튜디오의 공개 주소(클라우드). PUBLIC_URL이 없으면 요청 헤더로 짐작한다. */
+export function publicOrigin(req: Request): string {
+  const fixed = process.env.PUBLIC_URL?.replace(/\/$/, '');
+  if (fixed) return fixed;
+  const host = (trustProxy() && String(req.headers['x-forwarded-host'] ?? '').split(',')[0]!.trim()) || req.headers.host || '';
+  const proto = (trustProxy() && String(req.headers['x-forwarded-proto'] ?? '').split(',')[0]!.trim()) || (req.secure ? 'https' : 'http');
+  return `${proto}://${host}`;
+}
+
+/** 이 스튜디오의 주소로 인정하는 호스트들 (다른 사이트에서 보낸 변경 요청을 막는 데 쓴다) */
+function ownHosts(req: Request): Set<string> {
+  const hosts = new Set<string>();
+  if (req.headers.host) hosts.add(req.headers.host);
+  if (trustProxy()) {
+    const fwd = String(req.headers['x-forwarded-host'] ?? '').split(',')[0]!.trim();
+    if (fwd) hosts.add(fwd);
+  }
+  if (process.env.PUBLIC_URL) {
+    try {
+      hosts.add(new URL(process.env.PUBLIC_URL).host);
+    } catch {
+      /* 잘못된 주소는 무시 */
+    }
+  }
+  return hosts;
+}
+
+/**
+ * 처음 계정 만들기용 설정 코드 (클라우드 서버처럼 명령창이 없는 곳에서 쓴다).
+ * 8자 미만이면 쓰지 않는다 (추측당하기 쉬움).
+ */
+export function setupCode(): string | null {
+  const code = process.env.STUDIO_SETUP_CODE ?? '';
+  return code.length >= 8 ? code : null;
 }
 
 export class Auth {
@@ -90,25 +129,63 @@ export class Auth {
     return r ? { id: Number(r.id), username: String(r.username), displayName: String(r.display_name), hash: String(r.password_hash) } : null;
   }
 
-  /** 로그인 성공 시 세션 토큰 (DB에는 해시만 저장) */
-  login(username: string, password: string, ip: string): { token: string; user: User } {
+  private checkLocked(ip: string) {
     const f = this.fails.get(ip);
     if (f && Date.now() - f.first < FAIL_WINDOW_MS && f.count >= MAX_FAILS) {
-      throw new HttpError(429, '로그인을 너무 많이 실패했어요. 15분 뒤 다시 시도해 주세요.');
+      throw new HttpError(429, '너무 많이 실패했어요. 15분 뒤 다시 시도해 주세요.');
     }
+  }
+
+  private countFail(ip: string) {
+    const f = this.fails.get(ip);
+    const cur = f && Date.now() - f.first < FAIL_WINDOW_MS ? f : { count: 0, first: Date.now() };
+    this.fails.set(ip, { ...cur, count: cur.count + 1 });
+  }
+
+  /** 로그인 성공 시 세션 토큰 (DB에는 해시만 저장) */
+  login(username: string, password: string, ip: string): { token: string; user: User } {
+    this.checkLocked(ip);
     const u = this.findUser(username.trim());
     if (!u || !verifyPassword(password, u.hash)) {
-      const cur = f && Date.now() - f.first < FAIL_WINDOW_MS ? f : { count: 0, first: Date.now() };
-      this.fails.set(ip, { ...cur, count: cur.count + 1 });
+      this.countFail(ip);
       throw new HttpError(401, '아이디 또는 비밀번호가 맞지 않아요.');
     }
     this.fails.delete(ip);
+    return { token: this.newSession(u.id), user: { id: u.id, username: u.username, displayName: u.displayName } };
+  }
+
+  /**
+   * 첫 계정 만들기 (계정이 하나도 없고 설정 코드가 있을 때만).
+   * 설정 코드는 서버 관리자가 정한 값이며, 틀리면 로그인 실패처럼 횟수를 센다.
+   */
+  setupFirstUser(input: { code: string; username: string; displayName: string; password: string }, ip: string): { token: string; user: User } {
+    const expected = setupCode();
+    if (!expected) throw new HttpError(404, '이 서버에서는 화면에서 계정을 만들 수 없어요.');
+    if (this.userCount() > 0) throw new HttpError(409, '이미 계정이 있어요. 로그인해 주세요.');
+    this.checkLocked(ip);
+    const a = Buffer.from(sha256(input.code));
+    const b = Buffer.from(sha256(expected));
+    if (!crypto.timingSafeEqual(a, b)) {
+      this.countFail(ip);
+      throw new HttpError(401, '설정 코드가 맞지 않아요.');
+    }
+    let user: User;
+    try {
+      user = this.addUser(input.username, input.displayName, input.password);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    this.fails.delete(ip);
+    return { token: this.newSession(user.id), user };
+  }
+
+  private newSession(userId: number): string {
     const token = crypto.randomBytes(32).toString('base64url');
     const now = Date.now();
     this.db
       .prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-      .run(sha256(token), u.id, new Date(now).toISOString(), new Date(now + SESSION_DAYS * 864e5).toISOString());
-    return { token, user: { id: u.id, username: u.username, displayName: u.displayName } };
+      .run(sha256(token), userId, new Date(now).toISOString(), new Date(now + SESSION_DAYS * 864e5).toISOString());
+    return token;
   }
 
   sessionUser(token: string | undefined): User | null {
@@ -153,7 +230,7 @@ export function authGuard(auth: Auth) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const origin = req.headers.origin;
-      if (origin && origin !== 'null' && new URL(origin).host !== req.headers.host) {
+      if (origin && origin !== 'null' && !ownHosts(req).has(new URL(origin).host)) {
         return next(new HttpError(403, '다른 사이트에서 보낸 요청은 받지 않아요.'));
       }
     }
@@ -161,6 +238,7 @@ export function authGuard(auth: Auth) {
     if (req.baseUrl === '/media' && hasRenderToken(req)) return next();
     if (auth.userCount() === 0) {
       if (isDirectLocal(req)) return next();
+      if (setupCode()) return next(new HttpError(403, '처음 계정을 먼저 만들어 주세요.'));
       return next(new HttpError(403, '아직 계정이 없어 이 컴퓨터에서만 쓸 수 있어요. 스튜디오 PC에서 "npm run user:add"로 계정을 만드세요.'));
     }
     const user = auth.sessionUser(readCookie(req));

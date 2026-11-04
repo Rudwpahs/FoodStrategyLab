@@ -101,7 +101,7 @@ export function cancelRender(repo: Repo, renderId: number) {
  * 승인 전에도 '검수용'으로 만들 수 있다: 연구자가 실제 영상을 보고 승인하도록.
  * 내보내기(ZIP)·게시는 승인된 최신 대본으로 만든 영상만 가능하다 (exportPackage).
  */
-export function startRender(repo: Repo, projectId: number, origin: string): number {
+export function startRender(repo: Repo, projectId: number, origin: string, keepAliveOrigin?: string): number {
   const state = repo.versionState(projectId);
   if (state.latestScriptVersion === null) throw new HttpError(409, '대본이 아직 없습니다.');
   const busy = repo.getProject(projectId).renders.find((r) => r.status === 'queued' || r.status === 'running');
@@ -110,8 +110,26 @@ export function startRender(repo: Repo, projectId: number, origin: string): numb
   const approved = state.approvedScriptVersion === version;
   const renderId = repo.createRender(projectId, version);
   repo.logEvent(projectId, 'render', `${approved ? '제작' : '검수용 제작'} 시작 (대본 v${version}, 작업 #${renderId})`);
-  queue = queue.then(() => runRender(repo, projectId, version, renderId, origin));
+  queue = queue.then(async () => {
+    const stopKeepAlive = keepAliveOrigin ? keepAwake(keepAliveOrigin) : () => undefined;
+    try {
+      await runRender(repo, projectId, version, renderId, origin);
+    } finally {
+      stopKeepAlive();
+    }
+  });
   return renderId;
+}
+
+/**
+ * 클라우드 서버(Modal)는 요청이 한동안 없으면 잠든다.
+ * 휴대폰 앱을 닫아도 제작이 끝까지 가도록, 제작하는 동안 1분마다 공개 주소로 스스로를 부른다.
+ */
+export function keepAwake(publicOrigin: string, everyMs = Number(process.env.KEEPALIVE_MS) || 60_000): () => void {
+  const ping = () => fetch(`${publicOrigin}/api/health`, { signal: AbortSignal.timeout(30_000) }).catch(() => undefined);
+  void ping();
+  const timer = setInterval(ping, everyMs);
+  return () => clearInterval(timer);
 }
 
 /** 내부 오류 문장 → 사용자에게 보여 줄 쉬운 문장 */

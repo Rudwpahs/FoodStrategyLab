@@ -5,21 +5,24 @@ import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
 import { createApp } from './app.ts';
 import { startRender } from './pipeline.ts';
-import { DATA_DIR, PORT } from './config.ts';
+import { DATA_DIR, DB_FILE, DB_SNAPSHOT, PORT } from './config.ts';
+import { restoreSnapshot, startSnapshots, type Snapshots } from './dbSnapshot.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
-import { Auth } from './auth.ts';
+import { Auth, setupCode } from './auth.ts';
 import { describeVoice, ttsProvider } from './tts.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export async function startServer(port = PORT) {
-  const repo = new Repo(openDb(path.join(DATA_DIR, 'studio.db')));
+  if (DB_SNAPSHOT && restoreSnapshot(DB_FILE, DB_SNAPSHOT)) console.log(`  저장소의 DB 복사본을 불러왔어요: ${DB_SNAPSHOT}`);
+  const repo = new Repo(openDb(DB_FILE));
+  const snapshots: Snapshots | null = DB_SNAPSHOT ? startSnapshots(repo.db, DB_SNAPSHOT) : null;
   const interrupted = repo.failInterruptedRenders();
-  // 이 PC 밖에서 접속하게 열려면(HOST=0.0.0.0) 먼저 계정이 있어야 한다
+  // 이 PC 밖에서 접속하게 열려면(HOST=0.0.0.0) 먼저 계정이 있거나, 화면에서 첫 계정을 만들 설정 코드가 있어야 한다
   const host = process.env.HOST ?? '127.0.0.1';
   const auth = new Auth(repo.db);
-  if (!['127.0.0.1', 'localhost', '::1'].includes(host) && auth.userCount() === 0) {
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host) && auth.userCount() === 0 && !setupCode()) {
     throw new Error('외부 접속(HOST)을 열기 전에 "npm run user:add"로 계정을 먼저 만드세요.');
   }
   const app = createApp(repo, { startRender, auth });
@@ -42,11 +45,23 @@ export async function startServer(port = PORT) {
   }
   const server = app.listen(port, host);
   await new Promise<void>((resolve) => server.once('listening', resolve));
-  return { repo, server, vite, interrupted };
+  return { repo, server, vite, interrupted, snapshots };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { interrupted } = await startServer();
+  const { interrupted, snapshots } = await startServer();
+  // 클라우드 서버가 꺼질 때 마지막 변경까지 저장소에 복사한다
+  if (snapshots) {
+    for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+      process.on(sig, () => {
+        try {
+          snapshots.flush();
+        } finally {
+          process.exit(0);
+        }
+      });
+    }
+  }
   const tts = await ttsProvider().then(describeVoice, (e: Error) => `없음 (${e.message})`);
   console.log(`\n  🧪 이희재의 맛 연구소 스튜디오: http://localhost:${PORT}`);
   console.log(`  데이터 폴더: ${DATA_DIR}`);

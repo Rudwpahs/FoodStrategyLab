@@ -7,7 +7,7 @@ import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExp
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, cancelRender, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
-import { Auth, authGuard, clientIp, isDirectLocal, readCookie, sessionCookie } from './auth.ts';
+import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
@@ -59,6 +59,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   app.use(express.json({ limit: '2mb' }));
   const auth = deps.auth ?? new Auth(repo.db);
 
+  // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true });
+  });
+
   // ── 로그인 (이 경로만 로그인 없이 열림) ──
   app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body ?? {};
@@ -73,7 +78,18 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   app.get('/api/auth/me', (req, res) => {
     const local = auth.userCount() === 0;
-    res.json({ mode: local ? 'local' : 'login', allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
+    // 계정이 없을 때: 설정 코드가 있으면 화면에서 첫 계정 만들기, 없으면 이 PC 전용
+    const mode = !local ? 'login' : setupCode() ? 'setup' : 'local';
+    res.json({ mode, allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
+  });
+  app.post('/api/auth/setup', (req, res) => {
+    const { code, username, displayName, password } = req.body ?? {};
+    const { token, user } = auth.setupFirstUser(
+      { code: String(code ?? ''), username: String(username ?? ''), displayName: String(displayName ?? ''), password: String(password ?? '') },
+      clientIp(req),
+    );
+    res.setHeader('Set-Cookie', sessionCookie(req, token));
+    res.json({ user });
   });
   // 그 밖의 모든 API·미디어는 로그인 확인
   app.use(['/api', '/media'], authGuard(auth));
@@ -367,7 +383,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/projects/:id/renders', (req, res) => {
     // 렌더러는 이 서버 안에서 돈다: 휴대폰이 접속한 주소(Tailscale 등)가 아니라 서버 내부 주소로 파일을 가져간다
     const origin = `http://127.0.0.1:${req.socket.localPort}`;
-    res.status(202).json({ renderId: deps.startRender(repo, id(req), origin) });
+    // 클라우드(KEEPALIVE=1): 제작하는 동안 공개 주소로 스스로를 불러 서버가 잠들지 않게 한다
+    const keepAlive = process.env.KEEPALIVE === '1' ? publicOrigin(req) : undefined;
+    res.status(202).json({ renderId: deps.startRender(repo, id(req), origin, keepAlive) });
   });
 
   api.post('/renders/:id/cancel', (req, res) => {

@@ -64,6 +64,8 @@ async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRa
     enforceAudioTrack: true,
     // 느린 서버(무료 ARM 2코어)에서 영상·이미지 불러오기가 늦어도 멈추지 않게
     timeoutInMilliseconds: 120_000,
+    // 동시에 그릴 프레임 수. 컨테이너는 실제 쓸 수 있는 CPU보다 많이 보일 수 있어 직접 정한다 (REMOTION_CONCURRENCY)
+    ...(Number(process.env.REMOTION_CONCURRENCY) > 0 ? { concurrency: Number(process.env.REMOTION_CONCURRENCY) } : {}),
     ...(frameRange ? { frameRange } : {}),
     ...(cancelSignal ? { cancelSignal } : {}),
     onProgress: ({ progress }) => onProgress?.(progress),

@@ -1,0 +1,91 @@
+name: Deploy to Modal
+
+# 스튜디오를 Modal 클라우드에 올린다.
+# 필요한 저장소 비밀값(Settings → Secrets and variables → Actions):
+#   MODAL_TOKEN_ID, MODAL_TOKEN_SECRET : Modal 설정 → API Tokens 에서 만든 값
+#   STUDIO_SETUP_CODE                  : 처음 계정을 만들 때 화면에 넣을 설정 코드 (8자 이상, 직접 정함)
+# 비밀값이 없으면 아무것도 하지 않고 끝난다.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/studio/**'
+      - 'packages/**'
+      - 'tools/setup/**'
+      - 'deploy/modal/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/modal-deploy.yml'
+
+concurrency:
+  group: modal-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      STUDIO_SETUP_CODE: ${{ secrets.STUDIO_SETUP_CODE }}
+    steps:
+      - name: 비밀값 확인
+        id: check
+        run: |
+          if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+            echo "::warning::MODAL_TOKEN_ID / MODAL_TOKEN_SECRET 비밀값이 없어 배포를 건너뜁니다. docs/MODAL_SETUP.md 를 보세요."
+            echo "ready=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${#STUDIO_SETUP_CODE}" -lt 8 ]; then
+            echo "::error::STUDIO_SETUP_CODE 비밀값을 8자 이상으로 넣어 주세요 (처음 계정 만들 때 쓰는 코드)."
+            exit 1
+          fi
+          echo "ready=1" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == '1'
+
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.ready == '1'
+        with:
+          python-version: '3.12'
+
+      - name: Modal 도구 설치
+        if: steps.check.outputs.ready == '1'
+        run: pip install -q modal==1.6.3
+
+      - name: 설정 코드를 Modal 비밀값으로 저장
+        if: steps.check.outputs.ready == '1'
+        run: modal secret create matlab-studio STUDIO_SETUP_CODE="$STUDIO_SETUP_CODE" --force >/dev/null
+
+      - name: 배포 (처음에는 이미지 만들기로 20~40분)
+        if: steps.check.outputs.ready == '1'
+        run: modal deploy deploy/modal/app.py
+
+      - name: 스튜디오 깨우기 · 주소 알려 주기
+        if: steps.check.outputs.ready == '1'
+        run: |
+          URL=$(python deploy/modal/url.py)
+          echo "스튜디오 주소: $URL"
+          code=000
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$URL/api/health" || true)
+            [ "$code" = 200 ] && break
+            sleep 15
+          done
+          {
+            echo "## 스튜디오 주소"
+            echo ""
+            echo "$URL"
+            echo ""
+            if [ "$code" = 200 ]; then
+              echo "서버가 켜졌어요. 휴대폰에서 이 주소를 열어 첫 계정을 만드세요."
+              echo "맛조수 목소리는 처음 한 번 GPU에서 준비돼요 (10~30분). 그동안에도 스튜디오는 쓸 수 있어요."
+            else
+              echo "서버 응답을 확인하지 못했어요 (마지막 응답 $code). 몇 분 뒤 주소를 열어 보세요."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

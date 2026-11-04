@@ -4,7 +4,7 @@
 
 클라우드 작업 환경에서는 할 수 없던 **"실제 기기에서 해야 하는 일"**을 넘긴다. 코드는 거의 끝났고, 남은 것은 설치·실기기 확인·측정이다.
 
-> **최종 사용 형태: 컴퓨터 없음.** 어머니는 휴대폰 앱 → 오라클 클라우드 서버(Tailscale)만 쓴다. 영상·목소리도 서버에서 만든다. 아래 작업 B~D가 본 작업이고, 작업 A(Windows PC)는 PC를 따로 계속 쓰고 싶을 때만 하는 **선택 작업**이다. 설치 한 번에만 SSH가 필요한데, PC가 없으면 오라클 콘솔의 **Cloud Shell**(브라우저 안 터미널)에서 해도 된다. 저장소 규칙은 루트의 [AGENTS.md](../../AGENTS.md)를 먼저 읽을 것.
+> **최종 사용 형태: 컴퓨터 없음.** 어머니는 휴대폰(앱 또는 크롬) → **Modal 클라우드**(`https://…modal.run`)만 쓴다. 영상은 Modal CPU, 목소리는 Modal GPU에서 만든다. 사용자는 2026-11-04에 오라클 대신 Modal을 골랐다. 본 작업은 **작업 M(Modal 첫 배포 확인)** → C(휴대폰) → D(네이버)이고, 작업 A(PC)와 작업 B(오라클)는 Modal이 안 될 때만 쓰는 대안이다. 저장소 규칙은 루트의 [AGENTS.md](../../AGENTS.md)를 먼저 읽을 것.
 
 ---
 
@@ -12,16 +12,18 @@
 
 | 항목 | 상태 | 근거 |
 | --- | --- | --- |
-| 테스트 130개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck`, GitHub Actions #19 성공 |
+| 테스트 136개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck` |
+| Modal 배포 코드 | 작성·로컬 검증 | `deploy/modal/app.py`, `voice_proxy.py`, `.github/workflows/modal-deploy.yml`, 안내 `docs/MODAL_SETUP.md`. 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정 스튜디오로 첫 계정·목소리 준비·영상 제작 확인 |
+| **Modal 실제 배포** | ❌ 미확인 (계정 없음) | 이미지 빌드, GPU에서 VoxCPM2, 공개 주소 헤더(Host/X-Forwarded-*), 제작 중 깨워 두기 |
 | 로그인·세션·잠금·출처 검사 | 구현·테스트됨 | `apps/studio/server/auth.ts`, `auth.test.ts`, `app.test.ts` |
 | 후보 3개 → 선택 → 검토용 렌더 → 블로그 2안 → 승인 → 게시 기록 | 구현·화면 확인 | `docs/studio-2.0/USER_FLOW.md` |
 | 로그인 상태 실제 렌더 (목소리 포함) | 클라우드 x64에서 확인 | 39.4초 MP4, 8장면 모두 음성, 승인 전 문구 없음 (`docs/research/content-strategy/implementation-status.md` §7) |
 | 휴대폰 폭 화면 | 에뮬레이션(Pixel 7)으로 확인 | 가로 넘침 없음 |
 | 안드로이드 APK | 빌드됨 (디버그 서명, 26KB) | `out/android/matlab-studio.apk` (ZIP에 동봉) |
 | 오라클 설치 스크립트 | 작성·shellcheck 통과, **부분만 확인** | `deploy/oracle/install.sh` — VoiceStudio CPU 설치는 x64에서 확인, ARM 실기 미확인 |
-| **오라클 ARM 서버 실제 설치** | ❌ 미확인 | 이번 인계의 핵심 |
+| 오라클 ARM 서버 실제 설치 | ❌ 미확인 (대안이라 급하지 않음) | |
 | **실제 휴대폰에서 APK** | ❌ 미확인 | |
-| **오라클에서 렌더 시간** | ❌ 미측정 (추정: 목소리 ~20분 + 렌더 ~1시간) | |
+| **Modal에서 영상 1편 시간·비용** | ❌ 미측정 (추정: 목소리 1~3분, 렌더 10~30분, $0.2~0.4) | |
 | **네이버 글쓰기 링크** `https://blog.naver.com/GoBlogWrite.naver` | ❌ 미확인 | 로그인 상태 휴대폰·PC에서 확인 필요 |
 | 인스타그램 공식 API 연동 | ⏸ 사용자 지시로 보류 | 건드리지 말 것 |
 
@@ -40,9 +42,24 @@
 
 ---
 
-## 2. 할 일 (B → C → D, A는 선택)
+## 2. 할 일 (M → C → D, A·B는 대안)
 
 각 작업은 **완료 기준**을 모두 만족해야 "완료"로 보고한다. 못 한 것은 못 했다고 쓴다.
+
+### 작업 M — Modal 첫 배포 확인 (가장 중요)
+
+사용자가 직접 하는 일: Modal 가입·카드 등록·**지출 한도 $0**, API 토큰 만들기, GitHub 비밀값 3개(`MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `STUDIO_SETUP_CODE`) 넣기, Actions에서 **Deploy to Modal** 실행. 순서는 `docs/MODAL_SETUP.md`. 비밀값을 대신 받거나 기록하지 말 것.
+
+Codex가 할 일:
+1. Actions 실행 로그 확인. 실패하면 원인을 고쳐 작업 브랜치에 커밋 → 사용자에게 다시 실행 부탁.
+   - 이미지 빌드에서 흔할 수 있는 실패: 크롬 라이브러리 이름(데비안 버전, `t64`), `uv sync --group cuda`, `voxcpm` 설치, `ensureBrowser` 다운로드.
+2. 배포 뒤 확인 (사용자 휴대폰 또는 로컬 브라우저):
+   - 주소 접속 → "처음 계정 만들기" 화면 → 설정 코드로 계정 생성 → 로그인 유지
+   - 계정을 만든 뒤 POST 요청(프로젝트 만들기)이 403("다른 사이트")으로 막히지 않는지 → 막히면 Modal이 넘기는 Host/X-Forwarded-Host를 로그로 확인해 `auth.ts`의 `ownHosts`를 고친다
+   - Modal 대시보드 → Apps → matlab-studio → web 로그에 "목소리 준비 끝"
+   - 검토용 영상 1편: 목소리 포함 MP4, 걸린 시간, Modal 사용량(달러) 기록. 제작 중 앱을 닫아도 끝까지 가는지(깨워 두기)
+   - 20분 넘게 쓰지 않은 뒤 다시 열 때 데이터(계정·프로젝트·영상)가 남아 있는지 (DB 복사본)
+3. 완료 기준: 위 항목 모두 성공, 시간·비용 기록.
 
 ### 작업 A — (선택) Windows PC 확인 — 최종 사용에는 필요 없음, 건너뛰어도 됨
 
@@ -70,7 +87,7 @@ npm run start
 
 완료 기준: 테스트·타입 통과, 로그인 성공, 렌더 1편 MP4 확인(시간 기록).
 
-### 작업 B — 오라클 무료 서버 설치 (가장 중요)
+### 작업 B — (대안) 오라클 무료 서버 설치 — Modal이 안 될 때만
 
 사용자가 직접 해야 하는 부분(가입·카드·콘솔 클릭·비밀번호·Tailscale 로그인)은 **안내만** 한다. 순서는 `docs/ORACLE_SETUP.md` 그대로.
 
@@ -145,6 +162,7 @@ npm run start
 ## 4. 하지 말 것
 
 - 비밀번호·SSH 키·Tailscale 키·카드 정보를 대신 입력하거나 파일·로그·커밋·채팅에 남기기
+- Modal 지출 한도(Spend limit)를 올리거나, GPU를 더 비싼 것으로 바꾸기 (사용자 확인 없이)
 - 오라클 **유료** 리소스 만들기(Always Free 표시 없는 shape, 추가 볼륨 등), 유료 API 사용
 - 인터넷 공개(공개 IP 포트 열기, Cloudflare 공개 터널, `tailscale funnel`) — 사용자 승인 없이 금지. 오라클 보안 목록에 5178 포트를 열지 말 것(Tailscale로만 접속)
 - 인스타그램·네이버에 실제 게시, 인스타 API 연동 시작

@@ -1,0 +1,274 @@
+"""이희재의 맛 연구소 스튜디오 — Modal 클라우드 배포.
+
+구성
+- web   : 스튜디오 전체(화면·API·영상 렌더). 쉴 때는 CPU 0.125개·메모리 1GB만 잡고,
+          영상을 만들 때 CPU 8개·메모리 16GB까지 늘어난다 (쓴 만큼만 요금).
+          요청이 20분 없으면 잠들고, 다음 접속 때 깨어난다.
+- Voice : 맛조수 목소리 엔진(VoiceStudio + VoxCPM2)을 GPU에서 돌린다. 목소리를 만들 때만 깨어난다.
+- 저장소 : matlab-data(레시피·영상·DB 복사본), matlab-voice(목소리 프로필·모델 파일)
+
+배포: GitHub Actions(.github/workflows/modal-deploy.yml)가 `modal deploy deploy/modal/app.py`를 실행한다.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import modal
+
+APP_NAME = "matlab-studio"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# VoiceStudio: 오라클 설치와 같은 고정 버전 (deploy/oracle/install.sh 와 맞춘다)
+VS_REPO = "https://github.com/debpalash/voicestudio.git"
+VS_COMMIT = "429f1e5bb2703ac5b928ab8ba6f60159167e9c44"
+VS_DIR = "/opt/voicestudio"
+# 목소리 GPU: L4(24GB, bf16 지원). 바꾸려면 배포 전에 MATLAB_GPU 환경 변수로 지정
+GPU = os.environ.get("MATLAB_GPU", "L4")
+
+app = modal.App(APP_NAME)
+data_volume = modal.Volume.from_name("matlab-data", create_if_missing=True, version=2)
+voice_volume = modal.Volume.from_name("matlab-voice", create_if_missing=True, version=2)
+
+# ───────────── 웹(스튜디오) 이미지: Node 22 + 렌더용 크롬 라이브러리 + 한글 글꼴 ─────────────
+CHROME_LIBS = (
+    "libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libasound2 libgbm1 libxrandr2 "
+    "libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libpango-1.0-0 libcairo2"
+)
+# 데비안 버전에 따라 일부 라이브러리 이름 끝에 t64가 붙는다
+APT_CHROME = (
+    "apt-get update -q && apt-get install -y -q $(for p in " + CHROME_LIBS + "; do "
+    'if apt-cache show "${p}t64" >/dev/null 2>&1; then echo "${p}t64"; else echo "$p"; fi; done)'
+)
+IGNORE = [
+    "node_modules", "**/node_modules", ".git", "data", "out", "tmp", "apps/android",
+    "apps/studio/dist", "**/__pycache__", "**/*.log",
+]
+
+web_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install("curl", "ca-certificates", "gnupg", "git", "fonts-noto-cjk", "fonts-noto-color-emoji")
+    .run_commands(
+        APT_CHROME,
+        "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
+        "apt-get install -y -q nodejs",
+    )
+    .add_local_dir(REPO_ROOT, "/app", copy=True, ignore=IGNORE)
+    .run_commands(
+        "cd /app && npm ci --no-audit --no-fund --loglevel=error",
+        "cd /app/apps/studio && npx vite build --config vite.config.ts --logLevel error",
+        # 렌더용 크롬(Headless Shell)을 이미지에 미리 넣는다
+        "cd /app && node -e \"require('@remotion/renderer').ensureBrowser().then(() => console.log('chrome ok'))\"",
+    )
+    .env({"TZ": "Asia/Seoul"})
+)
+
+# ───────────── 목소리(GPU) 이미지: VoiceStudio + VoxCPM2 (상업 이용 가능한 엔진만) ─────────────
+voice_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git", "curl", "ca-certificates", "build-essential", "ffmpeg")
+    .pip_install("uv")
+    .run_commands(
+        f"git clone -q {VS_REPO} {VS_DIR} && git -C {VS_DIR} checkout -q {VS_COMMIT}",
+        # GPU(cuda) 묶음만 설치 (개발용 묶음 제외)
+        f"cd {VS_DIR} && uv sync --frozen --no-default-groups --group cuda --managed-python --python 3.11",
+        f"cd {VS_DIR} && uv pip install --python .venv/bin/python 'voxcpm>=2.0.3'",
+        f"cd {VS_DIR} && .venv/bin/python -c \"import torch, voxcpm; print('torch', torch.__version__)\"",
+    )
+    .add_local_file(Path(__file__).parent / "voice_proxy.py", "/root/voice_proxy.py", copy=True)
+    .env(
+        {
+            "OMNIVOICE_DEVICE": "cuda",
+            "OMNIVOICE_TTS_BACKEND": "voxcpm2",
+            # 목소리 프로필 DB는 서버 안 디스크에서 쓰고 저장소로 복사한다 (SQLite 잠금 문제 방지)
+            "OMNIVOICE_DATA_DIR": "/root/vsdata",
+            # 모델 파일은 저장소에 두어 다음에 다시 내려받지 않는다
+            "OMNIVOICE_CACHE_DIR": "/voice/cache",
+            "TZ": "Asia/Seoul",
+        }
+    )
+)
+
+VS_LOCAL_DATA = "/root/vsdata"
+VS_SAVED_DATA = "/voice/data"
+VS_PORT = 3900
+
+
+@app.cls(
+    image=voice_image,
+    gpu=GPU,
+    volumes={"/voice": voice_volume},
+    max_containers=1,  # 목소리 엔진은 한 번에 하나씩 (같은 프로필 DB를 쓰므로)
+    scaledown_window=240,  # 마지막 요청 4분 뒤 GPU를 끈다
+    timeout=1800,
+    startup_timeout=1800,  # 처음에는 모델(수 GB) 내려받기로 오래 걸린다
+)
+class Voice:
+    @modal.enter()
+    def start(self) -> None:
+        import shutil
+
+        if os.path.isdir(VS_SAVED_DATA):
+            shutil.copytree(VS_SAVED_DATA, VS_LOCAL_DATA, dirs_exist_ok=True)
+        os.makedirs(VS_LOCAL_DATA, exist_ok=True)
+        self.proc = subprocess.Popen(
+            [f"{VS_DIR}/.venv/bin/python", "-m", "uvicorn", "main:app", "--app-dir", "backend",
+             "--host", "127.0.0.1", "--port", str(VS_PORT)],
+            cwd=VS_DIR,
+        )
+        deadline = time.time() + 1700
+        while True:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"VoiceStudio가 시작하지 못했어요 (종료 코드 {self.proc.returncode})")
+            if _health(f"http://127.0.0.1:{VS_PORT}") == "ok":
+                break
+            if time.time() > deadline:
+                raise RuntimeError("VoiceStudio가 준비되지 않았어요 (모델 불러오기 시간 초과)")
+            time.sleep(3)
+
+    def _save(self) -> None:
+        import shutil
+
+        shutil.copytree(VS_LOCAL_DATA, VS_SAVED_DATA, dirs_exist_ok=True)
+        voice_volume.commit()
+
+    @modal.method()
+    def request(self, method: str, path: str, headers: dict, body: bytes) -> tuple:
+        import sys
+
+        sys.path.insert(0, "/root")
+        from voice_proxy import forward
+
+        result = forward(method, path, headers, body, f"http://127.0.0.1:{VS_PORT}")
+        # 목소리를 만들거나 지우면 바로 저장소에 남긴다
+        if method != "GET" and path.startswith("/profiles"):
+            self._save()
+        return result
+
+    @modal.exit()
+    def stop(self) -> None:
+        try:
+            self._save()
+        finally:
+            self.proc.terminate()
+
+
+def _health(base: str) -> str:
+    """VoiceStudio /health 상태: ok · starting · down (불러오는 동안은 503 starting)"""
+    try:
+        with urllib.request.urlopen(f"{base}/health", timeout=5) as r:
+            return json.loads(r.read()).get("status", "down")
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read()).get("status", "down")
+        except ValueError:
+            return "down"
+    except (OSError, ValueError):
+        return "down"
+
+
+# ───────────── 웹(스튜디오) ─────────────
+STUDIO_PORT = 5178
+VOICE_PROXY_PORT = 3901
+LOCAL_DB = "/root/matlab-db/studio.db"
+
+
+def _studio_env(public_url: str | None) -> dict:
+    env = dict(os.environ)
+    env.update(
+        {
+            "MATLAB_DATA_DIR": "/data",
+            "MATLAB_DB_FILE": LOCAL_DB,
+            "PORT": str(STUDIO_PORT),
+            "HOST": "0.0.0.0",
+            "COOKIE_SECURE": "1",
+            "TRUST_PROXY": "1",
+            "KEEPALIVE": "1",
+            "REMOTION_GL": "swangle",
+            "REMOTION_CONCURRENCY": "6",
+            "VOICESTUDIO_URL": f"http://127.0.0.1:{VOICE_PROXY_PORT}",
+            "VOICESTUDIO_TIMEOUT_MS": "1800000",
+            "VOICESTUDIO_INFO_TIMEOUT_MS": "1800000",
+            # 목소리가 없으면 자막만으로 조용히 만들지 않고 알린다
+            "TTS_PROVIDER": "voicestudio",
+            "NODE_OPTIONS": "--max-old-space-size=4096",
+            "NODE_NO_WARNINGS": "1",
+        }
+    )
+    if public_url:
+        env["PUBLIC_URL"] = public_url
+    return env
+
+
+def _wait_http(url: str, seconds: int) -> bool:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=3):
+                return True
+        except OSError:
+            time.sleep(1)
+    return False
+
+
+def _voice_ready() -> bool:
+    try:
+        with open("/data/settings.json", encoding="utf-8") as f:
+            return bool(json.load(f).get("voicestudioVoice"))
+    except (OSError, ValueError):
+        return False
+
+
+def _setup_voice(env: dict, public_url: str | None) -> None:
+    """처음 한 번: '맛조수' 목소리를 만든다 (tools/setup/voice.ts). 그동안 서버가 잠들지 않게 스스로 부른다."""
+    if not _wait_http(f"http://127.0.0.1:{STUDIO_PORT}/api/health", 180) or _voice_ready():
+        return
+    proc = subprocess.Popen(["npx", "tsx", "tools/setup/voice.ts"], cwd="/app", env=env)
+    while proc.poll() is None:
+        if public_url:
+            try:
+                urllib.request.urlopen(f"{public_url}/api/health", timeout=30).read()
+            except OSError:
+                pass
+        time.sleep(60)
+    print(f"목소리 준비 {'끝' if proc.returncode == 0 else f'실패 (코드 {proc.returncode}) — 다음에 서버가 켜질 때 다시 시도해요'}")
+
+
+@app.function(
+    image=web_image,
+    volumes={"/data": data_volume},
+    secrets=[modal.Secret.from_name("matlab-studio")],
+    cpu=(0.125, 8.0),
+    memory=(1024, 16384),
+    max_containers=1,  # DB를 한 곳에서만 쓴다
+    scaledown_window=1200,  # 20분 동안 요청이 없으면 잠든다 (제작 중에는 스스로 깨워 둠)
+    timeout=600,
+)
+@modal.concurrent(max_inputs=100)
+@modal.web_server(STUDIO_PORT, startup_timeout=180)
+def web() -> None:
+    import sys
+
+    sys.path.insert(0, "/app/deploy/modal")
+    from voice_proxy import serve
+
+    public_url = None
+    try:
+        public_url = web.get_web_url()
+    except Exception:
+        pass
+
+    def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
+        return Voice().request.remote(method, path, headers, body)
+
+    serve(VOICE_PROXY_PORT, call_voice, f"/data/voice-meta-{VS_COMMIT[:8]}.json")
+    env = _studio_env(public_url)
+    subprocess.Popen(["npx", "tsx", "server/index.ts", "--production"], cwd="/app/apps/studio", env=env)
+    threading.Thread(target=_setup_voice, args=(env, public_url), daemon=True).start()

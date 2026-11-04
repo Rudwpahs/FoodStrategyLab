@@ -2,12 +2,12 @@
 // 사용: MATLAB_DATA_DIR=... npx tsx tools/content-lab/seed-pilot-render.ts <projectId> <out/pilot/X.mp4> [첫 화면 png]
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR } from '../../apps/studio/server/config.ts';
+import { DATA_DIR, DB_FILE } from '../../apps/studio/server/config.ts';
 import { openDb } from '../../apps/studio/server/db.ts';
 import { Repo } from '../../apps/studio/server/repo.ts';
 
 const [pid, video, still] = process.argv.slice(2);
-const repo = new Repo(openDb(path.join(DATA_DIR, 'studio.db')));
+const repo = new Repo(openDb(DB_FILE));
 const state = repo.versionState(Number(pid));
 if (state.latestScriptVersion === null) throw new Error('대본이 없습니다');
 const rid = repo.createRender(Number(pid), state.latestScriptVersion);

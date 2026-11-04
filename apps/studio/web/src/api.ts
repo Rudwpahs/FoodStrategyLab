@@ -41,7 +41,8 @@ export interface VoiceInfo {
 }
 
 export interface AuthState {
-  mode: 'local' | 'login';
+  /** login: 계정 있음 · setup: 화면에서 첫 계정 만들기(클라우드) · local: 이 PC 전용 */
+  mode: 'local' | 'login' | 'setup';
   allowed: boolean;
   user: { id: number; username: string; displayName: string } | null;
 }
@@ -50,6 +51,7 @@ export const api = {
   me: () => request<AuthState>('GET', '/auth/me'),
   login: (username: string, password: string) => request<{ user: AuthState['user'] }>('POST', '/auth/login', { username, password }),
   logout: () => request<{ ok: true }>('POST', '/auth/logout'),
+  setup: (input: { code: string; username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
   designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),

@@ -48,6 +48,12 @@ export async function findVoiceStudio(): Promise<VoiceStudioStatus> {
   return { state: 'offline' };
 }
 
+/**
+ * 목록·엔진 정보 요청의 시간 제한. 클라우드 GPU는 처음 깨어나는 데 몇 분 걸려서
+ * VOICESTUDIO_INFO_TIMEOUT_MS로 늘린다 (기본: 목록 5초, 엔진 60초).
+ */
+const infoTimeout = (fallback: number) => Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || fallback;
+
 export interface VoiceProfile {
   id: string;
   name: string;
@@ -56,7 +62,7 @@ export interface VoiceProfile {
 }
 
 export async function listProfiles(url: string): Promise<VoiceProfile[]> {
-  const res = await fetch(`${url}/profiles`, { headers: headers(), signal: AbortSignal.timeout(5000) });
+  const res = await fetch(`${url}/profiles`, { headers: headers(), signal: AbortSignal.timeout(infoTimeout(5000)) });
   if (!res.ok) throw new Error(`VoiceStudio 목소리 목록을 불러오지 못했습니다 (${res.status})`);
   const rows = (await res.json()) as { id: string | number; name: string; kind?: string; audio_url?: string | null }[];
   return rows.map((r) => ({ id: String(r.id), name: r.name, kind: r.kind ?? '', audioUrl: r.audio_url ? `${url}${r.audio_url}` : null }));
@@ -78,7 +84,7 @@ export interface EngineInfo {
 
 export async function engineInfo(url: string): Promise<EngineInfo> {
   // 모델을 처음 불러오는 동안에는 응답이 늦을 수 있다
-  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(60000) });
+  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(infoTimeout(60000)) });
   if (!res.ok) throw new Error(`VoiceStudio 엔진 목록을 불러오지 못했습니다 (${res.status})`);
   const d = (await res.json()) as { active: string; backends: { id: string; available: boolean }[] };
   const available = d.backends.filter((b) => b.available).map((b) => b.id);

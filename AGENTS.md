@@ -16,14 +16,15 @@
 | `apps/studio/server` | Express 5 + node:sqlite: API, 로그인(`auth.ts`), 제작 파이프라인(`pipeline.ts`), VoiceStudio 연동(`voicestudio.ts`, `tts.ts`) |
 | `apps/studio/web` | React 19 화면 (Vite) |
 | `apps/android` | 스튜디오를 여는 안드로이드 WebView 앱 |
-| `deploy/oracle/install.sh` | 오라클(Ubuntu) 한 번에 설치 |
+| `deploy/modal/` | 기본 배포: Modal 클라우드(`app.py` 웹+GPU 목소리, `voice_proxy.py`), `.github/workflows/modal-deploy.yml`, 안내 `docs/MODAL_SETUP.md` |
+| `deploy/oracle/install.sh` | 대안: 오라클(Ubuntu) 한 번에 설치 |
 | `tools/content-lab`, `tools/setup` | 파일럿 렌더·검증 도구, 서버 목소리 자동 준비 |
 
 ## 명령
 
 ```
 npm ci            # 설치 (Node 22.13 이상)
-npm test          # Vitest 전체 (현재 130개 통과)
+npm test          # Vitest 전체 (현재 136개 통과)
 npm run typecheck # tsc
 npm run dev       # 개발 서버 http://localhost:5178
 npm run start     # 화면 묶음을 만든 뒤 빠른 실행 모드

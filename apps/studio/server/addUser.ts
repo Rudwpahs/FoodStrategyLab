@@ -4,7 +4,7 @@
 import path from 'node:path';
 import readline from 'node:readline';
 import { Auth } from './auth.ts';
-import { DATA_DIR } from './config.ts';
+import { DATA_DIR, DB_FILE } from './config.ts';
 import { openDb } from './db.ts';
 
 function askHidden(question: string): Promise<string> {
@@ -30,7 +30,7 @@ if (!username) {
   console.log('사용법: npm run user:add -- <아이디> <표시 이름>   (비밀번호 바꾸기: --reset)');
   process.exit(1);
 }
-const auth = new Auth(openDb(path.join(DATA_DIR, 'studio.db')));
+const auth = new Auth(openDb(DB_FILE));
 const pw = await askHidden('비밀번호 (10자 이상): ');
 const again = await askHidden('비밀번호 한 번 더: ');
 if (pw !== again) {

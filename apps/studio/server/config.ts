@@ -5,6 +5,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '../../..');
 export const DATA_DIR = path.resolve(process.env.MATLAB_DATA_DIR ?? path.join(ROOT, 'data'));
 export const PORT = Number(process.env.PORT ?? 5178);
+/** DB 파일. 클라우드에서는 서버 안 디스크(MATLAB_DB_FILE)에 두고 DATA_DIR로 복사본을 보낸다 */
+export const DB_FILE = path.resolve(process.env.MATLAB_DB_FILE ?? path.join(DATA_DIR, 'studio.db'));
+/** 클라우드 저장소에 둘 DB 복사본 (MATLAB_DB_FILE을 따로 정했을 때만) */
+export const DB_SNAPSHOT = process.env.MATLAB_DB_FILE ? path.join(DATA_DIR, 'studio.db') : null;
 
 export type TtsChoice = 'auto' | 'voicestudio' | 'edge' | 'none';
 
