@@ -82,10 +82,10 @@ jobs:
           URL=$(python deploy/modal/url.py)
           echo "스튜디오 주소: $URL"
           code=000
-          for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 "$URL/api/health" || true)
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/api/health" || true)
             [ "$code" = 200 ] && break
-            sleep 15
+            sleep 10
           done
           {
             echo "## 스튜디오 주소"
@@ -99,3 +99,9 @@ jobs:
               echo "서버 응답을 확인하지 못했어요 (마지막 응답 $code). 몇 분 뒤 주소를 열어 보세요."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" != 200 ]; then
+            echo "::group::Modal 서버 로그 (최근 200줄)"
+            modal app logs matlab-studio --tail 200 --timestamps || true
+            echo "::endgroup::"
+            exit 1
+          fi

@@ -24,7 +24,10 @@ from pathlib import Path
 import modal
 
 APP_NAME = "matlab-studio"
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# 저장소 위치는 배포하는 컴퓨터(GitHub Actions)에서만 계산한다.
+# 컨테이너 안에서는 이 파일이 /root/app.py 같은 얕은 위치에 있어 "두 단계 위"가 없다.
+_HERE = Path(__file__).resolve()
+REPO_ROOT = _HERE.parents[2] if modal.is_local() and len(_HERE.parents) > 2 else Path("/app")
 
 # VoiceStudio: 오라클 설치와 같은 고정 버전 (deploy/oracle/install.sh 와 맞춘다)
 VS_REPO = "https://github.com/debpalash/voicestudio.git"
