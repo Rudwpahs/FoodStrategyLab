@@ -45,7 +45,7 @@ export interface RenderRow {
   id: number;
   projectId: number;
   scriptVersion: number;
-  status: 'queued' | 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled';
   stage: string;
   progress: number;
   outputDir: string;

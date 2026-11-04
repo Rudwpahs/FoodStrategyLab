@@ -62,7 +62,7 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
         </details>
       )}
       <div className="small" style={{ background: notes.confirmedBy && !changed ? '#eef8f2' : '#fff8e1', padding: 10, borderRadius: 10 }}>
-        {notes.confirmedBy && !changed ? `✓ ${notes.confirmedBy} 연구자가 확인한 답변이에요 (${(notes.confirmedAt ?? '').slice(0, 10)})` : '답변을 고치면 연구자 본인 확인을 다시 받아야 해요.'}
+        {notes.confirmedBy && !changed ? `✓ ${notes.confirmedBy} 연구자가 확인한 답변이에요 (${notes.confirmedAt ? new Date(notes.confirmedAt).toLocaleDateString('ko-KR') : ''})` : '답변을 고치면 연구자 본인 확인을 다시 받아야 해요.'}
       </div>
       <div className="row">
         <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

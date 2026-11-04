@@ -72,6 +72,7 @@ export const api = {
   setBlogStyle: (id: number, style: BlogStyle | '') => request<ProjectDetail>('PUT', `/projects/${id}/blog-style`, { style }),
   addPublication: (id: number, body: { platform: Publication['platform']; status?: 'scheduled' | 'published'; url?: string; scheduledAt?: string; note?: string; confirmDuplicate?: boolean }) =>
     request<Publication>('POST', `/projects/${id}/publications`, body),
+  cancelRender: (renderId: number) => request<RenderRow>('POST', `/renders/${renderId}/cancel`),
   setMetrics: (pubId: number, metrics: Record<string, number | string>) => request<Publication>('PUT', `/publications/${pubId}/metrics`, metrics),
   templateScript: (id: number) => request<ProjectDetail>('POST', `/projects/${id}/script/template`),
   aiPrompt: (id: number) => request<{ prompt: string }>('GET', `/projects/${id}/ai-prompt`),

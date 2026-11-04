@@ -5,9 +5,9 @@ import { ZodError } from 'zod';
 import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
-import { AUDIO_DIR, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
+import { AUDIO_DIR, cancelRender, exportPackage, generateVoice, previewTimeline, startRender } from './pipeline.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
-import { Auth, authGuard, isDirectLocal, readCookie, sessionCookie } from './auth.ts';
+import { Auth, authGuard, clientIp, isDirectLocal, readCookie, sessionCookie } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
@@ -62,7 +62,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   // ── 로그인 (이 경로만 로그인 없이 열림) ──
   app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body ?? {};
-    const { token, user } = auth.login(String(username ?? ''), String(password ?? ''), req.socket.remoteAddress ?? '');
+    const { token, user } = auth.login(String(username ?? ''), String(password ?? ''), clientIp(req));
     res.setHeader('Set-Cookie', sessionCookie(req, token));
     res.json({ user });
   });
@@ -365,8 +365,15 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
 
   api.post('/projects/:id/renders', (req, res) => {
-    const origin = `${req.protocol}://${req.get('host')}`;
+    // 렌더러는 이 서버 안에서 돈다: 휴대폰이 접속한 주소(Tailscale 등)가 아니라 서버 내부 주소로 파일을 가져간다
+    const origin = `http://127.0.0.1:${req.socket.localPort}`;
     res.status(202).json({ renderId: deps.startRender(repo, id(req), origin) });
+  });
+
+  api.post('/renders/:id/cancel', (req, res) => {
+    const r = repo.getRender(id(req));
+    cancelRender(repo, r.id);
+    res.json(repo.getRender(r.id));
   });
 
   api.get('/renders/:id', (req, res) => {

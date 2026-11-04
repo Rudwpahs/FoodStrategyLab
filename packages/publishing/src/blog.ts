@@ -19,6 +19,13 @@ export interface BlogPost {
   tags: string[];
 }
 
+/** 날짜는 한국 시간 기준으로 쓴다 (서버는 보통 UTC라 그대로 자르면 하루 어긋날 수 있다) */
+export function kstDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
 const AI_NOTICE = '캐릭터 애니메이션과 일부 문장은 AI 도구로 만들었습니다.';
 
 /**
@@ -30,7 +37,7 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
   const title = `${recipe.topic} | ${BRAND.researcherTitle} ${BRAND.researcher}의 ${dish} 노하우`;
   const tags = uniqueTags(['이희재의맛연구소', '요리팁', dish, CATEGORY_LABELS[recipe.category], '맛조수', '요리과학']);
   const reviewLine = review
-    ? `이 글의 조리 정보는 ${BRAND.researcherTitle} ${review.reviewer}가 검토했습니다. (검토일 ${review.reviewedAt.slice(0, 10)})`
+    ? `이 글의 조리 정보는 ${BRAND.researcherTitle} ${review.reviewer}가 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
     : '⚠️ 검수 전 초안입니다. 게시하지 마세요.';
 
   const md: string[] = [];

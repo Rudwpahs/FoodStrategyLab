@@ -35,6 +35,28 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
+/**
+ * 영상 렌더러(이 서버 안의 크롬)가 목소리·사진 파일을 가져갈 때 쓰는 비밀 열쇠.
+ * 서버를 켤 때마다 새로 만들고, 렌더러에 넘기는 주소에만 붙는다 (사람 화면에는 쓰이지 않음).
+ */
+export const RENDER_TOKEN = crypto.randomBytes(24).toString('hex');
+
+export function withRenderToken(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}k=${RENDER_TOKEN}`;
+}
+
+function hasRenderToken(req: Request): boolean {
+  const k = typeof req.query.k === 'string' ? req.query.k : '';
+  return k.length === RENDER_TOKEN.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(RENDER_TOKEN));
+}
+
+/** 로그인 실패 횟수를 셀 사람 구분: 터널·Tailscale 뒤에서는 전달된 실제 주소를 쓴다 */
+export function clientIp(req: Request): string {
+  const remote = req.socket.remoteAddress ?? '';
+  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]!.trim();
+  return LOOPBACK.has(remote) && fwd ? fwd : remote;
+}
+
 export class Auth {
   private fails = new Map<string, { count: number; first: number }>();
 
@@ -135,6 +157,8 @@ export function authGuard(auth: Auth) {
         return next(new HttpError(403, '다른 사이트에서 보낸 요청은 받지 않아요.'));
       }
     }
+    // 영상 렌더러의 미디어 요청 (비밀 열쇠가 맞을 때만)
+    if (req.baseUrl === '/media' && hasRenderToken(req)) return next();
     if (auth.userCount() === 0) {
       if (isDirectLocal(req)) return next();
       return next(new HttpError(403, '아직 계정이 없어 이 컴퓨터에서만 쓸 수 있어요. 스튜디오 PC에서 "npm run user:add"로 계정을 만드세요.'));

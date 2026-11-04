@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, buildStyledScript, formatIngredient } from '@mat-lab/recipe-core';
-import { BLOG_STYLES, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, checkConsistency, lintBlog, questionsFor } from './index.ts';
+import { kstDate, BLOG_STYLES, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, checkConsistency, lintBlog, questionsFor } from './index.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 const review = { reviewer: '이희재', reviewedAt: '2026-11-03T00:00:00Z' };
@@ -95,5 +95,12 @@ describe('블로그 문체 검사', () => {
       const post = buildExpertBlog({ recipe: walnut, style, notes: { answers: {} }, review });
       expect(lintBlog(post.markdown, { dish: '호두정과' }).filter((i) => i.level === 'error'), style).toEqual([]);
     }
+  });
+});
+
+describe('날짜', () => {
+  it('한국 시간 기준 날짜를 쓴다 (UTC 저녁은 한국 다음 날)', () => {
+    expect(kstDate('2026-11-03T20:00:00Z')).toBe('2026-11-04');
+    expect(kstDate('2026-11-03T01:00:00Z')).toBe('2026-11-03');
   });
 });

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bundle } from '@remotion/bundler';
-import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
+import { makeCancelSignal, renderMedia, renderStill, selectComposition } from '@remotion/renderer';
+export { makeCancelSignal };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const entryPoint = path.join(here, 'entry.ts');
@@ -41,13 +42,15 @@ export interface RenderVideoOptions {
   onProgress?: (progress: number) => void;
   /** 일부 구간만 렌더 (확인용) */
   frameRange?: [number, number];
+  /** 취소 신호 (makeCancelSignal) */
+  cancelSignal?: Parameters<typeof renderMedia>[0]['cancelSignal'];
 }
 
 export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   return withGlFallback(() => renderVideoOnce(options));
 }
 
-async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRange }: RenderVideoOptions): Promise<void> {
+async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRange, cancelSignal }: RenderVideoOptions): Promise<void> {
   const url = await getServeUrl();
   const composition = await selectComposition({ serveUrl: url, id: 'ShortVideo', inputProps, browserExecutable, chromiumOptions });
   await renderMedia({
@@ -59,7 +62,10 @@ async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRa
     browserExecutable,
     chromiumOptions,
     enforceAudioTrack: true,
+    // 느린 서버(무료 ARM 2코어)에서 영상·이미지 불러오기가 늦어도 멈추지 않게
+    timeoutInMilliseconds: 120_000,
     ...(frameRange ? { frameRange } : {}),
+    ...(cancelSignal ? { cancelSignal } : {}),
     onProgress: ({ progress }) => onProgress?.(progress),
   });
 }
@@ -71,5 +77,5 @@ export async function renderStillImage(id: string, inputProps: Record<string, un
 async function renderStillOnce(id: string, inputProps: Record<string, unknown>, output: string, frame: number): Promise<void> {
   const url = await getServeUrl();
   const composition = await selectComposition({ serveUrl: url, id, inputProps, browserExecutable, chromiumOptions });
-  await renderStill({ composition, serveUrl: url, output, inputProps, browserExecutable, chromiumOptions, frame });
+  await renderStill({ composition, serveUrl: url, output, inputProps, browserExecutable, chromiumOptions, frame, timeoutInMilliseconds: 120_000 });
 }

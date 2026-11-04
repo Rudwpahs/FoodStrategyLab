@@ -6,11 +6,13 @@ import path from 'node:path';
 import { createApp, type AppDeps } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { HttpError } from './repo.ts';
+import { friendlyRenderError, startRender } from './pipeline.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
 import { mp3DurationSeconds } from './tts.ts';
 
 let base = '';
+let testRepo: Repo;
 let close: () => void;
 
 beforeAll(async () => {
@@ -26,7 +28,8 @@ beforeAll(async () => {
     repo.updateRender(rid, { status: 'done', stage: '완료', progress: 1, outputDir: dir, finished: true });
     return rid;
   };
-  const app = createApp(new Repo(openDb(':memory:')), { startRender: fakeRender });
+  testRepo = new Repo(openDb(':memory:'));
+  const app = createApp(testRepo, { startRender: fakeRender });
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
@@ -304,6 +307,31 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     const changed = { ...latest.script, scenes: latest.script.scenes.map((s: { line: string }, i: number) => (i === 1 ? { ...s, line: '바뀐 대사' } : s)) };
     await call('PUT', `/projects/${pid}/script`, { script: changed });
     expect((await call('POST', `/projects/${pid}/publications`, { platform: 'naver', url: 'https://blog.naver.com/matlab/223456790' })).status).toBe(409);
+  });
+});
+
+describe('제작 작업 관리', () => {
+  it('대기 중인 작업은 취소되고, 끝난 작업은 취소할 수 없다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const done = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    expect((await call('POST', `/renders/${done}/cancel`)).status).toBe(409);
+    const queued = testRepo.createRender(pid, 1);
+    const c = await call('POST', `/renders/${queued}/cancel`);
+    expect(c.body.status).toBe('canceled');
+  });
+
+  it('이미 만들고 있는 영상이 있으면 두 번 시작하지 않는다', () => {
+    const pid = testRepo.createProject(SAMPLE_RECIPES[1]);
+    testRepo.addScriptVersion(pid, { title: 't', scenes: [{ id: 's1', type: 'intro', emotion: 'joy', line: 'a' }, { id: 's2', type: 'explain', emotion: 'joy', line: 'b' }, { id: 's3', type: 'outro', emotion: 'joy', line: 'c' }] }, 'edit');
+    testRepo.createRender(pid, 1);
+    expect(() => startRender(testRepo, pid, 'http://127.0.0.1:1')).toThrow(/이미 만들고/);
+  });
+
+  it('렌더 오류는 쉬운 문장으로 바꾼다', () => {
+    expect(friendlyRenderError('Error: Failed to launch the browser process')).toContain('크롬');
+    expect(friendlyRenderError('ENOSPC: no space left on device')).toContain('저장 공간');
+    expect(friendlyRenderError('VoiceStudio 음성 생성 실패 (500)')).toContain('VoiceStudio');
   });
 });
 

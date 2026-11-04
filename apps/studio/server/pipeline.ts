@@ -6,13 +6,16 @@ import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type 
 import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
+import { withRenderToken } from './auth.ts';
 import { cachedAudio, measuredWords, synthesize, ttsProvider, voiceIdentity } from './tts.ts';
 
 export const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 export const RENDER_DIR = path.join(DATA_DIR, 'renders');
 
 /** 음성 파일 URL. 미리보기(브라우저)는 상대경로, 렌더러는 절대경로를 쓴다. */
-const audioUrl = (file: string, origin = '') => `${origin}/media/audio/${path.basename(file)}`;
+const audioUrl = (file: string, origin = '') => renderUrl(origin, `/media/audio/${path.basename(file)}`);
+/** 렌더러용 주소(origin이 있을 때)에는 비밀 열쇠를 붙인다. 브라우저 미리보기는 로그인 쿠키로 받는다. */
+const renderUrl = (origin: string, url: string) => (origin ? withRenderToken(`${origin}${url}`) : url);
 
 /** 캐시된 음성이 있으면 그 길이로, 없으면 추정 길이로 미리보기 타임라인을 만든다. */
 export async function previewTimeline(script: Script, origin = ''): Promise<{ timings: SceneTiming[]; voiced: boolean }> {
@@ -44,12 +47,13 @@ export async function previewTimeline(script: Script, origin = ''): Promise<{ ti
 }
 
 /** 대본 전 장면의 음성을 만든다 (검수 중에도 들어볼 수 있게 승인 전 허용). */
-export async function generateVoice(script: Script): Promise<{ provider: string; generated: number }> {
+export async function generateVoice(script: Script, shouldStop: () => boolean = () => false): Promise<{ provider: string; generated: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') return { provider, generated: 0 };
   const identity = await voiceIdentity(provider);
   let generated = 0;
   for (const scene of script.scenes) {
+    if (shouldStop()) throw new RenderCanceled();
     if (!cachedAudio(scene.line, AUDIO_DIR, identity)) generated++;
     const a = await synthesize(scene.line, AUDIO_DIR);
     // 빈 음성(소리 없음)은 지우고 알린다: 영상에서 대사가 통째로 빠지는 것을 막는다
@@ -69,6 +73,29 @@ const loadRenderer = () => (rendererPromise ??= import('@mat-lab/video/render'))
 
 let queue: Promise<unknown> = Promise.resolve();
 
+class RenderCanceled extends Error {
+  constructor() {
+    super('취소했어요');
+  }
+}
+
+/** 진행 중인 제작 작업의 취소 손잡이 */
+const jobs = new Map<number, { canceled: boolean; cancelRemotion?: () => void }>();
+
+/**
+ * 제작을 취소한다. 대기 중이면 시작하지 않고, 진행 중이면 다음 단계 전에 멈춘다 (렌더 중이면 바로 멈춤).
+ */
+export function cancelRender(repo: Repo, renderId: number) {
+  const r = repo.getRender(renderId);
+  if (r.status !== 'queued' && r.status !== 'running') throw new HttpError(409, '이미 끝난 작업이에요.');
+  const job = jobs.get(renderId) ?? { canceled: false };
+  job.canceled = true;
+  job.cancelRemotion?.();
+  jobs.set(renderId, job);
+  if (r.status === 'queued') repo.updateRender(renderId, { status: 'canceled', stage: '취소됨', finished: true });
+  repo.logEvent(r.projectId, 'render', `제작 취소 (작업 #${renderId})`);
+}
+
 /**
  * 최신 대본으로 영상·이미지를 만든다. 한 번에 하나씩 처리한다.
  * 승인 전에도 '검수용'으로 만들 수 있다: 연구자가 실제 영상을 보고 승인하도록.
@@ -77,6 +104,8 @@ let queue: Promise<unknown> = Promise.resolve();
 export function startRender(repo: Repo, projectId: number, origin: string): number {
   const state = repo.versionState(projectId);
   if (state.latestScriptVersion === null) throw new HttpError(409, '대본이 아직 없습니다.');
+  const busy = repo.getProject(projectId).renders.find((r) => r.status === 'queued' || r.status === 'running');
+  if (busy) throw new HttpError(409, `이미 만들고 있는 영상이 있어요 (작업 #${busy.id}). 끝나거나 취소한 뒤 다시 눌러 주세요.`);
   const version = state.latestScriptVersion;
   const approved = state.approvedScriptVersion === version;
   const renderId = repo.createRender(projectId, version);
@@ -85,9 +114,31 @@ export function startRender(repo: Repo, projectId: number, origin: string): numb
   return renderId;
 }
 
+/** 내부 오류 문장 → 사용자에게 보여 줄 쉬운 문장 */
+export function friendlyRenderError(message: string): string {
+  if (/VoiceStudio|음성|목소리/.test(message)) return message;
+  if (/ENOSPC|no space left/i.test(message)) return '서버 저장 공간이 부족해요. 오래된 영상을 정리해야 해요.';
+  if (/ENOMEM|out of memory|Killed|SIGKILL/i.test(message)) return '서버 메모리가 부족해 멈췄어요. 잠시 뒤 다시 시도해 주세요.';
+  if (/Failed to launch|browser|chrom/i.test(message)) return '영상 렌더러(크롬)를 시작하지 못했어요. 잠시 뒤 다시 시도하고, 계속되면 서버를 다시 켜 주세요.';
+  if (/ECONNREFUSED|fetch failed|ETIMEDOUT/i.test(message)) return '서버 안에서 파일을 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+  return '영상을 만들지 못했어요. 다시 시도해 주세요.';
+}
+
 async function runRender(repo: Repo, projectId: number, version: number, renderId: number, origin: string) {
   const outDir = path.join(RENDER_DIR, String(renderId));
-  const set = (stage: string, progress: number) => repo.updateRender(renderId, { status: 'running', stage, progress, outputDir: outDir });
+  const job = jobs.get(renderId) ?? { canceled: false };
+  jobs.set(renderId, job);
+  const stopIfCanceled = () => {
+    if (job.canceled) throw new RenderCanceled();
+  };
+  const set = (stage: string, progress: number) => {
+    stopIfCanceled();
+    repo.updateRender(renderId, { status: 'running', stage, progress, outputDir: outDir });
+  };
+  if (job.canceled) {
+    jobs.delete(renderId);
+    return;
+  }
   try {
     fs.mkdirSync(outDir, { recursive: true });
     const recipe = repo.getRecipe(projectId);
@@ -96,7 +147,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const approval = review?.decision === 'approved' ? review : null;
 
     set('음성 생성', 0.02);
-    await generateVoice(script);
+    await generateVoice(script, () => job.canceled);
     const { timings } = await previewTimeline(script, origin);
     const photo = repo.getPhoto(projectId);
     const props: VideoProps = {
@@ -107,9 +158,9 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
       // 승인 전 검수용: 워터마크·상태 문구 없이 (승인 뒤 다시 렌더하지 않아도 되게)
       cleanDraft: !approval,
       recipe,
-      photoUrl: photo ? `${origin}${photo.url}` : undefined,
+      photoUrl: photo ? renderUrl(origin, photo.url) : undefined,
       photoColor: photo?.color || undefined,
-      sceneMedia: Object.fromEntries(Object.entries(repo.getSceneMedia(projectId)).map(([k, m]) => [k, { kind: m.kind, url: `${origin}${m.url}` }])),
+      sceneMedia: Object.fromEntries(Object.entries(repo.getSceneMedia(projectId)).map(([k, m]) => [k, { kind: m.kind, url: renderUrl(origin, m.url) }])),
     };
 
     set('렌더러 준비', 0.08);
@@ -118,11 +169,17 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
 
     set('영상 렌더링', 0.12);
     const raw = path.join(outDir, 'video-raw.mp4');
+    const { cancelSignal, cancel } = renderer.makeCancelSignal();
+    job.cancelRemotion = cancel;
     await renderer.renderVideo({
       inputProps: props,
       outputLocation: raw,
-      onProgress: (p) => set('영상 렌더링', 0.12 + p * 0.7),
+      cancelSignal,
+      onProgress: (p) => {
+        if (!job.canceled) repo.updateRender(renderId, { status: 'running', stage: '영상 렌더링', progress: 0.12 + p * 0.7, outputDir: outDir });
+      },
     });
+    job.cancelRemotion = undefined;
     // 숏폼 기준 음량(-14 LUFS)으로 맞춘다
     set('음량 맞추기', 0.83);
     await normalizeLoudness(raw, path.join(outDir, 'video.mp4')).then(
@@ -146,8 +203,15 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     repo.logEvent(projectId, 'render', `제작 완료 (작업 #${renderId})`);
   } catch (e) {
     const message = (e as Error).message || String(e);
-    repo.updateRender(renderId, { status: 'failed', error: message, finished: true });
-    repo.logEvent(projectId, 'error', `제작 실패 (작업 #${renderId}): ${message}`);
+    if (job.canceled || e instanceof RenderCanceled) {
+      repo.updateRender(renderId, { status: 'canceled', stage: '취소됨', finished: true });
+    } else {
+      // 화면에는 쉬운 문장, 자세한 내용은 작업 내역에 남긴다
+      repo.updateRender(renderId, { status: 'failed', error: friendlyRenderError(message), finished: true });
+      repo.logEvent(projectId, 'error', `제작 실패 (작업 #${renderId}): ${message.slice(0, 500)}`);
+    }
+  } finally {
+    jobs.delete(renderId);
   }
 }
 

@@ -2,6 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+const RENDERS_TABLE = `CREATE TABLE IF NOT EXISTS renders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  script_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed', 'canceled')),
+  stage TEXT NOT NULL DEFAULT '',
+  progress REAL NOT NULL DEFAULT 0,
+  output_dir TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  finished_at TEXT
+);`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,18 +42,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS renders (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  script_version INTEGER NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed')),
-  stage TEXT NOT NULL DEFAULT '',
-  progress REAL NOT NULL DEFAULT 0,
-  output_dir TEXT NOT NULL DEFAULT '',
-  error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL,
-  finished_at TEXT
-);
+${RENDERS_TABLE}
 CREATE TABLE IF NOT EXISTS scene_media (
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   scene_id TEXT NOT NULL,
@@ -97,6 +99,19 @@ export function openDb(file: string): Db {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  // 예전 DB: 제작 상태에 '취소됨(canceled)'이 없으면 표를 새 규칙으로 다시 만든다 (기존 기록은 그대로 옮김)
+  const rendersSql = String((db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'renders'").get() as { sql?: string } | undefined)?.sql ?? '');
+  if (rendersSql && !rendersSql.includes("'canceled'")) {
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.exec(`BEGIN;
+      ALTER TABLE renders RENAME TO renders_old;
+      ${RENDERS_TABLE}
+      INSERT INTO renders (id, project_id, script_version, status, stage, progress, output_dir, error, created_at, finished_at)
+        SELECT id, project_id, script_version, status, stage, progress, output_dir, error, created_at, finished_at FROM renders_old;
+      DROP TABLE renders_old;
+      COMMIT;`);
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
   // 이전 버전 DB에 없는 열 추가
   const cols = new Set((db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]).map((c) => c.name));
   if (!cols.has('photo_file')) db.exec("ALTER TABLE projects ADD COLUMN photo_file TEXT NOT NULL DEFAULT ''");

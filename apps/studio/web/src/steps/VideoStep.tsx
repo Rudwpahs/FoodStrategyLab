@@ -134,14 +134,26 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
                 if (r) reload();
               }}
             >
-              {busy ? '만드는 중…' : approved ? '영상 만들기' : '검수용 영상 만들기'}
+              {busy ? '만드는 중… (20분~1시간)' : approved ? '영상 만들기' : '검수용 영상 만들기'}
             </button>
           </div>
           {render && (
             <div className="stack">
               <div className="row small">
-                <b>작업 #{render.id}</b> · 대본 v{render.scriptVersion} · {render.stage || '대기'}
+                <b>작업 #{render.id}</b> · 대본 v{render.scriptVersion} · {render.status === 'canceled' ? '취소됨' : render.stage || '대기'}
                 {render.status === 'failed' && <span style={{ color: 'var(--err)' }}>실패: {render.error}</span>}
+                {busy && (
+                  <button
+                    className="btn small ghost"
+                    onClick={async () => {
+                      if (!confirm('영상 만들기를 멈출까요? 다시 만들려면 처음부터 다시 시작해요.')) return;
+                      const r = await run(() => api.cancelRender(render.id), '취소했어요');
+                      if (r) reload();
+                    }}
+                  >
+                    취소
+                  </button>
+                )}
               </div>
               {busy && (
                 <div className="progress">

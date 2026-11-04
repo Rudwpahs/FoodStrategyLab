@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
-import { Auth, hashPassword, verifyPassword } from './auth.ts';
+import { Auth, RENDER_TOKEN, hashPassword, verifyPassword } from './auth.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
 
@@ -87,14 +87,26 @@ describe('계정이 있을 때', () => {
     expect(r.approval.reviewer).toBe('가족');
   });
 
+  it('영상 렌더러는 비밀 열쇠로만 미디어를 받을 수 있다 (로그인 없이)', async () => {
+    expect((await req('/media/audio/none.mp3?k=wrong')).status).toBe(401);
+    // 열쇠가 맞으면 로그인 확인을 통과한다 (파일이 없어서 404)
+    expect((await req(`/media/audio/none.mp3?k=${RENDER_TOKEN}`)).status).toBe(404);
+    // 열쇠로 API는 열리지 않는다
+    expect((await req(`/api/projects?k=${RENDER_TOKEN}`)).status).toBe(401);
+  });
+
   it('로그아웃하면 그 세션은 더 이상 쓸 수 없다', async () => {
     await req('/api/auth/logout', { method: 'POST', cookie });
     expect((await req('/api/projects', { cookie })).status).toBe(401);
   });
 
-  it('비밀번호를 여러 번 틀리면 잠시 막는다', async () => {
+  it('비밀번호를 여러 번 틀리면 잠시 막는다 (Tailscale 뒤에서는 실제 접속 주소별로)', async () => {
+    const h = (ip: string) => ({ 'x-forwarded-for': ip });
     let last = 0;
-    for (let i = 0; i < 11; i++) last = (await req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'heejae', password: `wrong-${i}-xxxxxxxx` }) })).status;
+    for (let i = 0; i < 11; i++) last = (await req('/api/auth/login', { method: 'POST', headers: h('100.64.0.9'), body: JSON.stringify({ username: 'heejae', password: `wrong-${i}-xxxxxxxx` }) })).status;
     expect(last).toBe(429);
+    // 다른 기기(다른 주소)는 막히지 않는다
+    const other = await req('/api/auth/login', { method: 'POST', headers: h('100.64.0.10'), body: JSON.stringify({ username: 'heejae', password: 'correct horse battery' }) });
+    expect(other.status).toBe(200);
   });
 });
