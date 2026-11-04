@@ -86,3 +86,18 @@ npm test
 - 렌더(그래픽카드 없는 서버): `REMOTION_GL=swangle REMOTION_BROWSER_EXECUTABLE=<chrome-headless-shell 경로>`
 - 파일럿 다시 만들기: `npx tsx tools/content-lab/pilot.ts A-problem` (스크립트: `tools/content-lab/`)
 - 화면 점검: 빈 데이터로 서버를 띄우고 `node apps/studio/e2e/content-lab.e2e.cjs`
+
+## 7. 서버 배포 준비 (2026-11-04)
+
+| 항목 | 상태 | 검증 |
+| --- | --- | --- |
+| 로그인·계정(`npm run user:add`, 서버에서는 `matlab-user`) | 완료 | 자동 테스트 + 가상 터미널로 비밀번호 입력 확인(화면에 안 보임) |
+| 휴대폰 화면·홈 화면 설치·안드로이드 앱(APK) | 완료 | 휴대폰 크기 화면 점검. **실제 휴대폰 설치는 미확인** |
+| 렌더러가 목소리·사진을 가져갈 때 로그인에 막히던 결함 | 수정 (서버마다 새로 만드는 렌더 전용 열쇠) | 자동 테스트 + 계정이 있는 서버에서 실제 렌더(아래) |
+| 렌더러가 휴대폰 접속 주소로 파일을 찾던 결함 | 수정 (항상 서버 내부 주소) | 같음 |
+| 렌더 취소·중복 시작 방지·쉬운 오류 문장 | 완료 | 자동 테스트 |
+| 블로그 날짜 한국 시간, 엉뚱한 브랜드 "참고" 경고 | 수정 | 자동 테스트 |
+| 오라클 설치 스크립트 `deploy/oracle/install.sh` | 완료 | shellcheck 통과. VoiceStudio 설치 명령·서비스 시작 방식은 새 폴더에서 그대로 실행해 확인. **실제 오라클 ARM 서버에서는 미실행** |
+| 설치 안내 `docs/ORACLE_SETUP.md` | 완료 | 오라클 공식 문서·FAQ 대조 |
+
+다음: 인스타그램 공식 게시 연결 (Meta 앱·어머니 프로페셔널 계정 필요).
