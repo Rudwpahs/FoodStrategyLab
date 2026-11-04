@@ -3,7 +3,7 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
 import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
-import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
+import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, approvedRender, cancelRender, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
@@ -75,7 +75,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true });
+    // public: 공개 주소(PUBLIC_URL)를 알고 있는지 (배포 확인용, 비밀 아님)
+    res.json({ ok: true, public: Boolean(process.env.PUBLIC_URL) });
   });
 
   // Meta가 게시할 영상을 내려받는 임시 주소 (추측할 수 없는 열쇠, 2시간 뒤·게시 후 만료). 로그인 없이 열린다.
@@ -470,18 +471,25 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const caption = String(body.caption ?? '').trim();
     const bad = checkCaption(caption);
     if (bad) throw new HttpError(400, bad);
+    // 설명 글을 고쳤어도 원본 레시피(또는 연구자 답변)에 없는 분량은 올릴 수 없다
+    const wrongAmounts = blogQuantityIssues(repo.getRecipe(pid), repo.getExpertNotes(pid), caption);
+    if (wrongAmounts.length) throw new HttpError(409, `설명 글에 ${wrongAmounts.join(', ')}이(가) 있어요. 원본 레시피의 분량만 쓸 수 있어요.`);
     const origin = publicOrigin(req);
     if (!origin.startsWith('https://') && process.env.IG_ALLOW_HTTP !== '1') {
       throw new HttpError(409, '인스타그램은 공개 https 주소의 영상만 가져갈 수 있어요. 클라우드(Modal) 주소에서 올려 주세요.');
     }
     const script = repo.getScript(pid, render.scriptVersion).script;
-    const stopKeepAlive = process.env.KEEPALIVE === '1' ? keepAwake(origin) : () => undefined;
+    let stopKeepAlive: () => void = () => undefined;
     const job = await ig.startReel({
       projectId: pid,
       renderId: render.id,
       videoFile: path.join(render.outputDir, 'video.mp4'),
       caption,
       publicOrigin: origin,
+      // 인스타그램 처리를 기다리는 동안 대본이 바뀌거나 승인이 풀렸으면 여기서 멈춘다
+      beforePublish: () => {
+        approvedRender(repo, render.id);
+      },
       onPublished: (permalink) => {
         stopKeepAlive();
         repo.addPublication(pid, {
@@ -503,6 +511,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
         repo.logEvent(pid, 'error', `인스타그램 게시 실패 (작업 #${render.id}): ${message.slice(0, 300)}`);
       },
     });
+    // 작업이 실제로 시작된 뒤에만 서버를 깨워 둔다 (시작 전 오류로 타이머가 남지 않게)
+    if (process.env.KEEPALIVE === '1' && (job.status === 'uploading' || job.status === 'processing' || job.status === 'publishing')) stopKeepAlive = keepAwake(origin);
     res.status(202).json(job);
   });
 

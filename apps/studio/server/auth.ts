@@ -56,9 +56,13 @@ const trustProxy = () => process.env.TRUST_PROXY === '1';
 /** 로그인 실패 횟수를 셀 사람 구분: 터널·Tailscale·클라우드 프록시 뒤에서는 전달된 실제 주소를 쓴다 */
 export function clientIp(req: Request): string {
   const remote = req.socket.remoteAddress ?? '';
-  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]!.trim();
+  // 맨 오른쪽 값 = 바로 앞의 믿는 프록시가 붙인 실제 접속 주소. 맨 앞 값은 접속자가 마음대로 넣을 수 있다.
+  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',').map((x) => x.trim()).filter(Boolean).at(-1) ?? '';
   return (LOOPBACK.has(remote) || trustProxy()) && fwd ? fwd : remote;
 }
+
+/** 설정 코드는 정상 사용자가 딱 한 번 쓰는 값: 서버가 켜져 있는 동안 전체에서 이만큼 틀리면 막는다 */
+const SETUP_MAX_FAILS_TOTAL = 30;
 
 /** 이 스튜디오의 공개 주소(클라우드). PUBLIC_URL이 없으면 요청 헤더로 짐작한다. */
 export function publicOrigin(req: Request): string {
@@ -136,7 +140,14 @@ export class Auth {
     }
   }
 
+  private setupFailsTotal = 0;
+
   private countFail(ip: string) {
+    // 기록이 끝없이 쌓이지 않게 오래된 것을 지운다
+    if (this.fails.size > 5000) {
+      for (const [k, v] of this.fails) if (Date.now() - v.first > FAIL_WINDOW_MS) this.fails.delete(k);
+      if (this.fails.size > 5000) this.fails.clear();
+    }
     const f = this.fails.get(ip);
     const cur = f && Date.now() - f.first < FAIL_WINDOW_MS ? f : { count: 0, first: Date.now() };
     this.fails.set(ip, { ...cur, count: cur.count + 1 });
@@ -162,11 +173,13 @@ export class Auth {
     const expected = setupCode();
     if (!expected) throw new HttpError(404, '이 서버에서는 화면에서 계정을 만들 수 없어요.');
     if (this.userCount() > 0) throw new HttpError(409, '이미 계정이 있어요. 로그인해 주세요.');
+    if (this.setupFailsTotal >= SETUP_MAX_FAILS_TOTAL) throw new HttpError(429, '설정 코드가 너무 많이 틀렸어요. 서버를 다시 배포한 뒤 시도해 주세요.');
     this.checkLocked(ip);
     const a = Buffer.from(sha256(input.code));
     const b = Buffer.from(sha256(expected));
     if (!crypto.timingSafeEqual(a, b)) {
       this.countFail(ip);
+      this.setupFailsTotal++;
       throw new HttpError(401, '설정 코드가 맞지 않아요.');
     }
     let user: User;

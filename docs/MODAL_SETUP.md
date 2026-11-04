@@ -28,7 +28,7 @@ Modal → **Settings → Usage & Billing** → **Spend limit**을 `0`으로 저�
 | --- | --- |
 | `MODAL_TOKEN_ID` | Token ID |
 | `MODAL_TOKEN_SECRET` | Token Secret |
-| `STUDIO_SETUP_CODE` | 직접 정하는 **설정 코드** (8자 이상, 예: 맛연구소-첫계정-2026). 처음 계정을 만들 때 한 번만 씁니다 |
+| `STUDIO_SETUP_CODE` | 직접 정하는 **설정 코드**. 남이 짐작하기 어렵게 12자 이상(문장·숫자 섞기)으로 정하세요. 처음 계정을 만들 때 한 번만 씁니다 |
 
 이 값들은 채팅·메모에 붙여넣지 말고 위 화면에만 넣으세요.
 

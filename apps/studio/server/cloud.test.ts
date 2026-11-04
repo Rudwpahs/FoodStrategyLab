@@ -7,7 +7,7 @@ import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { Auth } from './auth.ts';
 import { openDb } from './db.ts';
-import { restoreSnapshot, startSnapshots } from './dbSnapshot.ts';
+import { readLease, restoreSnapshot, startSnapshots } from './dbSnapshot.ts';
 import { keepAwake } from './pipeline.ts';
 import { Repo } from './repo.ts';
 
@@ -62,6 +62,14 @@ describe('클라우드: 화면에서 첫 계정 만들기', () => {
     expect(auth.userCount()).toBe(0);
   });
 
+  it('X-Forwarded-For 맨 앞 값을 바꿔도 잠금을 피할 수 없다 (맨 오른쪽 = 프록시가 붙인 실제 주소)', async () => {
+    let last = 0;
+    for (let i = 0; i < 11; i++) {
+      last = (await setup({ ...goodSetup, code: `nope-${i}-xxxx` }, { 'x-forwarded-for': `10.9.${i}.1, 198.51.100.77` })).status;
+    }
+    expect(last).toBe(429);
+  });
+
   it('맞는 코드면 계정을 만들고 바로 로그인된다. 두 번째부터는 만들 수 없다', async () => {
     const short = await setup({ ...goodSetup, password: 'short' });
     expect(short.status).toBe(400);
@@ -109,6 +117,19 @@ describe('클라우드: DB 복사본', () => {
     expect(new Auth(openDb(fresh)).userCount()).toBe(1);
     // 이미 DB가 있으면 덮어쓰지 않는다
     expect(restoreSnapshot(fresh, snap)).toBe(false);
+  });
+
+  it('쓰는 동안 임대 표시를 남기고, 끌 때 "다 썼음"으로 바꾼다 (다음 서버가 기다렸다 이어받게)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lease-'));
+    const snap = path.join(dir, 'volume', 'studio.db');
+    const repo = new Repo(openDb(path.join(dir, 'local', 'studio.db')));
+    const snaps = startSnapshots(repo.db, snap, 60_000, 'container-a');
+    expect(readLease(snap)).toMatchObject({ owner: 'container-a', released: false });
+    new Auth(repo.db).addUser('heejae', '이희재', 'correct horse battery');
+    snaps.release();
+    expect(readLease(snap)).toMatchObject({ owner: 'container-a', released: true });
+    // 끄기 직전 변경도 복사본에 들어 있다
+    expect(new Auth(openDb(snap)).userCount()).toBe(1);
   });
 });
 

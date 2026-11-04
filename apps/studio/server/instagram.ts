@@ -183,7 +183,8 @@ export class Instagram {
       problem = '연결 기간(60일)이 지났어요. 다시 연결해 주세요.';
       a = null;
     } else if (a) {
-      a = await this.refreshIfNeeded(a).catch(() => a);
+      const current = a;
+      a = await this.refreshIfNeeded(current).catch(() => this.account());
     }
     return { configured, connected: Boolean(a), username: a?.username ?? '', expiresAt: a?.expiresAt ?? '', problem };
   }
@@ -228,7 +229,7 @@ export class Instagram {
     const left = Date.parse(a.expiresAt) - Date.now();
     if (age < 24 * 3600_000 || left > 10 * 86400_000) return a;
     const cfg = this.cfg();
-    const r = await this.json(`${cfg.graph}/refresh_access_token?${new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: a.token })}`);
+    const r = await this.json(`${cfg.graph}/refresh_access_token?${new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: a.token })}`, {}, true);
     if (!r.access_token) return a;
     const next = { ...a, token: String(r.access_token), expiresAt: new Date(Date.now() + Number(r.expires_in ?? 5_184_000) * 1000).toISOString(), refreshedAt: new Date().toISOString() };
     this.save(next);
@@ -237,7 +238,9 @@ export class Instagram {
 
   /**
    * 릴스 게시 작업을 시작한다 (승인·중복 확인은 부르는 쪽에서 끝낸 뒤).
-   * media_publish는 자동으로 다시 시도하지 않는다 (같은 영상이 두 번 올라가는 것 방지).
+   * - 작업은 기다림 없이 바로 등록한다: 두 번 눌러도 하나만 진행된다.
+   * - 실제 게시 직전에 beforePublish()로 승인 상태를 다시 확인한다 (그사이 대본이 바뀌면 멈춤).
+   * - media_publish는 자동으로 다시 시도하지 않는다. 응답이 불확실하면 컨테이너 상태로 실제 게시 여부를 확인한다.
    */
   async startReel(input: {
     projectId: number;
@@ -245,52 +248,82 @@ export class Instagram {
     videoFile: string;
     caption: string;
     publicOrigin: string;
+    beforePublish: () => void;
     onPublished: (permalink: string) => void;
     onFailed?: (message: string) => void;
   }): Promise<IgJob> {
-    const cfg = this.cfg();
-    const status = await this.status();
-    if (!status.connected) throw new HttpError(409, status.problem || '인스타그램 계정을 먼저 연결해 주세요.');
-    const a = this.account()!;
-    if (!fs.existsSync(input.videoFile)) throw new HttpError(404, '영상 파일을 찾을 수 없어요. 영상을 다시 만들어 주세요.');
+    if (activeIgJob(input.projectId)) throw new HttpError(409, '이미 올리고 있어요. 끝날 때까지 기다려 주세요.');
     const job: IgJob = { id: crypto.randomUUID(), projectId: input.projectId, renderId: input.renderId, status: 'uploading', message: '인스타그램에 영상을 보내는 중', permalink: '', startedAt: new Date().toISOString() };
     jobs.set(job.id, job);
+    let a: Account;
+    let cfg: IgConfig;
+    try {
+      cfg = this.cfg();
+      const status = await this.status();
+      if (!status.connected) throw new HttpError(409, status.problem || '인스타그램 계정을 먼저 연결해 주세요.');
+      const acc = this.account();
+      if (!acc) throw new HttpError(409, '인스타그램 계정을 먼저 연결해 주세요.');
+      a = acc;
+      if (!fs.existsSync(input.videoFile)) throw new HttpError(404, '영상 파일을 찾을 수 없어요. 영상을 다시 만들어 주세요.');
+    } catch (e) {
+      jobs.delete(job.id);
+      throw e;
+    }
     const link = issuePublicLink(input.videoFile);
     const auth = { authorization: `Bearer ${a.token}`, 'content-type': 'application/json' };
     const api = (p: string) => `${cfg.graph}/${cfg.version}/${p}`;
     const pollMs = Number(process.env.IG_POLL_MS) || 30_000;
     const tries = Number(process.env.IG_POLL_TRIES) || 10;
     const set = (s: IgJobStatus, message: string) => Object.assign(job, { status: s, message });
+    const published = (permalink: string, message = '게시했어요') => {
+      job.permalink = permalink;
+      set('published', message);
+      // 기록이 실패해도 '게시됨' 상태는 바꾸지 않는다 (다시 올리는 일을 막기 위해)
+      try {
+        input.onPublished(permalink);
+      } catch (e) {
+        job.message = `게시는 됐지만 기록하지 못했어요: ${(e as Error).message}. 게시 이력에 주소를 직접 기록해 주세요.`;
+      }
+    };
 
     void (async () => {
       let containerId = '';
+      let publishing = false;
       try {
         const created = await this.json(api(`${a.igUserId}/media`), {
           method: 'POST',
           headers: auth,
           body: JSON.stringify({ media_type: 'REELS', video_url: `${input.publicOrigin}/public/reels/${link}.mp4`, caption: input.caption, share_to_feed: true }),
-        });
+        }, true);
         containerId = String(created.id ?? '');
         if (!containerId) throw new Error('인스타그램이 업로드 번호를 주지 않았어요.');
         set('processing', '인스타그램이 영상을 처리하는 중 (보통 1~3분)');
         let code = 'IN_PROGRESS';
         for (let i = 0; i < tries && code === 'IN_PROGRESS'; i++) {
           await new Promise((r) => setTimeout(r, pollMs));
-          const st = await this.json(`${api(containerId)}?fields=status_code,status`, { headers: auth });
+          const st = await this.json(`${api(containerId)}?fields=status_code,status`, { headers: auth }, true);
           code = String(st.status_code ?? 'IN_PROGRESS');
           if (code === 'ERROR' || code === 'EXPIRED') throw new Error(`인스타그램이 영상을 처리하지 못했어요 (${code}${st.status ? `: ${String(st.status)}` : ''}).`);
         }
         if (code !== 'FINISHED') throw new Error('인스타그램 처리가 오래 걸려요. 몇 분 뒤 인스타그램 앱에서 올라갔는지 확인하고, 안 올라갔으면 다시 시도해 주세요.');
+        // 처리를 기다리는 동안 대본이 바뀌었거나 승인이 풀렸으면 올리지 않는다
+        input.beforePublish();
         set('publishing', '게시하는 중');
-        const pub = await this.json(api(`${a.igUserId}/media_publish`), { method: 'POST', headers: auth, body: JSON.stringify({ creation_id: containerId }) });
+        publishing = true;
+        const pub = await this.json(api(`${a.igUserId}/media_publish`), { method: 'POST', headers: auth, body: JSON.stringify({ creation_id: containerId }) }, true);
         const mediaId = String(pub.id ?? '');
-        const info = mediaId ? await this.json(`${api(mediaId)}?fields=permalink`, { headers: auth }).catch(() => ({}) as Record<string, unknown>) : {};
-        const permalink = String((info as Record<string, unknown>).permalink ?? '');
-        job.permalink = permalink;
-        set('published', '게시했어요');
-        input.onPublished(permalink);
+        const info = mediaId ? await this.json(`${api(mediaId)}?fields=permalink`, { headers: auth }, true).catch(() => ({}) as Record<string, unknown>) : {};
+        published(String((info as Record<string, unknown>).permalink ?? ''));
       } catch (e) {
         const message = (e as Error).message || '인스타그램 게시에 실패했어요.';
+        // 게시 요청이 끝을 모르게 실패했으면, 실제로 올라갔는지 먼저 확인한다 (두 번 올리지 않게)
+        if (publishing && containerId) {
+          const st = await this.json(`${api(containerId)}?fields=status_code`, { headers: auth }, true).catch(() => null);
+          if (st?.status_code === 'PUBLISHED') {
+            published('', '게시됐어요. 릴스 주소는 인스타그램 앱에서 확인해 게시 이력에 기록해 주세요.');
+            return;
+          }
+        }
         set('failed', message);
         input.onFailed?.(message);
       } finally {
@@ -300,14 +333,17 @@ export class Instagram {
     return job;
   }
 
-  /** Meta API 호출: 오류는 쉬운 문장으로 바꾼다 (토큰은 메시지에 넣지 않는다) */
-  private async json(url: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  /**
+   * Meta API 호출: 오류는 쉬운 문장으로 바꾼다 (토큰은 메시지에 넣지 않는다).
+   * stored=true(저장된 토큰을 쓰는 호출)일 때만, 토큰이 무효하면 연결을 지운다.
+   */
+  private async json(url: string, init: RequestInit = {}, stored = false): Promise<Record<string, unknown>> {
     const res = await this.http(url, { ...init, signal: AbortSignal.timeout(60_000) });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
       const err = (body.error ?? {}) as Record<string, unknown>;
       const msg = String(err.message ?? body.error_message ?? `HTTP ${res.status}`);
-      if (res.status === 401 || err.code === 190) {
+      if (stored && (res.status === 401 || err.code === 190)) {
         this.disconnect();
         throw new HttpError(409, '인스타그램 연결이 끊겼어요. 다시 연결해 주세요.');
       }

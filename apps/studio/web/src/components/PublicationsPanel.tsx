@@ -45,7 +45,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>인스타그램 릴스</h2>
-        <InstagramPublish renderId={render?.id ?? null} approved={approved} onPublished={reload} />
+        <InstagramPublish key={render?.id ?? "none"} renderId={render?.id ?? null} approved={approved} onPublished={reload} />
         <div className="muted small">인스타그램 앱에서 직접 올렸다면 게시물 주소를 기록해 주세요.</div>
         <div className="row">
           <input type="url" placeholder="https://www.instagram.com/reel/…" value={urls.instagram ?? ''} onChange={(e) => setUrls({ ...urls, instagram: e.target.value })} style={{ flex: 1 }} disabled={!approved} />

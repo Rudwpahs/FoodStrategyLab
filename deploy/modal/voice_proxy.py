@@ -22,6 +22,19 @@ from typing import Callable
 Call = Callable[[str, str, dict, bytes], tuple]
 
 CACHEABLE = ("/engines/tts", "/profiles")
+# 상업 이용 가능한 엔진 (apps/studio/server/voicestudio.ts 의 COMMERCIAL_ENGINES 와 같게)
+COMMERCIAL_ENGINES = ("voxcpm2", "moss-tts-nano", "confucius4-tts", "gpt-sovits")
+
+
+def _worth_caching(path: str, body: bytes) -> bool:
+    """엔진 목록은 상업 엔진이 준비됐을 때만 기억한다 (아직 준비 전 답을 영원히 기억하지 않게)."""
+    if path != "/engines/tts":
+        return True
+    try:
+        data = json.loads(body)
+        return any(b.get("id") in COMMERCIAL_ENGINES and b.get("available") for b in data.get("backends", []))
+    except (ValueError, AttributeError, TypeError):
+        return False
 PASS_HEADERS = ("content-type", "authorization", "accept")
 RETURN_HEADERS = ("content-type", "content-disposition")
 
@@ -126,7 +139,7 @@ def make_handler(call: Call, cache_file: str):
                 status, rh, out = call(method, path, headers, body)
             except Exception as e:  # GPU 컨테이너 오류: 스튜디오가 쉬운 문장으로 보여 준다
                 return self._json(502, {"detail": f"VoiceStudio(클라우드 GPU) 오류: {e}"})
-            if key and status == 200:
+            if key and status == 200 and _worth_caching(key, out):
                 cache.put(key, rh.get("content-type", "application/json"), out)
             if method != "GET" and path.startswith("/profiles") and 200 <= status < 300:
                 cache.drop("/profiles")

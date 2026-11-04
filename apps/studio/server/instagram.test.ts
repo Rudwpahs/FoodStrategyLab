@@ -219,6 +219,28 @@ describe('인스타그램 릴스 게시 (가짜 Meta 서버)', () => {
     expect(meta.published).toBe(1);
   });
 
+  it('설명 글에 원본에 없는 분량을 넣으면 올릴 수 없다', async () => {
+    const { renderId } = await approvedProject();
+    const r = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption: '오늘은 설탕 999g을 넣었어요 #요리' });
+    expect(r.status).toBe(409);
+    expect(r.text).toContain('999g');
+  });
+
+  it('인스타그램이 처리하는 동안 대본이 바뀌면(승인 풀림) 게시하지 않는다', async () => {
+    const { pid, renderId } = await approvedProject();
+    meta.containerStatus = ['IN_PROGRESS', 'IN_PROGRESS', 'FINISHED'];
+    const before = meta.published;
+    const started = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption: '맛 연구소 실험 #요리' });
+    expect(started.status).toBe(202);
+    // 처리 중에 새 대본 버전을 만든다 → 승인이 풀린다
+    await call('POST', `/projects/${pid}/script/template`);
+    const done = await waitJob(String(started.json.id));
+    expect(done.status).toBe('failed');
+    expect(String(done.message)).toContain('대본이 바뀌었어요');
+    expect(meta.published).toBe(before);
+    expect(repo.listPublications(pid)).toHaveLength(0);
+  });
+
   it('인스타그램이 처리에 실패하면 게시하지 않고 실패로 알린다', async () => {
     const { pid, renderId } = await approvedProject();
     meta.containerStatus = ['IN_PROGRESS', 'ERROR'];

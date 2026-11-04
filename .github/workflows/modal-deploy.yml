@@ -100,8 +100,8 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$code" != 200 ]; then
-            echo "::group::Modal 서버 로그 (최근 200줄)"
-            modal app logs matlab-studio --tail 200 --timestamps || true
+            echo "::group::Modal 서버 오류 로그 (최근 150줄)"
+            modal app logs matlab-studio --source stderr --tail 150 --timestamps || true
             echo "::endgroup::"
             exit 1
           fi

@@ -53,6 +53,8 @@ APT_CHROME = (
 IGNORE = [
     "node_modules", "**/node_modules", ".git", "data", "out", "tmp", "apps/android",
     "apps/studio/dist", "**/__pycache__", "**/*.log",
+    # 비밀값이 이미지에 들어가지 않게
+    ".env", "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/local.properties",
 ]
 
 web_image = (
@@ -137,9 +139,26 @@ class Voice:
             time.sleep(3)
 
     def _save(self) -> None:
+        """목소리 프로필 등을 저장소로 복사한다. SQLite 파일은 쓰는 중이어도 일관되게 복사(백업 API)."""
         import shutil
+        import sqlite3
 
-        shutil.copytree(VS_LOCAL_DATA, VS_SAVED_DATA, dirs_exist_ok=True)
+        db_like = (".db", ".sqlite", ".sqlite3")
+        shutil.copytree(
+            VS_LOCAL_DATA,
+            VS_SAVED_DATA,
+            dirs_exist_ok=True,
+            ignore=lambda _d, names: [n for n in names if n.endswith(db_like) or n.endswith(("-wal", "-shm", "-journal"))],
+        )
+        for root, _dirs, files in os.walk(VS_LOCAL_DATA):
+            for name in files:
+                if not name.endswith(db_like):
+                    continue
+                src = os.path.join(root, name)
+                dst = os.path.join(VS_SAVED_DATA, os.path.relpath(src, VS_LOCAL_DATA))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with sqlite3.connect(src) as a, sqlite3.connect(dst) as b:
+                    a.backup(b)
         voice_volume.commit()
 
     @modal.method()
@@ -181,12 +200,15 @@ def _health(base: str) -> str:
 STUDIO_PORT = 5178
 VOICE_PROXY_PORT = 3901
 LOCAL_DB = "/root/matlab-db/studio.db"
+DB_LEASE = "/data/studio.db.lease"
+TSX = "/app/node_modules/.bin/tsx"
 
 
-def _studio_env(public_url: str | None) -> dict:
+def _studio_env(public_url: str | None, instance: str) -> dict:
     env = dict(os.environ)
     env.update(
         {
+            "MATLAB_INSTANCE": instance,
             "MATLAB_DATA_DIR": "/data",
             "MATLAB_DB_FILE": LOCAL_DB,
             "PORT": str(STUDIO_PORT),
@@ -208,6 +230,27 @@ def _studio_env(public_url: str | None) -> dict:
     if public_url:
         env["PUBLIC_URL"] = public_url
     return env
+
+
+def _wait_previous_owner(instance: str, max_seconds: int = 120) -> None:
+    """다시 배포할 때: 이전 서버가 DB를 다 쓰고 손을 뗄 때까지(또는 표시가 20초 넘게 멈출 때까지) 기다린다."""
+    deadline = time.time() + max_seconds
+    while time.time() < deadline:
+        try:
+            data_volume.reload()
+        except Exception as e:  # 처음에는 열린 파일이 없어 보통 성공한다
+            print(f"저장소 새로고침 실패: {e}")
+        try:
+            with open(DB_LEASE, encoding="utf-8") as f:
+                lease = json.load(f)
+        except (OSError, ValueError):
+            return
+        age = time.time() * 1000 - float(lease.get("ts", 0))
+        if lease.get("released") or lease.get("owner") == instance or age > 20_000:
+            return
+        print("이전 서버가 DB를 정리하는 중이라 기다려요…")
+        time.sleep(3)
+    print("이전 서버를 기다리다 시간이 지나 그대로 시작해요.")
 
 
 def _wait_http(url: str, seconds: int) -> bool:
@@ -233,7 +276,7 @@ def _setup_voice(env: dict, public_url: str | None) -> None:
     """처음 한 번: '맛조수' 목소리를 만든다 (tools/setup/voice.ts). 그동안 서버가 잠들지 않게 스스로 부른다."""
     if not _wait_http(f"http://127.0.0.1:{STUDIO_PORT}/api/health", 180) or _voice_ready():
         return
-    proc = subprocess.Popen(["npx", "tsx", "tools/setup/voice.ts"], cwd="/app", env=env)
+    proc = subprocess.Popen([TSX, "tools/setup/voice.ts"], cwd="/app", env=env)
     while proc.poll() is None:
         if public_url:
             try:
@@ -255,23 +298,43 @@ def _setup_voice(env: dict, public_url: str | None) -> None:
     timeout=600,
 )
 @modal.concurrent(max_inputs=100)
-@modal.web_server(STUDIO_PORT, startup_timeout=180)
+@modal.web_server(STUDIO_PORT, startup_timeout=300)
 def web() -> None:
+    import atexit
     import sys
+    import uuid
 
     sys.path.insert(0, "/app/deploy/modal")
     from voice_proxy import serve
 
-    public_url = None
-    try:
-        public_url = web.get_web_url()
-    except Exception:
-        pass
+    instance = uuid.uuid4().hex
+    public_url = os.environ.get("PUBLIC_URL") or None
+    if not public_url:
+        try:
+            public_url = web.get_web_url()
+        except Exception as e:
+            print(f"⚠️ 공개 주소를 알아내지 못했어요 ({e}). 요청 헤더로 짐작합니다. Modal 비밀값 PUBLIC_URL로 정할 수 있어요.")
+    _wait_previous_owner(instance)
 
     def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
         return Voice().request.remote(method, path, headers, body)
 
     serve(VOICE_PROXY_PORT, call_voice, f"/data/voice-meta-{VS_COMMIT[:8]}.json")
-    env = _studio_env(public_url)
-    subprocess.Popen(["npx", "tsx", "server/index.ts", "--production"], cwd="/app/apps/studio", env=env)
+    env = _studio_env(public_url, instance)
+    # npx를 거치지 않고 tsx를 바로 실행한다 (끌 때 신호가 스튜디오까지 전달되게)
+    node = subprocess.Popen([TSX, "server/index.ts", "--production"], cwd="/app/apps/studio", env=env)
+
+    def _shutdown() -> None:
+        # 서버가 꺼질 때: 스튜디오에 마지막 DB 복사를 맡기고 저장소에 확정한다
+        try:
+            node.terminate()
+            node.wait(timeout=20)
+        except Exception:
+            pass
+        try:
+            data_volume.commit()
+        except Exception as e:
+            print(f"저장소 확정 실패: {e}")
+
+    atexit.register(_shutdown)
     threading.Thread(target=_setup_voice, args=(env, public_url), daemon=True).start()
