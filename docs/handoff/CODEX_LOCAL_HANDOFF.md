@@ -12,9 +12,10 @@
 
 | 항목 | 상태 | 근거 |
 | --- | --- | --- |
-| 테스트 136개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck` |
+| 테스트 149개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck` |
 | Modal 배포 코드 | 작성·로컬 검증 | `deploy/modal/app.py`, `voice_proxy.py`, `.github/workflows/modal-deploy.yml`, 안내 `docs/MODAL_SETUP.md`. 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정 스튜디오로 첫 계정·목소리 준비·영상 제작 확인 |
-| **Modal 실제 배포** | ❌ 미확인 (계정 없음) | 이미지 빌드, GPU에서 VoxCPM2, 공개 주소 헤더(Host/X-Forwarded-*), 제작 중 깨워 두기 |
+| Modal 실제 배포 | ✅ 배포·응답 확인 (2026-11-05, Actions #4) | `https://rudwpahs--matlab-studio-web.modal.run`, 첫 계정 화면까지. **첫 계정·GPU 목소리·영상 1편·제작 중 깨워 두기는 미확인** |
+| 인스타그램 공식 게시 | 구현·모의 검증 | `docs/INSTAGRAM_SETUP.md`. 실제 연결·게시는 Meta 앱과 사용자 확인이 필요 |
 | 로그인·세션·잠금·출처 검사 | 구현·테스트됨 | `apps/studio/server/auth.ts`, `auth.test.ts`, `app.test.ts` |
 | 후보 3개 → 선택 → 검토용 렌더 → 블로그 2안 → 승인 → 게시 기록 | 구현·화면 확인 | `docs/studio-2.0/USER_FLOW.md` |
 | 로그인 상태 실제 렌더 (목소리 포함) | 클라우드 x64에서 확인 | 39.4초 MP4, 8장면 모두 음성, 승인 전 문구 없음 (`docs/research/content-strategy/implementation-status.md` §7) |

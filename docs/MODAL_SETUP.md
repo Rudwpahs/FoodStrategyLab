@@ -80,4 +80,6 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 - DB: 컨테이너 디스크(`/root/matlab-db/studio.db`)에서 쓰고 5초마다 `/data/studio.db`로 복사(`apps/studio/server/dbSnapshot.ts`). 새 컨테이너는 복사본에서 시작.
 - 제작 중 깨워 두기: `KEEPALIVE=1`이면 제작하는 동안 1분마다 공개 주소의 `/api/health`를 부른다.
 - 첫 계정: `STUDIO_SETUP_CODE`가 있고 계정이 없으면 화면에서 만들기(`POST /api/auth/setup`), 틀리면 로그인 실패처럼 횟수 제한.
-- 로컬 검증(2026-11-04): 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정의 스튜디오로 첫 계정 만들기·목소리 준비·영상 제작까지 확인. **Modal 실제 배포는 계정이 없어 시험하지 못함**(이미지 빌드·GPU에서의 VoxCPM2·공개 주소 헤더는 첫 배포 때 확인 필요).
+- 로컬 검증(2026-11-04): 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정의 스튜디오로 첫 계정 만들기·목소리 준비·43초 음성 영상 제작까지 확인.
+- 실제 배포(2026-11-05): Actions #4 성공. `https://rudwpahs--matlab-studio-web.modal.run` 응답(잠에서 깨는 데 약 12초), 공개 주소 인식, 휴대폰 폭에서 첫 계정 화면 확인. 첫 계정·GPU 목소리 준비·영상 1편은 아직 확인 전.
+- 다시 배포할 때 DB: 새 서버는 이전 서버의 임대 표시(`/data/studio.db.lease`)가 풀릴 때까지 최대 2분 기다렸다 이어받는다.
