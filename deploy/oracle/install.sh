@@ -98,7 +98,11 @@ cd "$APP_DIR"
 npm ci --no-audit --no-fund --loglevel=error
 (cd apps/studio && npx vite build --config vite.config.ts --logLevel error)
 # 영상 렌더용 크롬(Headless Shell)을 미리 받아 둔다 (ARM 서버 포함)
-node -e "require('@remotion/renderer').ensureBrowser().then(() => console.log('  렌더용 크롬 준비 완료'))"
+for try in 1 2 3; do
+  if node -e "require('@remotion/renderer').ensureBrowser().then(() => console.log('  렌더용 크롬 준비 완료'))"; then break; fi
+  [ "$try" = 3 ] && { echo "렌더용 크롬을 내려받지 못했어요. 인터넷 연결을 확인하고 다시 실행해 주세요."; exit 1; }
+  sleep 10
+done
 ok "스튜디오 $(git -C "$APP_DIR" rev-parse --short HEAD)"
 
 # ───────────────────────── 5. VoiceStudio + VoxCPM2 (맛조수 목소리) ─────────────────────────
@@ -108,10 +112,8 @@ VOICE_OK=1
   if [ ! -d "$VS_DIR/.git" ]; then git clone -q "$VS_REPO" "$VS_DIR"; fi
   git -C "$VS_DIR" fetch -q origin && git -C "$VS_DIR" checkout -q "$VS_COMMIT"
   cd "$VS_DIR"
-  GROUP=""
-  [ "$ARCH" = x86_64 ] && GROUP="--group cpu"
-  # shellcheck disable=SC2086
-  "$UV" sync --frozen --no-dev --managed-python --python 3.11 $GROUP
+  # 기본 묶음(GPU용 cuda)은 끄고 CPU용 묶음만 설치 (그래픽카드 없는 서버, ARM 포함)
+  "$UV" sync --frozen --no-default-groups --group cpu --managed-python --python 3.11
   "$UV" pip install --python .venv/bin/python -q "voxcpm>=2.0.3"
   .venv/bin/python -c "import torch, voxcpm; print('  torch', torch.__version__)"
 } || VOICE_OK=0
@@ -130,6 +132,8 @@ REMOTION_GL=swangle
 VOICESTUDIO_URL=http://127.0.0.1:3900
 VOICESTUDIO_TIMEOUT_MS=3600000
 NODE_OPTIONS=--max-old-space-size=4096
+# node:sqlite '실험 기능' 안내 문구가 화면·로그를 어지럽히지 않게
+NODE_NO_WARNINGS=1
 EOF
 sudo chmod 644 "$ENV_FILE"
 ok "$ENV_FILE"
@@ -145,7 +149,7 @@ if [ "${USERS:-0}" -gt 0 ]; then
   ok "계정이 이미 있어요 (${USERS}개). 비밀번호를 바꾸려면: matlab-user $STUDIO_USER --reset"
 else
   echo "  '$STUDIO_NAME'($STUDIO_USER) 계정을 만들어요. 비밀번호를 10자 이상으로 두 번 입력하세요 (화면에 안 보여요)."
-  (cd apps/studio && npx tsx server/addUser.ts "$STUDIO_USER" "$STUDIO_NAME" </dev/tty)
+  (cd apps/studio && NODE_NO_WARNINGS=1 npx tsx server/addUser.ts "$STUDIO_USER" "$STUDIO_NAME" </dev/tty)
 fi
 
 # ───────────────────────── 8. 자동 실행 서비스 ─────────────────────────
@@ -198,6 +202,8 @@ User=$RUN_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 ExecStart=/usr/bin/npx tsx tools/setup/voice.ts
+# 처음에는 모델 내려받기와 목소리 만들기로 1시간 넘게 걸릴 수 있다
+TimeoutStartSec=infinity
 Restart=on-failure
 RestartSec=120
 
