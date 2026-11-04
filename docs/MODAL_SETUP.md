@@ -34,7 +34,9 @@ Modal → **Settings → Usage & Billing** → **Spend limit**을 `0`으로 저�
 
 ## 4. 배포 버튼 누르기
 
-GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜치 선택(`main`, 또는 아직 병합 전이면 `content-research`) → **Run workflow**
+GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜치 `main` → **Run workflow**
+
+(이 버튼은 Modal 배포 기능이 `main`에 합쳐진 뒤에 보입니다. 비밀값을 넣은 뒤 `main`에 새 내용이 들어가도 자동으로 배포됩니다.)
 
 - 처음에는 **20~40분** 걸립니다(서버 이미지 만들기). 다음부터는 몇 분.
 - 끝나면 실행 화면 맨 아래 **Summary**에 **스튜디오 주소**가 나옵니다. 적어 두세요.
