@@ -1,0 +1,32 @@
+name: Modal logs
+
+# 진단용: Modal 서버의 최근 상태·오류 기록을 보여 준다 (버튼으로 실행).
+# 공개 저장소이므로 시스템 기록과 오류(stderr)만, 한 줄 300자까지만 보여 준다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: '최근 몇 줄'
+        required: false
+        default: '200'
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      LINES: ${{ github.event.inputs.lines }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q modal==1.6.3
+      - name: 실행 중인 컨테이너
+        run: modal container list || true
+      - name: 시스템 기록 (컨테이너 시작·종료·메모리)
+        run: modal app logs matlab-studio --source system --tail "${LINES:-200}" --timestamps --show-function-id 2>&1 | cut -c1-300 || true
+      - name: 오류 기록 (stderr)
+        run: modal app logs matlab-studio --source stderr --tail "${LINES:-200}" --timestamps --show-function-id 2>&1 | cut -c1-300 || true
