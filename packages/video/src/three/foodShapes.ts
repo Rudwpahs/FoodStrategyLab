@@ -31,7 +31,7 @@ function bumps(x: number, y: number, z: number, k: number, seed: number): number
 }
 
 /** 이음매를 붙이고(매끈한 음영) 각 꼭짓점을 옮긴 뒤 법선을 다시 계산 */
-function deform(g: BufferGeometry, fn: (v: Vector3) => void): BufferGeometry {
+export function deform(g: BufferGeometry, fn: (v: Vector3) => void): BufferGeometry {
   g.deleteAttribute('normal');
   g.deleteAttribute('uv');
   const m = mergeVertices(g);

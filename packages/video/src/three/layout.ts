@@ -26,5 +26,6 @@ export function propPositions(count: number): Vec3[] {
 
 /** 캐릭터가 접시를 들고 보여줄 때 접시 위치 */
 export function handPlate(facing: number): Vec3 {
-  return [CHEF_POS[0] + Math.sin(facing) * 0.42, CHEF_POS[1] + 0.3, CHEF_POS[2] + Math.cos(facing) * 0.42];
+  // 몸 앞 낮게 (그릇이 얼굴을 가리지 않도록)
+  return [CHEF_POS[0] + Math.sin(facing) * 0.4, CHEF_POS[1] + 0.17, CHEF_POS[2] + Math.cos(facing) * 0.4];
 }

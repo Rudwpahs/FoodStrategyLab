@@ -90,3 +90,17 @@ describe('긴 장면은 약 3초마다 다른 각도', () => {
     expect(b.progress).toBeLessThan(0.2);
   });
 });
+
+describe('맛조수 눈 깜빡임', () => {
+  it('대부분 뜬 눈이고, 깜빡이는 간격이 매번 같지 않다', async () => {
+    const { eyeOpenness } = await import('./Chef3D.tsx');
+    const frames = Array.from({ length: 900 }, (_, f) => eyeOpenness(f));
+    expect(frames.every((v) => v >= 0.06 && v <= 1)).toBe(true);
+    expect(frames.filter((v) => v === 1).length / frames.length).toBeGreaterThan(0.85);
+    // 완전히 감는 순간들의 간격
+    const closed = frames.map((v, f) => (v < 0.1 ? f : -1)).filter((f) => f >= 0);
+    const gaps = new Set(closed.slice(1).map((f, i) => f - closed[i]!).filter((g) => g > 20));
+    expect(closed.length).toBeGreaterThan(5);
+    expect(gaps.size).toBeGreaterThan(2);
+  });
+});
