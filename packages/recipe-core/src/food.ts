@@ -42,8 +42,8 @@ const KIND_RULES: { kind: FoodKind; words: string[] }[] = [
   { kind: 'greens', words: ['나물', '시금치', '데치', '데친', '무침', '샐러드', '겉절이'] },
   { kind: 'stirfry', words: ['볶음', '볶아', '볶는', '볶은', '정과', '강정', '튀김', '튀겨', '튀길'] },
 ];
-/** 종류 판단을 헷갈리게 하는 단어 (설탕의 '탕', 국간장의 '국' 등) */
-const KIND_NOISE = /설탕|국간장|국자|면수|전체|전자레인지/g;
+/** 종류 판단을 헷갈리게 하는 단어 (설탕의 '탕', 국간장의 '국', 청국장의 '국' 등) */
+const KIND_NOISE = /설탕|국간장|국자|면수|전체|전자레인지|청국장|국물/g;
 
 /** 재료 단어 → 대표 색 (건더기·국물 색에 사용) */
 const COLOR_WORDS: { words: string[]; color: string }[] = [
@@ -67,8 +67,30 @@ function includesAny(text: string, words: string[]): boolean {
   return words.some((w) => text.includes(w));
 }
 
+/**
+ * 요리 이름에서 종류 찾기. 한국 음식 이름은 맨 뒤 말이 종류다
+ * (청국장덮밥 → 덮밥, 김치찌개 → 찌개, 잔치국수 → 국수). 그래서 이름 끝에 가장 가까운 말로 정한다.
+ */
+function kindByHead(name: string): FoodKind | null {
+  let best: { kind: FoodKind; end: number; len: number } | null = null;
+  for (const rule of KIND_RULES) {
+    for (const w of rule.words) {
+      const at = name.lastIndexOf(w);
+      if (at < 0) continue;
+      const end = at + w.length;
+      if (!best || end > best.end || (end === best.end && w.length > best.len)) best = { kind: rule.kind, end, len: w.length };
+    }
+  }
+  return best?.kind ?? null;
+}
+
 /** 요리 이름을 가장 먼저 보고, 없으면 재료·순서에서 찾는다. */
 export function inferFoodKind(recipe: Pick<RecipeInput, 'dishName' | 'topic' | 'ingredients' | 'steps'>): FoodKind {
+  // 요리 이름(띄어쓰기 앞 첫 덩어리 기준)을 먼저, 그다음 주제 문장
+  for (const text of [recipe.dishName, recipe.topic]) {
+    const kind = kindByHead(text.replace(KIND_NOISE, '').split(/[\s,.!?]/).filter(Boolean)[0] ?? '');
+    if (kind) return kind;
+  }
   const name = `${recipe.dishName} ${recipe.topic}`.replace(KIND_NOISE, '');
   for (const rule of KIND_RULES) if (includesAny(name, rule.words)) return rule.kind;
   const rest = [...recipe.ingredients.map((i) => i.name), ...recipe.steps].join(' ').replace(KIND_NOISE, '');

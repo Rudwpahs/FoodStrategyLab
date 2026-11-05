@@ -12,6 +12,8 @@ export const SpeechAudio: React.FC<{ timing: SceneTiming }> = ({ timing }) => {
       src={timing.audioUrl}
       trimBefore={trim || undefined}
       trimAfter={trim + end + 2}
+      // 브라우저 미리보기에서 소리를 아직 받는 중이면 화면도 잠시 멈춘다 (소리가 늦게 시작해 장면 끝에서 잘리는 것 방지)
+      pauseWhenBuffering
       volume={(f) => interpolate(f, [0, 1, end - 1, end + 1], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}
     />
   );

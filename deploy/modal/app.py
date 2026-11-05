@@ -88,6 +88,8 @@ voice_image = (
         f"cd {VS_DIR} && .venv/bin/python -c \"import torch, voxcpm; print('torch', torch.__version__)\"",
     )
     .add_local_file(Path(__file__).parent / "voice_proxy.py", "/root/voice_proxy.py", copy=True)
+    # 맛조수 기준 녹음: GPU마다 이 녹음으로 같은 목소리를 만든다
+    .add_local_file(REPO_ROOT / "tools/setup/matjosu-reference.wav", "/root/matjosu-reference.wav", copy=True)
     .env(
         {
             "OMNIVOICE_DEVICE": "cuda",
@@ -102,6 +104,8 @@ voice_image = (
 )
 
 VS_LOCAL_DATA = "/root/vsdata"
+# apps/studio/server/voicestudio.ts 의 MASCOT_REFERENCE_TEXT 와 같게
+MASCOT_REFERENCE_TEXT = "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
 VS_SAVED_DATA = "/voice/data"
 VS_PORT = 3900
 
@@ -139,6 +143,15 @@ class Voice:
             if time.time() > deadline:
                 raise RuntimeError("VoiceStudio가 준비되지 않았어요 (모델 불러오기 시간 초과)")
             time.sleep(3)
+        # 기준 녹음으로 맛조수 목소리 준비 (이미 있으면 그대로)
+        import sys
+
+        sys.path.insert(0, "/root")
+        from voice_proxy import ensure_reference_profile
+
+        with open("/root/matjosu-reference.wav", "rb") as f:
+            name = ensure_reference_profile(f"http://127.0.0.1:{VS_PORT}", f.read(), MASCOT_REFERENCE_TEXT)
+        print(f"목소리 '{name}' 준비됨")
 
     def _save(self) -> None:
         """목소리 프로필 등을 저장소로 복사한다. SQLite 파일은 쓰는 중이어도 일관되게 복사(백업 API)."""
@@ -268,17 +281,10 @@ def _wait_http(url: str, seconds: int) -> bool:
     return False
 
 
-def _voice_ready() -> bool:
-    try:
-        with open("/data/settings.json", encoding="utf-8") as f:
-            return bool(json.load(f).get("voicestudioVoice"))
-    except (OSError, ValueError):
-        return False
-
-
 def _setup_voice(env: dict, public_url: str | None) -> None:
     """처음 한 번: '맛조수' 목소리를 만든다 (tools/setup/voice.ts). 그동안 서버가 잠들지 않게 스스로 부른다."""
-    if not _wait_http(f"http://127.0.0.1:{STUDIO_PORT}/api/health", 180) or _voice_ready():
+    # 서버가 켜질 때마다 실행한다 (이미 준비됐으면 몇 초 만에 끝남): 기준 녹음 목소리로 맞춘다
+    if not _wait_http(f"http://127.0.0.1:{STUDIO_PORT}/api/health", 180):
         return
     proc = subprocess.Popen([TSX, "tools/setup/voice.ts"], cwd="/app", env=env)
     while proc.poll() is None:
@@ -323,7 +329,12 @@ def web() -> None:
     def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
         return Voice().request.remote(method, path, headers, body)
 
-    serve(VOICE_PROXY_PORT, call_voice, f"/data/voice-meta-{VS_COMMIT[:8]}.json")
+    # 기준 녹음이 바뀌면 엔진·목소리 목록 기억도 새로 (파일 이름에 녹음 지문)
+    import hashlib
+
+    with open("/app/tools/setup/matjosu-reference.wav", "rb") as f:
+        ref_tag = hashlib.sha1(f.read()).hexdigest()[:6]
+    serve(VOICE_PROXY_PORT, call_voice, f"/data/voice-meta-{VS_COMMIT[:8]}-{ref_tag}.json")
     env = _studio_env(public_url, instance)
     # npx를 거치지 않고 tsx를 바로 실행한다 (끌 때 신호가 스튜디오까지 전달되게)
     node = subprocess.Popen([TSX, "server/index.ts", "--production"], cwd="/app/apps/studio", env=env)

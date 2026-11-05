@@ -10,6 +10,16 @@ describe('3D 음식 표현 규칙', () => {
     expect(inferFoodKind(egg)).toBe('egg');
     expect(inferFoodKind({ dishName: '된장찌개', topic: '', ingredients: [], steps: [] })).toBe('soup');
     expect(inferFoodKind({ dishName: '잔치국수', topic: '', ingredients: [], steps: [] })).toBe('noodles');
+    // 이름 맨 뒤 말이 종류: 청국장덮밥은 국이 아니라 덮밥
+    const dish = (dishName: string) => inferFoodKind({ dishName, topic: '', ingredients: [], steps: [] });
+    expect(dish('청국장덮밥')).toBe('rice');
+    expect(dish('청국장찌개')).toBe('soup');
+    expect(dish('김치볶음밥')).toBe('rice');
+    expect(dish('제육덮밥')).toBe('rice');
+    expect(dish('된장국')).toBe('soup');
+    expect(dish('해물파전')).toBe('pancake');
+    expect(dish('부대찌개')).toBe('soup');
+    expect(dish('비빔국수')).toBe('noodles');
     expect(inferFoodKind({ dishName: '', topic: '', ingredients: [], steps: ['재료를 센 불에 볶아 낸다'] })).toBe('stirfry');
   });
 

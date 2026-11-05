@@ -52,6 +52,40 @@ def forward(method: str, path: str, headers: dict, body: bytes, base: str, timeo
     return status, keep, out
 
 
+def reference_voice_name(wav: bytes) -> str:
+    """기준 녹음 → 목소리 이름 (Node의 mascotVoiceName과 같은 규칙: sha1 앞 6자)"""
+    import hashlib
+
+    return f"맛조수-{hashlib.sha1(wav).hexdigest()[:6]}"
+
+
+def ensure_reference_profile(base: str, wav: bytes, ref_text: str, timeout: float = 600) -> str:
+    """VoiceStudio에 기준 녹음 목소리가 없으면 만든다. 목소리 이름을 돌려준다.
+    GPU가 여러 대여도 각자 같은 녹음으로 만들므로 목소리가 같다."""
+    import json as _json
+    import uuid
+
+    name = reference_voice_name(wav)
+    with urllib.request.urlopen(f"{base}/profiles", timeout=timeout) as r:
+        if any(p.get("name") == name for p in _json.loads(r.read())):
+            return name
+    boundary = uuid.uuid4().hex
+    parts = []
+    for key, value in (("name", name), ("kind", "clone"), ("ref_text", ref_text), ("language", "Auto")):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+    parts.append(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="ref_audio"; filename="matjosu-reference.wav"\r\n'
+        f"Content-Type: audio/wav\r\n\r\n".encode() + wav + b"\r\n"
+    )
+    parts.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(
+        f"{base}/profiles", data=b"".join(parts), method="POST", headers={"content-type": f"multipart/form-data; boundary={boundary}"}
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        r.read()
+    return name
+
+
 class _MetaCache:
     """엔진·목소리 목록 응답을 파일에 기억한다."""
 
