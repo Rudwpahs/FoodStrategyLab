@@ -170,3 +170,87 @@ describe('VoiceStudio 음성', () => {
     expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, await voiceIdentity('edge'))).toBeNull();
   });
 });
+
+describe('VibeVoice (실험 엔진)', () => {
+  let vv: http.Server;
+  const vvRequests: { text: string; speaker: string }[] = [];
+  let vvDown = false;
+
+  beforeAll(async () => {
+    vv = http.createServer((req, res) => {
+      if (vvDown) {
+        req.socket.destroy();
+        return;
+      }
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        return res.end('{"status":"ok"}');
+      }
+      if (req.url === '/tts' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (d) => (body += d));
+        req.on('end', () => {
+          vvRequests.push(JSON.parse(body));
+          res.setHeader('content-type', 'audio/mpeg');
+          res.end(mp3);
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end();
+    });
+    vv.listen(0);
+    await new Promise((r) => vv.once('listening', r));
+    process.env.VIBEVOICE_URL = `http://127.0.0.1:${(vv.address() as AddressInfo).port}`;
+  });
+
+  afterAll(() => {
+    vv.close();
+    delete process.env.VIBEVOICE_URL;
+    writeVoiceSettings({ engine: 'voicestudio' });
+    resetTtsDetection();
+  });
+
+  it('설치돼 있어도 기본은 맛조수 목소리(VoiceStudio)다', async () => {
+    writeVoiceSettings({ engine: undefined });
+    resetTtsDetection();
+    expect(await ttsProvider()).toBe('voicestudio');
+  });
+
+  it('설정에서 고르면 VibeVoice로, 고른 목소리로 요청하고 캐시는 따로 둔다', async () => {
+    writeVoiceSettings({ engine: 'vibevoice', vibevoiceSpeaker: 'kr-man' });
+    resetTtsDetection();
+    expect(await ttsProvider()).toBe('vibevoice');
+    const a = await synthesize('VibeVoice 시험 문장', audioDir);
+    expect(a.seconds).toBeCloseTo(1.2, 5);
+    expect(vvRequests.at(-1)).toEqual({ text: 'VibeVoice 시험 문장', speaker: 'kr-man' });
+    // 같은 문장이라도 엔진·목소리가 다르면 다른 파일
+    const vsId = await voiceIdentity('voicestudio');
+    expect(cachedAudio('VibeVoice 시험 문장', audioDir, vsId)).toBeNull();
+    writeVoiceSettings({ vibevoiceSpeaker: 'kr-woman' });
+    const before = vvRequests.length;
+    await synthesize('VibeVoice 시험 문장', audioDir);
+    expect(vvRequests.length).toBe(before + 1);
+    expect(vvRequests.at(-1)?.speaker).toBe('kr-woman');
+  });
+
+  it('비교 듣기: 설정과 상관없이 고른 엔진으로 만든다', async () => {
+    writeVoiceSettings({ engine: 'vibevoice' });
+    resetTtsDetection();
+    const vsBefore = requests.length;
+    await synthesize('두 엔진 비교 문장', audioDir, { provider: 'voicestudio' });
+    expect(requests.length).toBe(vsBefore + 1);
+    expect(requests.at(-1)).toMatchObject({ model: 'voxcpm2', input: '두 엔진 비교 문장' });
+    await synthesize('두 엔진 비교 문장', audioDir, { provider: 'vibevoice', speaker: 'kr-man' });
+    expect(vvRequests.at(-1)).toEqual({ text: '두 엔진 비교 문장', speaker: 'kr-man' });
+  });
+
+  it('VibeVoice가 꺼져 있으면 몰래 다른 목소리로 바꾸지 않고 알린다', async () => {
+    writeVoiceSettings({ engine: 'vibevoice' });
+    resetTtsDetection();
+    vvDown = true;
+    await expect(ttsProvider()).rejects.toThrow(/VibeVoice/);
+    vvDown = false;
+    resetTtsDetection();
+  });
+});

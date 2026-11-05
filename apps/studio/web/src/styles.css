@@ -155,3 +155,12 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .source-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .source-thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--line); }
 .drop { border: 2px dashed var(--line); border-radius: 16px; padding: 22px; text-align: center; background: #fffdf9; cursor: pointer; }
+
+/* 목소리 엔진 고르기 · 비교 듣기 */
+.engine-options { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.engine-option { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1.5px solid var(--line, #e3ddd3); border-radius: 12px; cursor: pointer; }
+.engine-option.on { border-color: var(--red); background: rgba(232, 85, 58, 0.06); }
+.engine-option.disabled { opacity: 0.55; cursor: not-allowed; }
+.engine-option input { margin-top: 4px; }
+.compare-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.compare-cell { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: var(--cream); }

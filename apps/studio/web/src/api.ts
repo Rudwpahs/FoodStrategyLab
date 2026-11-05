@@ -39,7 +39,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 }
 
 export interface Meta {
-  tts: { provider: 'voicestudio' | 'edge' | 'none'; voice: string };
+  tts: { provider: 'voicestudio' | 'vibevoice' | 'edge' | 'none'; voice: string };
   samples: RecipeInput[];
 }
 
@@ -49,13 +49,26 @@ export interface RenderStatus extends RenderRow {
   baseUrl: string;
 }
 
+export type VoiceCompareResult = { url: string; seconds: number; tookSeconds: number } | { error: string };
+/** 같은 문장을 두 엔진으로 만들어 비교 듣기 */
+export interface VoiceCompare {
+  status: 'running' | 'done';
+  text: string;
+  speaker: string;
+  voxcpm: VoiceCompareResult | null;
+  vibevoice: VoiceCompareResult | null;
+}
+
 export interface VoiceInfo {
   voicestudio: { state: 'ok' | 'starting'; url: string; version: string } | { state: 'offline' };
   profiles: { id: string; name: string; kind: string; audioUrl: string | null }[];
   engines: { active: string; chosen: string | null; available: string[] } | null;
   selected: string;
-  provider: 'voicestudio' | 'edge' | 'none';
+  provider: 'voicestudio' | 'vibevoice' | 'edge' | 'none';
   describe: string;
+  /** 고른 음성 엔진: 맛조수 목소리(기본) 또는 VibeVoice(실험) */
+  engine: 'voicestudio' | 'vibevoice';
+  vibevoice: { configured: boolean; model: string; speakers: { id: string; label: string }[]; speaker: string };
 }
 
 export interface InstagramStatus {
@@ -97,6 +110,9 @@ export const api = {
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
   designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),
   voiceSample: (text?: string) => request<{ url: string; seconds: number }>('POST', '/voice/sample', { text }),
+  setVoiceEngine: (engine: 'voicestudio' | 'vibevoice', speaker?: string) => request<{ engine: string; speaker: string }>('PUT', '/voice/engine', { engine, speaker }),
+  startVoiceCompare: (text: string, speaker: string) => request<VoiceCompare>('POST', '/voice/compare', { text, speaker }),
+  voiceCompare: () => request<VoiceCompare | null>('GET', '/voice/compare'),
   meta: () => request<Meta>('GET', '/meta'),
   list: () => request<ProjectSummary[]>('GET', '/projects'),
   get: (id: number) => request<ProjectDetail>('GET', `/projects/${id}`),

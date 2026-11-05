@@ -5,6 +5,7 @@
           영상을 만들 때 CPU 8개·메모리 16GB까지 늘어난다 (쓴 만큼만 요금).
           요청이 20분 없으면 잠들고, 다음 접속 때 깨어난다.
 - Voice : 맛조수 목소리 엔진(VoiceStudio + VoxCPM2)을 GPU에서 돌린다. 목소리를 만들 때만 깨어난다.
+- VibeVoiceTTS : 실험용 음성 엔진(Microsoft VibeVoice-Realtime-0.5B). 설정에서 고르거나 '비교 듣기'를 할 때만 깨어난다.
 - 저장소 : matlab-data(레시피·영상·DB 복사본), matlab-voice(목소리 프로필·모델 파일)
 
 배포: GitHub Actions(.github/workflows/modal-deploy.yml)가 `modal deploy deploy/modal/app.py`를 실행한다.
@@ -102,6 +103,65 @@ voice_image = (
         }
     )
 )
+
+# ───────────── 실험용 음성 엔진: VibeVoice-Realtime-0.5B (MIT, 한국어는 실험 단계) ─────────────
+VV_REPO = "https://github.com/microsoft/VibeVoice.git"
+VV_COMMIT = "16fb2cb1217c9934a886e1948ffb06120caa2df5"  # deploy/vibevoice/engine.py 의 REPO_COMMIT 와 같게
+VV_DIR = "/opt/vibevoice"
+VV_GPU = os.environ.get("MATLAB_VIBEVOICE_GPU", "L4")
+
+vibevoice_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git", "ffmpeg")
+    .pip_install(
+        "torch==2.6.0", "transformers==4.51.3", "accelerate", "diffusers", "numpy", "scipy", "librosa",
+        "ml-collections", "absl-py", "huggingface_hub",
+    )
+    .run_commands(
+        f"git clone -q {VV_REPO} {VV_DIR} && git -C {VV_DIR} checkout -q {VV_COMMIT}",
+        f"pip install -q --no-deps -e {VV_DIR}",
+        # 모델 파일을 이미지에 넣어 깨어날 때 다시 받지 않는다
+        "python -c \"from huggingface_hub import snapshot_download as d; d('microsoft/VibeVoice-Realtime-0.5B'); d('Qwen/Qwen2.5-0.5B', allow_patterns=['*.json', '*.txt', 'merges.txt', 'vocab.json'])\"",
+    )
+    .add_local_file(REPO_ROOT / "deploy/vibevoice/engine.py", "/root/vibevoice_engine.py", copy=True)
+    .env({"TZ": "Asia/Seoul", "HF_HUB_OFFLINE": "1"})
+)
+
+
+@app.cls(
+    image=vibevoice_image,
+    gpu=VV_GPU,
+    max_containers=1,
+    scaledown_window=240,  # 마지막 요청 4분 뒤 GPU를 끈다
+    timeout=900,
+)
+class VibeVoiceTTS:
+    @modal.enter()
+    def start(self) -> None:
+        import sys
+
+        sys.path.insert(0, "/root")
+        from vibevoice_engine import Engine
+
+        self.engine = Engine(f"{VV_DIR}/demo/voices/streaming_model")
+
+    @modal.method()
+    def request(self, method: str, path: str, headers: dict, body: bytes) -> tuple:
+        """목소리 중계기에서 온 요청: POST /tts {text, speaker} → MP3"""
+        import sys
+
+        sys.path.insert(0, "/root")
+        from vibevoice_engine import to_mp3
+
+        if method != "POST" or path != "/tts":
+            return 404, {"content-type": "application/json"}, b'{"detail":"not found"}'
+        try:
+            data = json.loads(body or b"{}")
+            wav, _sec, _took = self.engine.speak(str(data.get("text", ""))[:600], str(data.get("speaker", "kr-woman")))
+            return 200, {"content-type": "audio/mpeg"}, to_mp3(wav)
+        except Exception as e:
+            return 500, {"content-type": "application/json"}, json.dumps({"detail": str(e)}, ensure_ascii=False).encode()
+
 
 VS_LOCAL_DATA = "/root/vsdata"
 # apps/studio/server/voicestudio.ts 의 MASCOT_REFERENCE_TEXT 와 같게
@@ -234,6 +294,9 @@ def _studio_env(public_url: str | None, instance: str) -> dict:
             "REMOTION_GL": "swangle",
             "REMOTION_CONCURRENCY": "6",
             "VOICESTUDIO_URL": f"http://127.0.0.1:{VOICE_PROXY_PORT}",
+            # 실험용 VibeVoice: 같은 중계기의 /vibevoice 아래로 (GPU는 쓸 때만 깨어남)
+            "VIBEVOICE_URL": f"http://127.0.0.1:{VOICE_PROXY_PORT}/vibevoice",
+            "VIBEVOICE_TIMEOUT_MS": "1800000",
             "VOICESTUDIO_TIMEOUT_MS": "1800000",
             "VOICESTUDIO_INFO_TIMEOUT_MS": "1800000",
             # 목소리가 없으면 자막만으로 조용히 만들지 않고 알린다
@@ -327,6 +390,8 @@ def web() -> None:
     _wait_previous_owner(instance)
 
     def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
+        if path.startswith("/vibevoice/"):
+            return VibeVoiceTTS().request.remote(method, path[len("/vibevoice"):], headers, body)
         return Voice().request.remote(method, path, headers, body)
 
     # 기준 녹음이 바뀌면 엔진·목소리 목록 기억도 새로 (파일 이름에 녹음 지문)

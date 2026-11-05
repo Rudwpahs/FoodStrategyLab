@@ -71,6 +71,15 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 - 올린 원본 사진·파일은 콘텐츠와 함께 보관되어 언제든 대조할 수 있습니다.
 - 영상은 후보 5개 모두 목소리를 넣어 미리보기로 보여 주고(브라우저가 그림, 렌더 비용 0원), **고른 1개만** 서버에서 완성 영상(MP4)으로 만듭니다.
 
+## 8. (실험) VibeVoice 목소리 비교
+
+[캐릭터] 화면의 **목소리 엔진** 카드에서 Microsoft **VibeVoice-Realtime-0.5B**를 맛조수 목소리(VoxCPM2)와 나란히 들어 보거나, 엔진을 바꿀 수 있습니다. 따로 설정할 것은 없습니다(배포에 포함).
+
+- **기본은 그대로 맛조수 목소리(VoxCPM2)**입니다. VibeVoice는 직접 고를 때만 쓰입니다.
+- VibeVoice는 빠르지만 한국어는 Microsoft가 '실험용'으로 낸 기본 목소리 2개(여성·남성)뿐이고, **맛조수 목소리를 복제할 수 없습니다.** 코드·모델은 MIT 라이선스지만 Microsoft는 "연구·개발용, 상업 서비스에는 추가 시험 후"라고 권합니다.
+- 별도 GPU(L4)를 쓰고, 쓸 때만 켜졌다가 4분 뒤 꺼집니다. 처음 켜질 때 1~3분 걸립니다.
+- 엔진을 바꾸면 이미 만든 목소리는 그대로 두고, 새로 만드는 대사부터 바뀝니다(엔진마다 따로 저장).
+
 ## 알아 둘 점
 
 - **잠들기**: 20분 동안 아무도 쓰지 않으면 서버가 잠들어 돈이 들지 않습니다. 다음에 주소를 열면 **10~30초** 뒤 깨어납니다.
@@ -92,7 +101,7 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 
 ## 개발자용 메모
 
-- 구성: `deploy/modal/app.py` (web 함수: Node 스튜디오 전체, CPU 0.125~8코어·메모리 1~16GB 탄력, 요청 없으면 20분 뒤 잠듦 / Voice 클래스: VoiceStudio+VoxCPM2 on L4 GPU, 4분 뒤 꺼짐)
+- 구성: `deploy/modal/app.py` (web 함수: Node 스튜디오 전체, CPU 0.125~8코어·메모리 1~16GB 탄력, 요청 없으면 20분 뒤 잠듦 / Voice 클래스: VoiceStudio+VoxCPM2 on L4 GPU, 4분 뒤 꺼짐 / VibeVoiceTTS 클래스: 실험 엔진 on L4(`MATLAB_VIBEVOICE_GPU`), 목소리 중계기 `/vibevoice/*` → `deploy/vibevoice/engine.py`)
 - 목소리 중계: `deploy/modal/voice_proxy.py` — 웹 컨테이너 안 `127.0.0.1:3901`이 VoiceStudio처럼 보이고, 요청을 GPU 함수 호출로 넘긴다. `/health`·엔진/목소리 목록은 GPU를 깨우지 않게 바로 답하거나 기억해 둔 값을 쓴다.
 - DB: 컨테이너 디스크(`/root/matlab-db/studio.db`)에서 쓰고 5초마다 `/data/studio.db`로 복사(`apps/studio/server/dbSnapshot.ts`). 새 컨테이너는 복사본에서 시작.
 - 제작 중 깨워 두기: `KEEPALIVE=1`이면 제작하는 동안 1분마다 공개 주소의 `/api/health`를 부른다.
