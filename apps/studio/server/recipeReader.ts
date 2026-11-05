@@ -9,10 +9,11 @@ import { HttpError } from './repo.ts';
  * 레시피 사진·파일 읽기 (Claude API).
  * - 재료·분량·순서·팁은 "적힌 그대로" 옮긴다 (원본 보존 원칙). 안 보이는 글자는 추측하지 않고 problems에 적는다.
  * - 원본에 없는 주제·핵심 원리·흔한 실수는 AI 제안으로 만들고, 화면에 "AI 제안 · 확인 필요"로 표시한다.
- * - 기본 모델은 값싼 Claude Haiku 5.5 (CLAUDE_MODEL로 바꿀 수 있음). 달마다 쓸 수 있는 금액 한도가 있다.
+ * - 기본 모델은 손글씨를 가장 잘 읽는 Claude Opus 5.5 (사진 한 장 약 $0.13 추정). CLAUDE_MODEL로 바꿀 수 있다(예: claude-haiku-5-5, 약 $0.002).
+ *   달마다 쓸 수 있는 금액 한도가 있다 (CLAUDE_MONTHLY_BUDGET_USD, 기본 $20).
  */
 
-export const DEFAULT_MODEL = 'claude-haiku-5-5';
+export const DEFAULT_MODEL = 'claude-opus-5-5';
 export const MAX_FILES = 4;
 
 /** 1백만 토큰당 달러 (입력, 출력). 2026-11 기준, 모르는 모델은 가장 비싼 값으로 계산해 한도를 넘지 않게 한다 */
@@ -164,7 +165,7 @@ export function monthSpentUsd(db: Db, now = new Date()): number {
   return Number(r.s);
 }
 
-export const monthlyBudgetUsd = () => Number(process.env.CLAUDE_MONTHLY_BUDGET_USD ?? '3');
+export const monthlyBudgetUsd = () => Number(process.env.CLAUDE_MONTHLY_BUDGET_USD || '20');
 
 export class RecipeReader {
   constructor(

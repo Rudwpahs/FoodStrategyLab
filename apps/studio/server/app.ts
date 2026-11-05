@@ -83,8 +83,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
-    // public: 공개 주소(PUBLIC_URL)를 알고 있는지 (배포 확인용, 비밀 아님)
-    res.json({ ok: true, public: Boolean(process.env.PUBLIC_URL) });
+    // public: 공개 주소(PUBLIC_URL)를 알고 있는지, ai: 레시피 읽기 열쇠가 있는지 (배포 확인용, 비밀값 자체는 내보내지 않음)
+    res.json({ ok: true, public: Boolean(process.env.PUBLIC_URL), ai: aiConfigured() });
   });
 
   // Meta가 게시할 영상을 내려받는 임시 주소 (추측할 수 없는 열쇠, 2시간 뒤·게시 후 만료). 로그인 없이 열린다.

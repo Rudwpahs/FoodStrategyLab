@@ -60,11 +60,11 @@ describe('레시피 읽기 (가짜 Claude)', () => {
     expect(() => toContentBlocks([], '')).toThrow(/올려 주세요/);
   });
 
-  it('재료·분량·순서는 적힌 그대로, 없는 칸은 AI 제안으로 표시하고, 사용 금액을 기록한다 (기본: Haiku)', async () => {
+  it('재료·분량·순서는 적힌 그대로, 없는 칸은 AI 제안으로 표시하고, 사용 금액을 기록한다 (기본: Opus 5.5)', async () => {
     const db = openDb(':memory:');
     const calls: { model: string }[] = [];
     const r = await new RecipeReader(db, fakeParse(kimchijeon, calls)).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }]);
-    expect(calls[0]!.model).toBe('claude-haiku-5-5');
+    expect(calls[0]!.model).toBe('claude-opus-5-5');
     expect(r.recipe.ingredients).toEqual([
       { name: '신김치', amount: '200g' },
       { name: '부침가루', amount: '1컵' },
@@ -74,8 +74,9 @@ describe('레시피 읽기 (가짜 Claude)', () => {
     expect(r.recipe.steps).toEqual(kimchijeon.steps);
     expect(r.aiFields).toEqual(['topic', 'principle', 'category', 'commonMistake']);
     expect(r.problems[0]).toContain('흐림');
-    expect(r.costUsd).toBeCloseTo(costUsd('claude-haiku-5-5', 4000, 2500));
-    expect(r.costUsd).toBeLessThan(0.01);
+    expect(r.costUsd).toBeCloseTo(costUsd('claude-opus-5-5', 4000, 2500));
+    // Opus 5.5: 입력 4천·출력 2천5백 토큰 = $0.016 + $0.05
+    expect(r.costUsd).toBeCloseTo(0.066, 3);
     expect(monthSpentUsd(db)).toBeCloseTo(r.costUsd);
     // 읽은 레시피로 후보 4개 이상, 대본은 원본 대조를 통과한다
     const { candidates } = contentCandidates(r.recipe, { count: 5 });
