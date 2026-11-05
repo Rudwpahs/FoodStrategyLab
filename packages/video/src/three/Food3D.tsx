@@ -26,7 +26,6 @@ const M: React.FC<{ color: string; rough?: number; opacity?: number; emissive?: 
     opacity={opacity ?? 1}
     emissive={emissive ?? '#000000'}
     emissiveIntensity={emissive ? 0.9 : 0}
-    flatShading
   />
 );
 
@@ -47,7 +46,7 @@ function useBits(count: number, radius: number, seed: number) {
 export const Pan: React.FC<{ children?: React.ReactNode; shake?: number }> = ({ children, shake = 0 }) => (
   <group position={[BURNER[0], BURNER[1] + 0.03, BURNER[2]]} rotation={[0, 0, shake]}>
     <mesh castShadow receiveShadow>
-      <cylinderGeometry args={[0.2, 0.17, 0.045, 32]} />
+      <cylinderGeometry args={[0.2, 0.17, 0.045, 64]} />
       <M color="#2E3036" rough={0.45} metal={0.3} />
     </mesh>
     <mesh position={[0, 0.0235, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -65,11 +64,11 @@ export const Pan: React.FC<{ children?: React.ReactNode; shake?: number }> = ({ 
 export const Pot: React.FC<{ children?: React.ReactNode; liquid?: string }> = ({ children, liquid }) => (
   <group position={[BURNER[0], BURNER[1] + 0.03, BURNER[2]]}>
     <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
-      <cylinderGeometry args={[0.17, 0.16, 0.17, 32, 1, true]} />
+      <cylinderGeometry args={[0.17, 0.16, 0.17, 64, 1, true]} />
       <meshStandardMaterial color="#C7CCD3" roughness={0.3} metalness={0.55} side={2} />
     </mesh>
     <mesh position={[0, 0.005, 0]} receiveShadow>
-      <cylinderGeometry args={[0.16, 0.16, 0.01, 32]} />
+      <cylinderGeometry args={[0.16, 0.16, 0.01, 64]} />
       <M color="#AEB3BA" />
     </mesh>
     {[-1, 1].map((s) => (
@@ -91,7 +90,7 @@ export const Pot: React.FC<{ children?: React.ReactNode; liquid?: string }> = ({
 export const Bowl: React.FC<{ children?: React.ReactNode; liquid?: string; position?: [number, number, number] }> = ({ children, liquid, position = [0, 0.02, 0] }) => (
   <group position={position}>
     <mesh position={[0, 0.07, 0]} rotation={[Math.PI, 0, 0]} castShadow receiveShadow>
-      <sphereGeometry args={[0.14, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <sphereGeometry args={[0.14, 56, 28, 0, Math.PI * 2, 0, Math.PI / 2]} />
       <meshStandardMaterial color="#F7F3EA" roughness={0.4} side={2} />
     </mesh>
     {liquid && (
@@ -115,7 +114,7 @@ const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?
   return (
     <group position={[0, 0.012 + lift, 0]} rotation={[flip * Math.PI, 0, 0]} scale={[1, soggy ? 0.55 : 1, 1]}>
       <mesh castShadow receiveShadow>
-        <cylinderGeometry args={[0.15, 0.155, 0.022, 28]} />
+        <cylinderGeometry args={[0.15, 0.155, 0.022, 56]} />
         <M color={color} rough={soggy ? 0.25 : 0.8} />
       </mesh>
       {bits.map((b, i) => (
@@ -160,7 +159,7 @@ const Leaves: React.FC<{ color: string; count?: number; radius?: number; mound?:
     <group>
       {leaves.map((l, i) => (
         <mesh key={i} position={[l.x, 0.012 + (1 - Math.hypot(l.x, l.z) / radius) * mound, l.z]} rotation={[0.3 * l.c, l.rot, 0.4]} scale={[0.055 * l.s, 0.012, 0.03 * l.s]} castShadow>
-          <sphereGeometry args={[1, 10, 6]} />
+          <sphereGeometry args={[1, 24, 16]} />
           <M color={mix(color, '#2F6E2A', l.c * 0.4)} />
         </mesh>
       ))}
@@ -178,7 +177,7 @@ const Eggs: React.FC<{ count?: number; halved?: boolean }> = ({ count = 3, halve
         <group key={i} position={[x, 0.045, z]} rotation={[0, a, 0]}>
           {/* 단면이 위를 보는 반쪽 달걀 */}
           <mesh scale={[0.045, 0.035, 0.06]} castShadow>
-            <sphereGeometry args={[1, 16, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
+            <sphereGeometry args={[1, 32, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
             <M color="#FFFDF6" rough={0.4} />
           </mesh>
           <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[0.045, 0.06, 1]}>
@@ -186,13 +185,13 @@ const Eggs: React.FC<{ count?: number; halved?: boolean }> = ({ count = 3, halve
             <M color="#FFFDF6" rough={0.4} />
           </mesh>
           <mesh position={[0, 0.003, 0]} scale={[0.024, 0.008, 0.028]}>
-            <sphereGeometry args={[1, 14, 8]} />
+            <sphereGeometry args={[1, 28, 16]} />
             <M color="#F6B526" rough={0.5} />
           </mesh>
         </group>
       ) : (
         <mesh key={i} position={[x, 0, z]} rotation={[0.4, a, 0.3]} scale={[0.04, 0.052, 0.04]} castShadow>
-          <sphereGeometry args={[1, 16, 12]} />
+          <sphereGeometry args={[1, 32, 24]} />
           <M color="#FFF3E0" rough={0.5} />
         </mesh>
       );
@@ -206,7 +205,7 @@ const Noodles: React.FC<{ color: string }> = ({ color }) => {
     <group>
       {strands.map((s, i) => (
         <mesh key={i} position={[s.x, 0.005, s.z]} rotation={[-Math.PI / 2, 0, s.rot]}>
-          <torusGeometry args={[0.04 * s.s, 0.005, 6, 20, Math.PI * 1.6]} />
+          <torusGeometry args={[0.04 * s.s, 0.005, 12, 40, Math.PI * 1.6]} />
           <M color={color} />
         </mesh>
       ))}
@@ -216,7 +215,7 @@ const Noodles: React.FC<{ color: string }> = ({ color }) => {
 
 const RiceMound: React.FC = () => (
   <mesh position={[0, 0, 0]} scale={[0.11, 0.07, 0.11]} castShadow>
-    <sphereGeometry args={[1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+    <sphereGeometry args={[1, 40, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
     <M color="#FFFDF5" rough={0.9} />
   </mesh>
 );
@@ -230,7 +229,7 @@ const Bubbles: React.FC<{ frame: number; on: boolean }> = ({ frame, on }) => {
         const t = ((frame + i * 7) % 24) / 24;
         return (
           <mesh key={i} position={[p.x, 0.004, p.z]} scale={0.012 * Math.sin(t * Math.PI)}>
-            <sphereGeometry args={[1, 8, 6]} />
+            <sphereGeometry args={[1, 24, 16]} />
             <M color="#FFFFFF" opacity={0.8} />
           </mesh>
         );
@@ -243,6 +242,14 @@ const Bubbles: React.FC<{ frame: number; on: boolean }> = ({ frame, on }) => {
 export const CookingFood: React.FC<{ food: FoodProfile; cook: number; frame: number; stirring: boolean; flip: number; showFood: boolean }> = ({ food, cook, frame, stirring, flip, showFood }) => {
   const boiling = showFood && cook > 0.05;
   if (!showFood) return food.vessel === 'pan' ? <Pan /> : <Pot liquid={food.kind === 'rice' ? undefined : food.liquidColor} />;
+  // 덮밥 고명은 팬에서 볶는다
+  if (food.topping) {
+    return (
+      <Pan shake={stirring ? Math.sin(frame / 3) * 0.02 : 0}>
+        <Heap food={food} cook={cook} jiggle={stirring ? frame / 3 : 0} />
+      </Pan>
+    );
+  }
   switch (food.kind) {
     case 'pancake':
       return (
@@ -328,7 +335,7 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
             {!failed &&
               sesame.map((s, i) => (
                 <mesh key={i} position={[s.x, 0.075 - Math.hypot(s.x, s.z) * 0.4, s.z]} scale={0.006}>
-                  <sphereGeometry args={[1, 6, 4]} />
+                  <sphereGeometry args={[1, 24, 16]} />
                   <M color="#F1E3B8" />
                 </mesh>
               ))}
@@ -339,7 +346,19 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
       case 'noodles':
         return <Bowl liquid={food.liquidColor}><Noodles color={food.cookedColor} /></Bowl>;
       case 'rice':
-        return <Bowl><RiceMound /></Bowl>;
+        return food.topping ? (
+          <Bowl>
+            <RiceMound />
+            {/* 밥 위에 볶은 고명 */}
+            <group position={[0.01, 0.045, 0.01]}>
+              <Heap food={food} cook={failed ? 0.3 : 1} radius={0.075} />
+            </group>
+          </Bowl>
+        ) : (
+          <Bowl>
+            <RiceMound />
+          </Bowl>
+        );
       default:
         return (
           <group position={top}>
@@ -365,7 +384,7 @@ export const Steam: React.FC<{ origin: [number, number, number]; frame: number; 
         const t = ((frame + i * 11) % 60) / 60;
         return (
           <mesh key={i} position={[p.x + Math.sin(t * 6 + i) * 0.02, t * 0.35, p.z]} scale={0.025 + t * 0.04}>
-            <sphereGeometry args={[1, 10, 8]} />
+            <sphereGeometry args={[1, 24, 16]} />
             <meshStandardMaterial color="#FFFFFF" transparent opacity={0.35 * (1 - t)} depthWrite={false} />
           </mesh>
         );
@@ -406,7 +425,7 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
           <group>
             {[-0.035, 0.035].map((x, i) => (
               <mesh key={i} position={[x, 0.045, i * 0.02]} scale={[0.038, 0.05, 0.038]} castShadow>
-                <sphereGeometry args={[1, 14, 10]} />
+                <sphereGeometry args={[1, 28, 20]} />
                 <M color={prop.color} rough={0.5} />
               </mesh>
             ))}
@@ -416,15 +435,15 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
         return (
           <group>
             <mesh position={[0, 0.09, 0]} castShadow>
-              <cylinderGeometry args={[0.045, 0.045, 0.18, 16]} />
+              <cylinderGeometry args={[0.045, 0.045, 0.18, 32]} />
               <M color={prop.color} rough={0.25} opacity={0.92} />
             </mesh>
             <mesh position={[0, 0.2, 0]} castShadow>
-              <cylinderGeometry args={[0.018, 0.035, 0.05, 12]} />
+              <cylinderGeometry args={[0.018, 0.035, 0.05, 32]} />
               <M color={prop.color} rough={0.25} />
             </mesh>
             <mesh position={[0, 0.235, 0]}>
-              <cylinderGeometry args={[0.02, 0.02, 0.025, 12]} />
+              <cylinderGeometry args={[0.02, 0.02, 0.025, 32]} />
               <M color="#E8553A" />
             </mesh>
           </group>
@@ -433,15 +452,15 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
         return (
           <group>
             <mesh position={[0, 0.06, 0]} castShadow>
-              <cylinderGeometry args={[0.05, 0.05, 0.12, 16]} />
+              <cylinderGeometry args={[0.05, 0.05, 0.12, 32]} />
               <M color="#EAF2F4" rough={0.2} opacity={0.75} />
             </mesh>
             <mesh position={[0, 0.045, 0]}>
-              <cylinderGeometry args={[0.046, 0.046, 0.085, 16]} />
+              <cylinderGeometry args={[0.046, 0.046, 0.085, 32]} />
               <M color={prop.color} />
             </mesh>
             <mesh position={[0, 0.13, 0]}>
-              <cylinderGeometry args={[0.052, 0.052, 0.025, 16]} />
+              <cylinderGeometry args={[0.052, 0.052, 0.025, 32]} />
               <M color="#8C5A35" />
             </mesh>
           </group>
@@ -450,11 +469,11 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
         return (
           <group>
             <mesh position={[0, 0.055, 0]} castShadow>
-              <cylinderGeometry args={[0.05, 0.042, 0.11, 18, 1, true]} />
+              <cylinderGeometry args={[0.05, 0.042, 0.11, 36, 1, true]} />
               <meshStandardMaterial color="#E8F4F8" transparent opacity={0.5} side={2} />
             </mesh>
             <mesh position={[0, 0.04, 0]}>
-              <cylinderGeometry args={[0.046, 0.042, 0.075, 18]} />
+              <cylinderGeometry args={[0.046, 0.042, 0.075, 36]} />
               <M color={prop.color} rough={0.15} opacity={0.7} />
             </mesh>
           </group>
@@ -465,7 +484,7 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
           <Bowl position={[0, 0, 0]}>
             {[[-0.03, 0], [0.03, 0.01], [0, -0.03]].map(([x, z], i) => (
               <mesh key={i} position={[x!, 0.012, z!]} scale={[0.022, 0.025, 0.02]}>
-                <sphereGeometry args={[1, 10, 8]} />
+                <sphereGeometry args={[1, 24, 16]} />
                 <M color={prop.color} />
               </mesh>
             ))}
@@ -484,7 +503,7 @@ export const IngredientModel: React.FC<{ prop: IngredientProp; position: [number
           <group scale={0.75}>
             <Bowl position={[0, 0, 0]} liquid={prop.color}>
               <mesh scale={[0.1, 0.04, 0.1]}>
-                <sphereGeometry args={[1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <sphereGeometry args={[1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
                 <M color={prop.color} rough={0.6} />
               </mesh>
             </Bowl>

@@ -71,3 +71,22 @@ describe('자막과 얼굴', () => {
     expect(stageAt(script, timings, frameOf('tip', 0.5), 'pancake', props)!.mood).toBe('golden');
   });
 });
+
+describe('긴 장면은 약 3초마다 다른 각도', () => {
+  it('긴 설명 장면은 화면이 바뀌고, 짧은 장면은 한 화면 그대로', async () => {
+    const { beatAt, BEAT_FRAMES } = await import('./shots.ts');
+    const long = BEAT_FRAMES * 3;
+    const a = beatAt({ type: 'explain' }, 0, 10, long);
+    const b = beatAt({ type: 'explain' }, 0, BEAT_FRAMES + 10, long);
+    const c = beatAt({ type: 'explain' }, 0, BEAT_FRAMES * 2 + 10, long);
+    expect(new Set([a.beat, b.beat, c.beat]).size).toBe(3);
+    expect(a.shot.from.pos).not.toEqual(b.shot.from.pos);
+    expect(b.shot.from.pos).not.toEqual(c.shot.from.pos);
+    // 짧은 장면(1.3박자 미만)은 한 화면
+    expect(beatAt({ type: 'explain' }, 0, 50, BEAT_FRAMES + 20).beat).toBe(0);
+    // 연출을 정한 장면(예: 완성 먼저)은 끊지 않는다
+    expect(beatAt({ type: 'explain', visual: 'result' }, 0, BEAT_FRAMES * 2, long).beat).toBe(0);
+    // 진행률은 화면마다 0에서 다시 시작
+    expect(b.progress).toBeLessThan(0.2);
+  });
+});

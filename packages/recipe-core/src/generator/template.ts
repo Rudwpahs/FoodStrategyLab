@@ -53,8 +53,8 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
       type: 'steps',
       emotion: 'confident',
       line: comedy
-        ? `이번엔 제대로! 딱 ${shown.length}단계${rest > 0 ? ', 나머지는 블로그에' : ''}!`
-        : `순서는 딱 ${shown.length}단계${rest > 0 ? ', 전체 과정은 블로그에 정리했어요' : ''}!`,
+        ? `이번엔 제대로! ${rest > 0 ? `핵심 ${shown.length}단계, 전체 ${recipe.steps.length}단계는 블로그에` : `딱 ${shown.length}단계`}!`
+        : `순서는 ${rest > 0 ? `핵심 ${shown.length}단계, 전체 ${recipe.steps.length}단계는 블로그에 정리했어요` : `딱 ${shown.length}단계`}!`,
       cardTitle: '조리 순서',
       cardItems: shown,
     });

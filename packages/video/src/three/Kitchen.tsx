@@ -81,7 +81,7 @@ const Counter: React.FC = () => {
         return (
           <group key={i}>
             <Box pos={[x, 0.45, front + 0.012]} size={[dw - 0.05, 0.72, 0.02]} color={C.cabinetDark} />
-            <Box pos={[x + dw / 2 - 0.1, 0.7, front + 0.035]} size={[0.025, 0.12, 0.03]} color={C.black} />
+            <Box pos={[x + dw / 2 - 0.1, 0.7, front + 0.035]} size={[0.025, 0.12, 0.03]} color={C.steel} />
           </group>
         );
       })}
@@ -98,7 +98,8 @@ const Counter: React.FC = () => {
         </group>
       ))}
       {[0, 1, 2].map((k) => (
-        <Cyl key={k} pos={[BURNER[0] - 0.12 + k * 0.14, 0.82, front + 0.03]} r={0.025} h={0.03} rot={[Math.PI / 2, 0, 0]} color={C.black} />
+        // 가스레인지 손잡이: 위에서 팬을 볼 때 검은 덩어리처럼 튀지 않게 작고 스테인리스 색으로
+        <Cyl key={k} pos={[BURNER[0] - 0.12 + k * 0.14, 0.82, front + 0.015]} r={0.018} h={0.018} rot={[Math.PI / 2, 0, 0]} color={C.steel} />
       ))}
       {/* 도마 */}
       <Box pos={[-0.32, COUNTER_TOP + 0.012, -1.3]} size={[0.36, 0.025, 0.24]} color="#E8C28E" />

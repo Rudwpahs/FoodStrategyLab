@@ -27,6 +27,8 @@ export interface FoodProfile {
   /** 날것 → 익은 색 */
   rawColor: string;
   cookedColor: string;
+  /** 덮밥·비빔밥: 볶은 고명을 팬에서 만들고, 완성은 밥 위에 얹는다 */
+  topping?: boolean;
   /** 위에 흩뿌려지는 건더기 색 (김치·파 등) */
   bits: string[];
   /** 물·국물 색 (냄비 요리) */
@@ -47,6 +49,9 @@ const KIND_NOISE = /설탕|국간장|국자|면수|전체|전자레인지|청국
 
 /** 재료 단어 → 대표 색 (건더기·국물 색에 사용) */
 const COLOR_WORDS: { words: string[]; color: string }[] = [
+  // 앞에 있는 규칙이 먼저: 청양고추·풋고추는 초록, 그 밖의 고추는 빨강
+  { words: ['청양고추', '풋고추', '꽈리고추'], color: '#3E8E2E' },
+  { words: ['청국장', '된장'], color: '#8A5A2B' },
   { words: ['김치', '고추장', '고춧가루', '고추'], color: '#D9472B' },
   { words: ['시금치', '대파', '쪽파', '실파', '부추', '깻잎', '쑥갓', '상추', '배추', '나물', '오이', '브로콜리'], color: '#4E9A3A' },
   { words: ['당근', '호박'], color: '#F08A2C' },
@@ -118,6 +123,13 @@ export function foodProfile(recipe: RecipeInput): FoodProfile {
   const base = BASE[kind];
   const bits = [...new Set(recipe.ingredients.map((i) => ingredientColor(i.name)).filter((c): c is string => c !== null))].slice(0, 3);
   const profile: FoodProfile = { kind, ...base, bits };
+  // 덮밥·비빔밥: 고명을 팬에 볶고(재료 색), 완성 그릇은 밥 위에 고명
+  if (kind === 'rice' && /덮밥|비빔밥|볶음밥/.test(`${recipe.dishName} ${recipe.topic}`)) {
+    profile.topping = true;
+    profile.vessel = 'pan';
+    profile.rawColor = '#E7C79A';
+    profile.cookedColor = bits.includes('#8A5A2B') ? '#8A5A2B' : '#B8743E';
+  }
   // 국물이 빨간 재료(김치·고추장)로 만든 국은 국물도 붉게
   if (kind === 'soup' && bits.includes('#D9472B')) profile.liquidColor = '#C8502E';
   // 김치전처럼 붉은 재료가 들어간 전은 반죽도 붉은 기

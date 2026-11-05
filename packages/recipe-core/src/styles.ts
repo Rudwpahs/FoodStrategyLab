@@ -164,33 +164,36 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
   };
   const tipScene = (lead = ''): Draft | null => (tip ? { type: 'tip', emotion: 'confident', line: `${lead}${BRAND.tipPhrase}! ${tip}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] } : null);
   const signature = (line: string): Draft => ({ type: 'outro', emotion: 'joy', line, visual: 'signature' });
-  const restNote = (rest: number) => (rest > 0 ? ', 전체 과정은 블로그에' : '');
+  // 영상에는 앞의 몇 단계만 보여 줄 때: "딱 5단계"라고 하면 원본(6단계)과 달라지므로 "핵심 5단계, 전체 6단계는 블로그에"로 말한다
+  const total = recipe.steps.length;
+  const restNote = (rest: number) => (rest > 0 ? `, 전체 ${total}단계는 블로그에` : '');
+  const count = (n: number, rest: number) => (rest > 0 ? `핵심 ${n}단계` : `딱 ${n}단계`);
 
   switch (style) {
     case 'problem': {
       if (!recipe.commonMistake) notes.push('흔한 실수가 입력되지 않아, 실수 대신 원리 중심으로 구성했어요. 연구자에게 실제로 자주 보는 실수를 물어 입력하면 더 좋아요.');
       body.push(brand());
       body.push(explain(0, '원인은 이거예요. ')!);
-      body.push(ingredients()!, steps((n, r) => `바른 순서는 딱 ${n}단계${restNote(r)}!`)!, tipScene()!);
+      body.push(ingredients()!, steps((n, r) => `바른 순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
       body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.labName}였어요.`));
       break;
     }
     case 'comedy': {
       body.push({ type: 'question', emotion: 'disappointed', line: '희재 선생님! 대체 왜 이렇게 된 거죠?', visual: 'react' });
       body.push(explain(0)!, explain(1)!);
-      body.push(steps((n, r) => `이번엔 제대로! 딱 ${n}단계${restNote(r)}!`)!);
+      body.push(steps((n, r) => `이번엔 제대로! ${count(n, r)}${restNote(r)}!`)!);
       body.push(signature(`대성공! ${BRAND.labName}, 다음 실험에서 만나요!`));
       break;
     }
     case 'experiment': {
       body.push(brand());
       body.push({ ...explain(0)!, visual: 'sizzle' }, explain(1)!);
-      body.push(ingredients()!, steps((n, r) => `순서는 딱 ${n}단계${restNote(r)}!`)!, tipScene()!);
+      body.push(ingredients()!, steps((n, r) => `순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
       body.push(signature(`오늘의 실험 노트, 저장해 두세요! ${BRAND.labName}였어요.`));
       break;
     }
     case 'before-after': {
-      body.push(brand(), ingredients()!, steps((n, r) => `만드는 법은 딱 ${n}단계${restNote(r)}!`)!);
+      body.push(brand(), ingredients()!, steps((n, r) => `만드는 법은 ${count(n, r)}${restNote(r)}!`)!);
       const ce = principle.map(causeEffect).find(Boolean);
       if (ce) {
         body.push({ type: 'explain', emotion: 'surprised', line: `${BRAND.notePhrase}에 따르면, ${ce.cause} ${ce.effect}.`, visual: 'compare', cardTitle: `${dish} 비교`, cardItems: ['건너뛰면', '노트대로 하면'] });

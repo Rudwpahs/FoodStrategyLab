@@ -21,7 +21,7 @@ function onFace(x: number, y: number, lift = 0.004): [number, number, number] {
 }
 
 const Mat: React.FC<{ color: string; rough?: number; emissive?: string }> = ({ color, rough = 0.7, emissive }) => (
-  <meshStandardMaterial color={color} roughness={rough} emissive={emissive ?? '#000000'} emissiveIntensity={emissive ? 0.5 : 0} flatShading />
+  <meshStandardMaterial color={color} roughness={rough} emissive={emissive ?? '#000000'} emissiveIntensity={emissive ? 0.5 : 0} />
 );
 
 interface Props {
@@ -79,18 +79,18 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
         {/* 발 */}
         {[-1, 1].map((s) => (
           <mesh key={s} position={[s * 0.11, 0.035, 0.05]} scale={[0.09, 0.05, 0.12]} castShadow>
-            <sphereGeometry args={[1, 16, 10]} />
+            <sphereGeometry args={[1, 32, 20]} />
             <Mat color={COLORS.navy} />
           </mesh>
         ))}
         {/* 몸통 */}
         <mesh position={[0, BODY.cy, 0]} scale={[BODY.rx, BODY.ry, BODY.rz]} castShadow>
-          <sphereGeometry args={[1, 22, 16]} />
+          <sphereGeometry args={[1, 44, 32]} />
           <Mat color={CREAM} rough={0.6} />
         </mesh>
         {/* 앞치마: 몸통 아래쪽 */}
         <mesh position={[0, BODY.cy, 0]} scale={[BODY.rx * 1.012, BODY.ry * 1.012, BODY.rz * 1.012]} castShadow>
-          <sphereGeometry args={[1, 22, 16, 0, Math.PI * 2, Math.PI * 0.6, Math.PI * 0.4]} />
+          <sphereGeometry args={[1, 44, 32, 0, Math.PI * 2, Math.PI * 0.6, Math.PI * 0.4]} />
           <Mat color={COLORS.red} />
         </mesh>
         {/* 앞치마 주머니 + 플라스크 */}
@@ -106,7 +106,7 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
         {/* 볼터치 */}
         {[-1, 1].map((s) => (
           <mesh key={s} position={onFace(s * 0.17, 0.33, 0.002)} rotation={[0, s * 0.62, 0]} scale={[0.045, 0.026, 0.01]}>
-            <sphereGeometry args={[1, 16, 8]} />
+            <sphereGeometry args={[1, 32, 16]} />
             <meshStandardMaterial color={COLORS.blush} transparent opacity={emotion === 'embarrassed' ? 0.95 : 0.7} />
           </mesh>
         ))}
@@ -118,11 +118,11 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
         {/* 조리모 */}
         <group position={[0, BODY.cy + BODY.ry - 0.035, 0]}>
           <mesh position={[0, 0.06, 0]} castShadow>
-            <cylinderGeometry args={[0.17, 0.16, 0.13, 28]} />
+            <cylinderGeometry args={[0.17, 0.16, 0.13, 56]} />
             <Mat color="#FFFFFF" />
           </mesh>
           <mesh position={[0, 0.035, 0]}>
-            <cylinderGeometry args={[0.172, 0.168, 0.03, 28]} />
+            <cylinderGeometry args={[0.172, 0.168, 0.03, 56]} />
             <Mat color={COLORS.red} />
           </mesh>
           {[
@@ -132,7 +132,7 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
             [0, 0.17, 0.06, 0.1],
           ].map(([x, y, z, r], i) => (
             <mesh key={i} position={[x!, y!, z!]} castShadow>
-              <sphereGeometry args={[r!, 12, 9]} />
+              <sphereGeometry args={[r!, 24, 18]} />
               <Mat color="#FFFFFF" />
             </mesh>
           ))}
@@ -140,7 +140,7 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
           {[-1, 1].map((s) => (
             <group key={s} position={[s * 0.052, 0.085, 0.158]}>
               <mesh>
-                <torusGeometry args={[0.038, 0.01, 8, 20]} />
+                <torusGeometry args={[0.038, 0.01, 16, 40]} />
                 <Mat color={INK} />
               </mesh>
               <mesh>
@@ -168,16 +168,16 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facin
 const Arm: React.FC<{ side: -1 | 1; raise: number; forward: number; spatula?: boolean; thumb?: boolean }> = ({ side, raise, forward, spatula, thumb }) => (
   <group position={[side * 0.26, BODY.cy + 0.02, 0.02]} rotation={[forward, 0, raise]}>
     <mesh position={[0, -0.08, 0]} castShadow>
-      <capsuleGeometry args={[0.052, 0.1, 6, 12]} />
+      <capsuleGeometry args={[0.052, 0.1, 12, 24]} />
       <Mat color={CREAM} />
     </mesh>
     <mesh position={[0, -0.17, 0]} castShadow>
-      <sphereGeometry args={[0.058, 16, 12]} />
+      <sphereGeometry args={[0.058, 32, 24]} />
       <Mat color={CREAM} />
     </mesh>
     {thumb && (
       <mesh position={[0, -0.24, 0]}>
-        <capsuleGeometry args={[0.018, 0.04, 4, 8]} />
+        <capsuleGeometry args={[0.018, 0.04, 8, 16]} />
         <Mat color={CREAM} />
       </mesh>
     )}
@@ -216,7 +216,7 @@ const Eyes: React.FC<{ emotion: Emotion; blink: boolean }> = ({ emotion, blink }
         case 'joy':
           return (
             <mesh key={s} position={p} rotation={tilt}>
-              <torusGeometry args={[0.025, 0.007, 6, 16, Math.PI]} />
+              <torusGeometry args={[0.025, 0.007, 12, 32, Math.PI]} />
               <Mat color={INK} />
             </mesh>
           );
@@ -241,7 +241,7 @@ const Eyes: React.FC<{ emotion: Emotion; blink: boolean }> = ({ emotion, blink }
                 <Mat color="#FFFFFF" />
               </mesh>
               <mesh position={[0, 0, 0.002]}>
-                <torusGeometry args={[0.036, 0.005, 6, 24]} />
+                <torusGeometry args={[0.036, 0.005, 12, 48]} />
                 <Mat color={INK} />
               </mesh>
               <mesh position={[0, -0.003, 0.003]}>
@@ -256,11 +256,11 @@ const Eyes: React.FC<{ emotion: Emotion; blink: boolean }> = ({ emotion, blink }
           return (
             <group key={s} position={emotion === 'disappointed' ? onFace(s * EYE_X, EYE_Y - 0.012) : p} rotation={tilt}>
               <mesh scale={[1, scaleY, 0.35]}>
-                <sphereGeometry args={[r, 16, 12]} />
+                <sphereGeometry args={[r, 32, 24]} />
                 <Mat color={INK} rough={0.3} />
               </mesh>
               <mesh position={[0.008, 0.008 * scaleY, r * 0.35]}>
-                <sphereGeometry args={[r * 0.3, 8, 6]} />
+                <sphereGeometry args={[r * 0.3, 24, 16]} />
                 <Mat color="#FFFFFF" />
               </mesh>
             </group>
@@ -304,7 +304,7 @@ const Mouth: React.FC<{ emotion: Emotion; open: number }> = ({ emotion, open }) 
     const w = emotion === 'surprised' && open <= 0.12 ? 0.022 : 0.035;
     return (
       <mesh position={p} rotation={rot} scale={[w, w * h * 1.3, 0.012]}>
-        <sphereGeometry args={[1, 16, 12]} />
+        <sphereGeometry args={[1, 32, 24]} />
         <Mat color={MOUTH} rough={0.5} />
       </mesh>
     );
@@ -313,21 +313,21 @@ const Mouth: React.FC<{ emotion: Emotion; open: number }> = ({ emotion, open }) 
     case 'curious':
       return (
         <mesh position={onFace(0.02, 0.305)} rotation={rot}>
-          <torusGeometry args={[0.013, 0.006, 6, 14]} />
+          <torusGeometry args={[0.013, 0.006, 12, 28]} />
           <Mat color={MOUTH} />
         </mesh>
       );
     case 'confident':
       return (
         <mesh position={onFace(0.005, 0.315)} rotation={[-0.1, 0, Math.PI + 0.35]}>
-          <torusGeometry args={[0.03, 0.007, 6, 16, Math.PI * 0.8]} />
+          <torusGeometry args={[0.03, 0.007, 12, 32, Math.PI * 0.8]} />
           <Mat color={INK} />
         </mesh>
       );
     case 'disappointed':
       return (
         <mesh position={onFace(0, 0.29)} rotation={rot}>
-          <torusGeometry args={[0.026, 0.007, 6, 16, Math.PI]} />
+          <torusGeometry args={[0.026, 0.007, 12, 32, Math.PI]} />
           <Mat color={INK} />
         </mesh>
       );
@@ -337,7 +337,7 @@ const Mouth: React.FC<{ emotion: Emotion; open: number }> = ({ emotion, open }) 
         <group position={p} rotation={rot}>
           {[-1, 0, 1].map((k) => (
             <mesh key={k} position={[k * 0.018, 0, 0]} rotation={[0, 0, k % 2 ? 0 : Math.PI]}>
-              <torusGeometry args={[0.009, 0.005, 6, 10, Math.PI]} />
+              <torusGeometry args={[0.009, 0.005, 12, 20, Math.PI]} />
               <Mat color={INK} />
             </mesh>
           ))}
@@ -353,7 +353,7 @@ const Effects: React.FC<{ emotion: Emotion; frame: number }> = ({ emotion, frame
     case 'embarrassed':
       return (
         <mesh position={[0.25, top - 0.15 - ((frame % 40) / 40) * 0.08, 0.1]} scale={[0.03, 0.045, 0.03]}>
-          <sphereGeometry args={[1, 12, 10]} />
+          <sphereGeometry args={[1, 24, 20]} />
           <meshStandardMaterial color="#8FD3F4" roughness={0.2} />
         </mesh>
       );
@@ -365,7 +365,7 @@ const Effects: React.FC<{ emotion: Emotion; frame: number }> = ({ emotion, frame
             <Mat color={COLORS.yellow} emissive={COLORS.yellow} />
           </mesh>
           <mesh position={[0, -0.03, 0]}>
-            <sphereGeometry args={[0.02, 10, 8]} />
+            <sphereGeometry args={[0.02, 24, 16]} />
             <Mat color={COLORS.yellow} emissive={COLORS.yellow} />
           </mesh>
         </group>
@@ -374,7 +374,7 @@ const Effects: React.FC<{ emotion: Emotion; frame: number }> = ({ emotion, frame
       return (
         <group position={[0.3, top + Math.sin(frame / 6) * 0.015, 0.05]}>
           <mesh position={[0, 0.06, 0]} rotation={[0, 0, -0.6]}>
-            <torusGeometry args={[0.035, 0.012, 8, 16, Math.PI * 1.4]} />
+            <torusGeometry args={[0.035, 0.012, 16, 32, Math.PI * 1.4]} />
             <Mat color={COLORS.red} emissive={COLORS.red} />
           </mesh>
           <mesh position={[0, -0.015, 0]}>
@@ -382,7 +382,7 @@ const Effects: React.FC<{ emotion: Emotion; frame: number }> = ({ emotion, frame
             <Mat color={COLORS.red} emissive={COLORS.red} />
           </mesh>
           <mesh position={[0, -0.06, 0]}>
-            <sphereGeometry args={[0.015, 10, 8]} />
+            <sphereGeometry args={[0.015, 24, 16]} />
             <Mat color={COLORS.red} emissive={COLORS.red} />
           </mesh>
         </group>

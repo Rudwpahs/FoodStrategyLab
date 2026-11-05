@@ -40,10 +40,11 @@ const CHEF_CLOSE = {
   from: { pos: add(CHEF_FACE, [0.75, 0.3, 2.15]), target: add(CHEF_FACE, [0.05, 0.22, 0]) },
   to: { pos: add(CHEF_FACE, [0.55, 0.26, 1.9]), target: add(CHEF_FACE, [0.05, 0.22, 0]) },
 };
-// 참고 영상처럼 어깨 너머로 팬을 내려다보는 시점
+// 가스레인지 앞쪽 왼편에서 팬을 내려다보는 시점.
+// (예전에는 캐릭터 어깨 너머라 흐릿한 몸통이 화면 아래를 크게 가렸다)
 const STOVE = {
-  from: { pos: [0.2, 1.98, -0.2] as Vec3, target: add(BURNER, [0.06, 0.2, 0.02]) },
-  to: { pos: [0.08, 1.9, -0.32] as Vec3, target: add(BURNER, [0.06, 0.2, 0.02]) },
+  from: { pos: add(BURNER, [-0.2, 1.08, 0.66]), target: add(BURNER, [0.03, 0.03, -0.04]) },
+  to: { pos: add(BURNER, [-0.14, 1.0, 0.58]), target: add(BURNER, [0.03, 0.03, -0.04]) },
 };
 const COUNTER = {
   from: { pos: add(PROPS_CENTER, [0.18, 0.78, 1.55]), target: add(PROPS_CENTER, [0.02, 0.2, -0.05]) },
@@ -102,6 +103,54 @@ const STOVE_CLOSE = {
   from: { pos: add(BURNER, [0.32, 0.62, 0.5]), target: add(BURNER, [0.04, 0.16, 0.02]) },
   to: { pos: add(BURNER, [0.2, 0.52, 0.38]), target: add(BURNER, [0.04, 0.16, 0.02]) },
 };
+
+/**
+ * 긴 장면을 한 화면으로 오래 두면 지루하다 (3초 넘게 같은 화면 → 넘김).
+ * 장면이 길면 약 3초마다 다른 각도로 끊어 보여 준다. 첫 화면은 장면 종류의 기본 화면.
+ */
+export const BEAT_FRAMES = 96;
+
+/** 장면 종류별로 번갈아 쓸 다른 각도 (기본 화면 다음에 차례로) */
+function alternateShots(type: SceneType, base: Shot): Shot[] {
+  switch (type) {
+    case 'explain':
+      return [
+        { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, action: 'point', face: 'camera' },
+        { ...base, ...STOVE_CLOSE, fov: 40, action: 'cook', face: 'stove' },
+      ];
+    case 'steps':
+      return [
+        { ...base, ...STOVE_CLOSE, fov: 40 },
+        { ...base, ...WIDE, action: 'cook', face: 'stove' },
+      ];
+    case 'ingredients':
+      return [{ ...base, ...COUNTER_LOW }];
+    case 'tip':
+      return [{ ...base, ...PRESENT, action: 'present', face: 'camera' }];
+    default:
+      return [];
+  }
+}
+
+// 재료를 낮은 각도로 훑는 화면
+const COUNTER_LOW = {
+  from: { pos: add(PROPS_CENTER, [-0.45, 0.42, 1.05]), target: add(PROPS_CENTER, [0.1, 0.05, -0.05]) },
+  to: { pos: add(PROPS_CENTER, [0.4, 0.42, 1.05]), target: add(PROPS_CENTER, [-0.05, 0.05, -0.05]) },
+};
+
+/**
+ * 장면 안의 지금 화면과 그 화면 안 진행률.
+ * 짧은 장면이나 연출(visual)을 정한 장면은 한 화면 그대로.
+ */
+export function beatAt(scene: Pick<Scene, 'type' | 'visual'>, indexOfType: number, local: number, duration: number): { shot: Shot; progress: number; beat: number } {
+  const base = shotForScene(scene, indexOfType);
+  const alts = scene.visual ? [] : alternateShots(scene.type, base);
+  const count = alts.length ? Math.max(1, Math.min(alts.length + 1, Math.floor(duration / BEAT_FRAMES))) : 1;
+  const len = Math.max(1, duration / count);
+  const beat = Math.min(count - 1, Math.floor(local / len));
+  const shot = beat === 0 ? base : alts[beat - 1]!;
+  return { shot, progress: Math.min(1, Math.max(0, (local - beat * len) / Math.max(1, len - 1))), beat };
+}
 
 /** 장면 연출(visual)이 있으면 그 화면을, 없으면 장면 종류의 기본 화면을 쓴다. */
 export function shotForScene(scene: Pick<Scene, 'type' | 'visual'>, indexOfType: number): Shot {

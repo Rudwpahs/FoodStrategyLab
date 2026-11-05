@@ -3,7 +3,7 @@ import type { FoodKind, Scene, Script } from '@mat-lab/recipe-core';
 import type { SceneTiming } from '../timeline.ts';
 import type { StageState } from './KitchenScene.tsx';
 import type { Vec3 } from './layout.ts';
-import { cameraAt, compareFailShot, shotForScene } from './shots.ts';
+import { beatAt, cameraAt, compareFailShot } from './shots.ts';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -44,9 +44,10 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   if (!at) return null;
   const { scene, index, local, progress, timing } = at;
   const sameTypeBefore = script.scenes.slice(0, index).filter((s) => s.type === scene.type).length;
-  const mainShot = shotForScene(scene, sameTypeBefore);
-  const shot = variant === 'compare-fail' ? compareFailShot(mainShot) : mainShot;
-  const cam = cameraAt(shot, progress);
+  // 긴 장면은 약 3초마다 다른 각도로 (음식 익힘은 장면 전체 진행률로 이어진다)
+  const beat = beatAt(scene, sameTypeBefore, local, timing.durationInFrames);
+  const shot = variant === 'compare-fail' ? compareFailShot(beat.shot) : beat.shot;
+  const cam = cameraAt(shot, beat.progress);
 
   const ingredientsIndex = script.scenes.findIndex((s) => s.type === 'ingredients');
   const propPop = Array.from({ length: propCount }, (_, i) => {
