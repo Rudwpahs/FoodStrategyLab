@@ -10,8 +10,8 @@
 
 | 경로 | 역할 |
 | --- | --- |
-| `packages/recipe-core` | 규칙·순수 함수: 레시피 모델, 원본 대조(`fidelity.ts`), 훅 15종(`hooks.ts`), 연출 6종(`styles.ts`), 후보 3개(`candidates.ts`) |
-| `packages/video` | Remotion + Three.js 렌더: 3D 주방·맛조수, 자막, 효과음(`sfx.ts`), 렌더러(`render.ts`) |
+| `packages/recipe-core` | 규칙·순수 함수: 레시피 모델, 원본 대조(`fidelity.ts`), 훅 15종(`hooks.ts`), 연출 6종(`styles.ts`), 후보 5개(`candidates.ts`) |
+| `packages/video` | Remotion + Three.js 렌더: 3D 주방·맛조수·음식(`foodShapes.ts`), 자막, 효과음(`sfx.ts`), 렌더러(`render.ts`) |
 | `packages/publishing` | 블로그(자동·전문가 답변형), SNS 문구, 일관성 검사, 문체 점검, ZIP |
 | `apps/studio/server` | Express 5 + node:sqlite: API, 로그인(`auth.ts`), 제작 파이프라인(`pipeline.ts`), VoiceStudio 연동(`voicestudio.ts`, `tts.ts`) |
 | `apps/studio/web` | React 19 화면 (Vite) |
@@ -24,7 +24,7 @@
 
 ```
 npm ci            # 설치 (Node 22.13 이상)
-npm test          # Vitest 전체 (현재 161개 통과)
+npm test          # Vitest 전체 (현재 162개 통과)
 npm run typecheck # tsc
 npm run dev       # 개발 서버 http://localhost:5178
 npm run start     # 화면 묶음을 만든 뒤 빠른 실행 모드

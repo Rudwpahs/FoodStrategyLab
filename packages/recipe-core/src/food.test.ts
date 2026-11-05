@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientProps } from './index.ts';
+import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientPiece, ingredientProps } from './index.ts';
 
 const [kimchi, spinach, egg] = SAMPLE_RECIPES as [typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0]];
 
@@ -21,6 +21,32 @@ describe('3D 음식 표현 규칙', () => {
     expect(dish('부대찌개')).toBe('soup');
     expect(dish('비빔국수')).toBe('noodles');
     expect(inferFoodKind({ dishName: '', topic: '', ingredients: [], steps: ['재료를 센 불에 볶아 낸다'] })).toBe('stirfry');
+  });
+
+  it('재료마다 실제 썬 모양으로 그린다 (양념은 조각이 아니다)', () => {
+    expect(ingredientPiece('청양고추')?.shape).toBe('ring');
+    expect(ingredientPiece('두부')?.shape).toBe('cube');
+    expect(ingredientPiece('청국장')?.shape).toBe('bean');
+    expect(ingredientPiece('배추속대')?.shape).toBe('leaf');
+    expect(ingredientPiece('양파')?.shape).toBe('strip');
+    expect(ingredientPiece('다진 파')?.shape).toBe('ring');
+    // 모양 없는 양념·이름 속 글자에 속지 않는다
+    expect(ingredientPiece('고춧가루')).toBeNull();
+    expect(ingredientPiece('고추장')).toBeNull();
+    expect(ingredientPiece('들기름')).toBeNull();
+    expect(ingredientPiece('파스타')).toBeNull();
+    const dish = RecipeInputSchema.parse({
+      dishName: '청국장덮밥',
+      topic: '청국장덮밥',
+      principle: '청국장은 마지막에 넣는다',
+      ingredients: [{ name: '청국장' }, { name: '배추속대' }, { name: '두부' }, { name: '홍고추' }, { name: '청양고추' }, { name: '들기름' }, { name: '간장' }],
+      steps: ['청국장을 다진다.', '두부를 으깬다.'],
+    });
+    const p = foodProfile(dish);
+    // 원본 재료 순서 그대로, 원본에 없는 재료(깨 등)는 넣지 않는다
+    expect(p.pieces.map((x) => x.shape)).toEqual(['bean', 'leaf', 'cube', 'ring', 'ring']);
+    // 조리대 그릇에는 손질한 모양
+    expect(ingredientProps(dish).find((x) => x.label.startsWith('두부'))?.piece?.shape).toBe('cube');
   });
 
   it('재료 색이 음식에 반영된다', () => {
