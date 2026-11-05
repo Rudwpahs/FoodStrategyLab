@@ -110,7 +110,9 @@ VS_PORT = 3900
     image=voice_image,
     gpu=GPU,
     volumes={"/voice": voice_volume},
-    max_containers=1,  # 목소리 엔진은 한 번에 하나씩 (같은 프로필 DB를 쓰므로)
+    # 후보 영상 목소리를 동시에 만들 수 있게 GPU 최대 3대 (초 단위 요금이라 총비용은 거의 같고 빨라진다).
+    # 목소리 프로필은 처음 준비 때 한 번 만들고, 새 GPU는 켜질 때 저장소의 프로필을 복사해 쓴다.
+    max_containers=int(os.environ.get("MATLAB_VOICE_GPUS", "3")),
     scaledown_window=240,  # 마지막 요청 4분 뒤 GPU를 끈다
     timeout=1800,
     startup_timeout=1800,  # 처음에는 모델(수 GB) 내려받기로 오래 걸린다
@@ -223,6 +225,8 @@ def _studio_env(public_url: str | None, instance: str) -> dict:
             "VOICESTUDIO_INFO_TIMEOUT_MS": "1800000",
             # 목소리가 없으면 자막만으로 조용히 만들지 않고 알린다
             "TTS_PROVIDER": "voicestudio",
+            # 후보 목소리를 GPU 여러 대에서 동시에 (MATLAB_VOICE_GPUS와 맞춘다)
+            "VOICE_PARALLEL": os.environ.get("MATLAB_VOICE_GPUS", "3"),
             "NODE_OPTIONS": "--max-old-space-size=4096",
             "NODE_NO_WARNINGS": "1",
         }

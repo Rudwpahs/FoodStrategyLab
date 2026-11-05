@@ -177,14 +177,15 @@ export async function measuredWords(file: string, line: string): Promise<[number
     form.append('language', 'ko');
     form.append('response_format', 'verbose_json');
     form.append('timestamp_granularities[]', 'word');
-    const res = await fetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(120_000) });
+    const res = await fetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000) });
     if (res.ok) {
       const data = (await res.json()) as { words?: { start: number; end: number }[] };
       const expected = line.trim().split(/\s+/).filter(Boolean).length;
       if (data.words && data.words.length === expected) words = data.words.map((w) => [w.start, w.end]);
     }
   } catch {
-    words = null;
+    // 연결 문제(시간 초과 등)는 기억하지 않는다: 다음에 다시 시도한다
+    return undefined;
   }
   fs.writeFileSync(cache, JSON.stringify(words));
   return words ?? undefined;

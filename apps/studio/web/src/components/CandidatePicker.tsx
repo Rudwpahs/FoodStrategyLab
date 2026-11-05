@@ -48,18 +48,19 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
     void load([]);
   }, [project.id, project.recipe, load]);
 
-  // 목소리 넣는 중이면 4초마다 확인하고, 끝나면 목소리가 들어간 미리보기로 다시 불러온다
+  // 목소리 넣는 중이면 5초마다 확인하고, 새로 만들어진 대사가 있으면 미리보기를 다시 불러온다
+  // (모든 후보의 첫 대사부터 만들기 때문에, 첫 장면부터 차례로 목소리가 들린다)
   useEffect(() => {
     if (job?.status !== 'running') return;
     const t = setTimeout(async () => {
       const next = await api.candidateVoiceStatus(project.id).catch(() => null);
       if (!next) return;
-      setJob(next);
-      if (next.status !== 'running') {
+      if (next.done !== job.done || next.status !== 'running') {
         const r = await api.candidates(project.id, seen.slice(0, Math.max(0, seen.length - candidates.length)), COUNT).catch(() => null);
         if (r) setCandidates(r.candidates);
       }
-    }, 4000);
+      setJob(next);
+    }, 5000);
     return () => clearTimeout(t);
   }, [job, project.id, seen, candidates.length]);
 
@@ -75,7 +76,7 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
       </div>
       {job?.status === 'running' && (
         <div className="issue info">
-          맛조수 목소리 넣는 중… {job.done}/{job.total} (처음에는 목소리 엔진이 깨어나느라 1~3분 더 걸려요). 그동안 목소리 없이 먼저 볼 수 있어요.
+          맛조수 목소리 넣는 중… {job.done}/{job.total}줄 · 첫 대사부터 차례로 들어가요. 처음에는 목소리 엔진이 깨어나느라 2~3분 더 걸리고, 한 줄에 30초~1분쯤 걸려요. 그동안 목소리 없이 먼저 볼 수 있어요.
           <div style={{ height: 6, background: '#dde4f2', borderRadius: 4, marginTop: 6 }}>
             <div style={{ width: `${job.total ? Math.round((job.done / job.total) * 100) : 0}%`, height: 6, background: '#5b7bc4', borderRadius: 4 }} />
           </div>

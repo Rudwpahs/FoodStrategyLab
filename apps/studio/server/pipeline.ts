@@ -84,7 +84,11 @@ export const candidateVoiceJob = (projectId: number) => candidateVoiceJobs.get(p
 export function startCandidateVoices(projectId: number, scripts: Script[], keepAliveOrigin?: string): CandidateVoiceJob {
   const running = candidateVoiceJobs.get(projectId);
   if (running?.status === 'running') return running;
-  const lines = [...new Set(scripts.flatMap((s) => s.scenes.map((sc) => sc.line)))];
+  // 장면 순서대로: 모든 후보의 첫 장면(훅)을 먼저 → 후보마다 첫 대사부터 목소리가 들린다
+  const longest = Math.max(0, ...scripts.map((s) => s.scenes.length));
+  const ordered: string[] = [];
+  for (let i = 0; i < longest; i++) for (const s of scripts) if (s.scenes[i]) ordered.push(s.scenes[i]!.line);
+  const lines = [...new Set(ordered)];
   const job: CandidateVoiceJob = { status: 'running', done: 0, total: lines.length, error: '' };
   candidateVoiceJobs.set(projectId, job);
   const stopKeepAlive = keepAliveOrigin ? keepAwake(keepAliveOrigin) : () => undefined;
@@ -92,16 +96,23 @@ export function startCandidateVoices(projectId: number, scripts: Script[], keepA
     try {
       const provider = await ttsProvider();
       if (provider === 'none') throw new Error('목소리 도구가 연결되지 않았어요. 목소리 없이 미리보기만 보여 드려요.');
-      for (const line of lines) {
-        const a = await synthesize(line, AUDIO_DIR);
-        const bounds = await cachedSpeechBounds(a.file).catch(() => null);
-        if (bounds?.silent) {
-          fs.rmSync(a.file, { force: true });
-          throw new Error(`"${line.slice(0, 20)}…" 대사의 음성이 비어 있어요. 다시 시도해 주세요.`);
+      // 여러 줄을 동시에 만든다 (클라우드에서는 GPU 여러 대가 나눠 맡는다)
+      const parallel = Math.max(1, Number(process.env.VOICE_PARALLEL) || 1);
+      let next = 0;
+      const worker = async () => {
+        while (next < lines.length) {
+          const line = lines[next++]!;
+          const a = await synthesize(line, AUDIO_DIR);
+          const bounds = await cachedSpeechBounds(a.file).catch(() => null);
+          if (bounds?.silent) {
+            fs.rmSync(a.file, { force: true });
+            throw new Error(`"${line.slice(0, 20)}…" 대사의 음성이 비어 있어요. 다시 시도해 주세요.`);
+          }
+          await measuredWords(a.file, line).catch(() => undefined);
+          job.done++;
         }
-        await measuredWords(a.file, line).catch(() => undefined);
-        job.done++;
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(parallel, lines.length) }, worker));
       job.status = 'done';
     } catch (e) {
       job.status = 'failed';
