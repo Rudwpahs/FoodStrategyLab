@@ -117,6 +117,7 @@ export const api = {
   makeCandidate: (id: number, style: StyleId, hookType: HookType) =>
     request<{ project: ProjectDetail; renderId: number; notes: string[] }>('POST', `/projects/${id}/candidates/make`, { style, hookType }),
   aiInfo: () => request<AiInfo>('GET', '/ai'),
+  confirmAi: (id: number) => request<unknown>('POST', `/projects/${id}/source/confirm`, {}),
   createFromFiles: (files: UploadFile[], memo: string) => request<{ id: number; aiFields: string[]; problems: string[] }>('POST', '/projects/from-files', { files, memo }),
   selectCandidate: (id: number, style: StyleId, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/candidates/select`, { style, hookType }),
   blogCompare: (id: number) =>

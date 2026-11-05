@@ -119,6 +119,9 @@ export interface RecipeSource {
   aiFields: string[];
   /** 읽기 어려웠던 부분·다른 메모 */
   problems: string[];
+  /** 연구자가 AI 제안 칸을 확인한 기록 (확인 전에는 승인할 수 없다) */
+  aiConfirmedBy?: string;
+  aiConfirmedAt?: string;
 }
 
 export interface ProjectDetail extends ProjectSummary {
@@ -252,7 +255,24 @@ export class Repo {
     if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
     const src = JSON.parse(String(row.source_json || '{}')) as Partial<RecipeSource>;
     if (!src.files?.length && !src.aiFields?.length) return null;
-    return { files: (src.files ?? []).map((f) => ({ ...f, url: `/media/${f.file}` })), aiFields: src.aiFields ?? [], problems: src.problems ?? [] };
+    return {
+      files: (src.files ?? []).map((f) => ({ ...f, url: `/media/${f.file}` })),
+      aiFields: src.aiFields ?? [],
+      problems: src.problems ?? [],
+      ...(src.aiConfirmedAt ? { aiConfirmedBy: src.aiConfirmedBy ?? '', aiConfirmedAt: src.aiConfirmedAt } : {}),
+    };
+  }
+
+  /** AI가 제안한 칸(주제·핵심 원리·흔한 실수)을 연구자가 확인했다고 기록한다 */
+  confirmAiFields(id: number, by: string): RecipeSource {
+    const row = this.db.prepare('SELECT source_json FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    const src = JSON.parse(String(row.source_json || '{}')) as Record<string, unknown>;
+    src.aiConfirmedBy = by;
+    src.aiConfirmedAt = now();
+    this.db.prepare('UPDATE projects SET source_json = ? WHERE id = ?').run(JSON.stringify(src), id);
+    this.logEvent(id, 'recipe', `AI 제안 내용 확인 (${by})`);
+    return this.getSource(id)!;
   }
 
   setSource(id: number, src: Omit<RecipeSource, 'files'> & { files: { name: string; type: string; file: string }[] }) {
@@ -382,6 +402,11 @@ export class Repo {
       // 원본 레시피와 다른 분량·재료·순서가 있으면 승인하지 않는다 (확인창으로 넘기지 않음)
       const errors = checkScript(this.getRecipe(id), latest.script).filter((i) => i.level === 'error');
       if (errors.length) throw new HttpError(409, `원본 레시피와 다른 곳 ${errors.length}건을 고쳐야 승인할 수 있어요: ${errors[0]!.message}`);
+      // 사진에서 읽을 때 AI가 채운 칸은 연구자가 확인해야 한다 (영상에서 "이희재 연구자의 조리 노트"로 나오므로)
+      const src = this.getSource(id);
+      if (src?.aiFields.length && !src.aiConfirmedAt) {
+        throw new HttpError(409, 'AI가 제안한 내용(주제·핵심 원리·흔한 실수)을 먼저 확인해 주세요. 영상에서 연구자의 조리 노트로 소개돼요.');
+      }
     } else if (!input.reviewer.trim()) {
       throw new HttpError(400, '검수자 이름을 입력하세요.');
     }

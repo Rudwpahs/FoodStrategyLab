@@ -187,6 +187,12 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/projects', (req, res) => res.status(201).json({ id: repo.createProject(req.body?.recipe) }));
 
   // ── 레시피 사진·파일로 새 콘텐츠 (Claude가 적힌 그대로 옮기고, 없는 칸은 'AI 제안'으로 표시) ──
+  api.post('/projects/:id/source/confirm', (req, res) => {
+    const pid = id(req);
+    if (!repo.getSource(pid)?.aiFields.length) throw new HttpError(400, '확인할 AI 제안 내용이 없어요.');
+    const by = (res.locals.user as { displayName?: string } | undefined)?.displayName || String(req.body?.by ?? '').trim() || '연구자';
+    res.json(repo.confirmAiFields(pid, by));
+  });
   api.get('/ai', (_req, res) => {
     res.json({ configured: aiConfigured(), model: process.env.CLAUDE_MODEL || DEFAULT_MODEL, spentUsd: monthSpentUsd(repo.db), budgetUsd: monthlyBudgetUsd(), maxFiles: MAX_FILES });
   });

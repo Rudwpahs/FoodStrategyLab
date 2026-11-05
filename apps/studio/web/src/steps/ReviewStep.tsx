@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
 import { api } from '../api.ts';
+import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
 const LEVEL_LABEL = { error: '오류', warning: '확인 필요', info: '참고' } as const;
 
-export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => {
+export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
   const { run, user } = useApp();
   const latest = project.latest;
   const [issues, setIssues] = useState<Issue[] | null>(null);
@@ -33,6 +34,8 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
   const r = project.recipe;
   const render = project.renders.find((x) => x.status === 'done' && x.scriptVersion === latest.version);
   const hasRender = Boolean(render);
+  // 사진에서 읽은 레시피의 AI 제안 칸은 확인해야 승인할 수 있다
+  const aiPending = Boolean(project.source?.aiFields.length && !project.source.aiConfirmedAt);
 
   const submit = async (decision: 'approved' | 'changes_requested') => {
     const p = await run(
@@ -116,6 +119,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
           </div>
         ) : (
           <>
+            {aiPending && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} open />}
             {CHECKLIST_ITEMS.map((c) => (
               <label key={c.key} className={`check ${checklist[c.key] ? 'on' : ''}`}>
                 <input type="checkbox" checked={!!checklist[c.key]} onChange={(e) => setChecklist((p) => ({ ...p, [c.key]: e.target.checked }))} />
@@ -138,8 +142,8 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go }) => 
               <button className="btn" onClick={() => submit('changes_requested')}>수정 요청</button>
               <button
                 className="btn primary"
-                disabled={errors > 0 || !CHECKLIST_ITEMS.every((c) => checklist[c.key]) || !reviewer.trim()}
-                title={errors > 0 ? '원본 레시피와 다른 곳을 먼저 고쳐야 승인할 수 있어요' : ''}
+                disabled={errors > 0 || aiPending || !CHECKLIST_ITEMS.every((c) => checklist[c.key]) || !reviewer.trim()}
+                title={errors > 0 ? '원본 레시피와 다른 곳을 먼저 고쳐야 승인할 수 있어요' : aiPending ? 'AI 제안 내용을 먼저 확인해 주세요' : ''}
                 onClick={() => submit('approved')}
               >
                 승인

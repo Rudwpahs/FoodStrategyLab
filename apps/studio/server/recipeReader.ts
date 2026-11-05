@@ -51,7 +51,7 @@ export const ExtractedRecipeSchema = z.object({
   suggestion: z
     .object({
       topic: z.string().describe('숏폼 주제가 될 질문 한 문장 (예: "김치전은 왜 금방 눅눅해질까?")'),
-      principle: z.string().describe('이 레시피의 핵심 조리 원리 1~2문장. "~하면 ~한다" 꼴로'),
+      principle: z.string().describe('이 레시피의 핵심 조리 원리 한 문장, 50자 이내. "~하면 ~한다" 꼴로 (영상에서 소리 내어 읽으므로 짧게)'),
       commonMistake: z.string().describe('이 요리에서 흔한 실수 한 문장'),
       category: z.enum(CATEGORIES).describe('science=요리 과학, fix=실패 해결, compare=재료 비교·조리 기술, tradition=전통조리·음식문화'),
     })
@@ -104,6 +104,15 @@ export function toContentBlocks(files: UploadFile[], memo: string): Anthropic.Co
   return blocks;
 }
 
+/** AI가 제안한 핵심 원리는 영상에서 소리 내어 읽으므로 한 문장으로 줄인다 (길면 첫 문장만) */
+export function shortPrinciple(text: string): string {
+  const t = text.trim();
+  if (t.length < 5) return '재료의 특성에 맞게 순서와 불 조절을 지키면 맛이 살아난다.';
+  if (t.length <= 70) return t;
+  const first = t.split(/(?<=[.!?])\s+/)[0]!.trim();
+  return first.length >= 5 ? first : t;
+}
+
 /** 읽은 결과 → 스튜디오 레시피. 어떤 칸이 AI 제안인지도 돌려준다 */
 export function toRecipe(x: ExtractedRecipe, memo = ''): { recipe: RecipeInput; aiFields: string[]; problems: string[] } {
   if (!x.isRecipe) throw new HttpError(422, '레시피로 보이지 않아요. 재료와 만드는 법이 보이게 다시 찍어 주세요.');
@@ -120,7 +129,7 @@ export function toRecipe(x: ExtractedRecipe, memo = ''): { recipe: RecipeInput; 
     format: 'explainer' as const,
     ingredients,
     steps,
-    principle: x.suggestion.principle.trim().length >= 5 ? x.suggestion.principle.trim() : '재료의 특성에 맞게 순서와 불 조절을 지키면 맛이 살아난다.',
+    principle: shortPrinciple(x.suggestion.principle),
     tips: x.tips.map((t) => t.trim()).filter(Boolean),
     commonMistake: mistake,
     source: '이희재 레시피 (올린 자료에서 읽음)',

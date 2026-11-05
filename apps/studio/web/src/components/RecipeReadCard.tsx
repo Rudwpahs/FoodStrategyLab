@@ -1,6 +1,7 @@
 import React from 'react';
 import { CATEGORY_LABELS, formatIngredient } from '@mat-lab/recipe-core';
-import type { ProjectDetail } from '../api.ts';
+import { api, type ProjectDetail } from '../api.ts';
+import { useApp } from '../App.tsx';
 
 const FIELD_LABELS: Record<string, string> = {
   topic: '주제(질문)',
@@ -13,14 +14,15 @@ const FIELD_LABELS: Record<string, string> = {
  * 사진·파일에서 읽은 레시피. 재료·분량·순서는 적힌 그대로 옮긴 것이고,
  * 자료에 없던 칸(주제·원리·흔한 실수)은 AI 제안이라 연구자가 확인해야 한다.
  */
-export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => void }> = ({ project, onEdit }) => {
+export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => void; onConfirmed: () => Promise<void> | void; open?: boolean }> = ({ project, onEdit, onConfirmed, open }) => {
+  const { run } = useApp();
   const src = project.source;
   if (!src) return null;
   const r = project.recipe;
   const value = (f: string) => (f === 'category' ? CATEGORY_LABELS[r.category] : String((r as Record<string, unknown>)[f] ?? ''));
 
   return (
-    <details className="card" open={src.problems.length > 0}>
+    <details className="card" open={open || src.problems.length > 0 || (src.aiFields.length > 0 && !src.aiConfirmedAt)}>
       <summary style={{ cursor: 'pointer' }}>
         <b>올린 자료에서 읽은 레시피</b>{' '}
         <span className="muted small">
@@ -69,10 +71,30 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
             <span className="badge review">AI 제안 · 확인 필요</span> <b>{FIELD_LABELS[f] ?? f}</b>: {value(f)}
           </div>
         ))}
-        <div>
+        {src.aiFields.length > 0 &&
+          (src.aiConfirmedAt ? (
+            <div className="small">
+              ✅ AI 제안 내용 확인함 ({src.aiConfirmedBy}, {new Date(src.aiConfirmedAt).toLocaleString('ko-KR')})
+            </div>
+          ) : (
+            <div className="issue warning small">
+              AI 제안 내용은 영상에서 <b>"이희재 연구자의 조리 노트"</b>로 소개돼요. 맞으면 확인을, 틀리면 [레시피 고치기]에서 고쳐 주세요. 확인 전에는 승인할 수 없어요.
+            </div>
+          ))}
+        <div className="row">
           <button className="btn small" onClick={onEdit}>
             레시피 고치기
           </button>
+          {src.aiFields.length > 0 && !src.aiConfirmedAt && (
+            <button
+              className="btn small primary"
+              onClick={async () => {
+                if ((await run(() => api.confirmAi(project.id), 'AI 제안 내용을 확인했어요')) !== undefined) await onConfirmed();
+              }}
+            >
+              AI 제안 내용 맞아요 (확인)
+            </button>
+          )}
         </div>
       </div>
     </details>

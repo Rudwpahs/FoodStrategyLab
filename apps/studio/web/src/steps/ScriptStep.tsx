@@ -19,7 +19,7 @@ const TYPE_LABELS: Record<Scene['type'], string> = {
 };
 const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', edit: '직접 수정' } as const;
 
-export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => {
+export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
   const { run } = useApp();
   const [draft, setDraft] = useState<Script | null>(project.latest?.script ?? null);
   const [dirty, setDirty] = useState(false);
@@ -50,7 +50,7 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go }) => 
 
   return (
     <div className="stack">
-      {project.source && <RecipeReadCard project={project} onEdit={() => go('input')} />}
+      {project.source && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} />}
       <CandidatePicker
         project={project}
         onMade={(p) => {

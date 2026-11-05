@@ -6,7 +6,7 @@ import { checkScript, contentCandidates } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { openDb } from './db.ts';
-import { ExtractedRecipeSchema, RecipeReader, costUsd, monthSpentUsd, toContentBlocks, type ExtractedRecipe, type ParseFn } from './recipeReader.ts';
+import { ExtractedRecipeSchema, RecipeReader, costUsd, monthSpentUsd, shortPrinciple, toContentBlocks, type ExtractedRecipe, type ParseFn } from './recipeReader.ts';
 import { Repo } from './repo.ts';
 
 /** 손글씨 김치전 레시피를 읽었다고 치는 결과 */
@@ -102,6 +102,15 @@ describe('레시피 읽기 (가짜 Claude)', () => {
   });
 });
 
+describe('AI 제안 원리 길이', () => {
+  it('영상에서 읽는 원리는 한 문장으로: 길면 첫 문장만', () => {
+    expect(shortPrinciple('반죽을 찬물로 하면 바삭해진다.')).toBe('반죽을 찬물로 하면 바삭해진다.');
+    const long = '청국장을 오래 가열하면 발효균과 효소가 줄고 특유의 쿰쿰한 냄새가 강해진다. 다른 재료를 먼저 익힌 뒤 마지막에 넣어 짧게 볶으면 풍미와 영양을 살릴 수 있다.';
+    expect(shortPrinciple(long)).toBe('청국장을 오래 가열하면 발효균과 효소가 줄고 특유의 쿰쿰한 냄새가 강해진다.');
+    expect(shortPrinciple('')).toContain('불 조절');
+  });
+});
+
 describe('사진으로 새 콘텐츠 (API)', () => {
   let base = '';
   let close: () => void;
@@ -158,6 +167,23 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     expect(body.project.latest.version).toBe(1);
     expect(`${body.project.latest.script.style}:${body.project.latest.script.hookType}`).toBe(pick.key);
     expect(starts).toEqual([id]);
+    fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
+  });
+
+  it('사진에서 읽은 콘텐츠는 AI 제안 내용을 확인하기 전에는 승인할 수 없다', async () => {
+    const res = await fetch(`${base}/api/projects/from-files`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: [{ name: 'a.png', type: 'image/png', data: png }] }) });
+    const { id } = (await res.json()) as { id: number };
+    const list = (await (await fetch(`${base}/api/projects/${id}/candidates?count=5`)).json()) as { candidates: { style: string; hookType: string }[] };
+    await fetch(`${base}/api/projects/${id}/candidates/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ style: list.candidates[0]!.style, hookType: list.candidates[0]!.hookType }) });
+    const checklist = { ingredients: true, safety: true, noFakeClaims: true, expression: true };
+    const approve = () => fetch(`${base}/api/projects/${id}/reviews`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ version: 1, reviewer: '이희재', checklist, decision: 'approved' }) });
+    const blocked = await approve();
+    expect(blocked.status).toBe(409);
+    expect(await blocked.text()).toContain('AI가 제안한 내용');
+    const confirmed = await fetch(`${base}/api/projects/${id}/source/confirm`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ by: '이희재' }) });
+    expect(confirmed.status).toBe(200);
+    expect(repo.getSource(id)?.aiConfirmedBy).toBe('이희재');
+    expect((await approve()).status).toBe(200);
     fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
   });
 
