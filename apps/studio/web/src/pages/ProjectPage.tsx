@@ -9,8 +9,8 @@ import { ScriptStep } from '../steps/ScriptStep.tsx';
 import { VideoStep } from '../steps/VideoStep.tsx';
 
 const STEPS = [
-  { key: 'input', label: '콘텐츠 입력' },
-  { key: 'script', label: '후보 고르기' },
+  { key: 'input', label: '레시피' },
+  { key: 'script', label: '영상 고르기' },
   { key: 'video', label: '영상·블로그' },
   { key: 'review', label: '검수·승인' },
   { key: 'publish', label: '게시·기록' },

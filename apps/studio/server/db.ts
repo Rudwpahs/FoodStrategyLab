@@ -83,6 +83,18 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 
+-- Claude API 사용 기록 (달마다 금액 한도를 지키기 위해)
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  month TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cost_usd REAL NOT NULL
+);
+
 -- 인스타그램 연결 (계정 하나). 토큰은 암호화해서만 저장한다.
 CREATE TABLE IF NOT EXISTS instagram_account (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -129,5 +141,7 @@ export function openDb(file: string): Db {
   if (!cols.has('photo_color')) db.exec("ALTER TABLE projects ADD COLUMN photo_color TEXT NOT NULL DEFAULT ''");
   if (!cols.has('expert_notes')) db.exec("ALTER TABLE projects ADD COLUMN expert_notes TEXT NOT NULL DEFAULT '{}'");
   if (!cols.has('blog_style')) db.exec("ALTER TABLE projects ADD COLUMN blog_style TEXT NOT NULL DEFAULT ''");
+  // 레시피를 사진·파일에서 읽었을 때: 원본 파일 목록, AI가 제안한 칸, 읽기 어려웠던 부분
+  if (!cols.has('source_json')) db.exec("ALTER TABLE projects ADD COLUMN source_json TEXT NOT NULL DEFAULT '{}'");
   return db;
 }

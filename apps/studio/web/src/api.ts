@@ -1,10 +1,28 @@
 import type { ContentCandidate, HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
-import type { VideoProps } from '@mat-lab/video/timeline';
+import type { SceneTiming, VideoProps } from '@mat-lab/video/timeline';
+import type { CandidateVoiceJob } from '../../server/pipeline.ts';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
 import type { ProjectDetail, ProjectSummary, Publication, RenderRow } from '../../server/repo.ts';
 import type { FormatInsight } from '../../server/insights.ts';
 
-export type { FormatInsight, ProjectDetail, ProjectSummary, Publication, RenderRow };
+export type { CandidateVoiceJob, FormatInsight, ProjectDetail, ProjectSummary, Publication, RenderRow };
+
+/** 후보 + 미리보기 타임라인 (목소리를 만든 문장은 실제 목소리로) */
+export type VoicedCandidate = ContentCandidate & { timings: SceneTiming[] | null; voiced: boolean };
+
+export interface AiInfo {
+  configured: boolean;
+  model: string;
+  spentUsd: number;
+  budgetUsd: number;
+  maxFiles: number;
+}
+
+export interface UploadFile {
+  name: string;
+  type: string;
+  data: string;
+}
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
@@ -89,8 +107,17 @@ export const api = {
     request<{ styles: Record<StyleId, StyleInfo>; hookInfo: Record<HookType, HookInfo>; hooks: HookCandidate[]; repetition: string | null }>('GET', `/projects/${id}/hooks${style ? `?style=${style}` : ''}`),
   styledScript: (id: number, style: StyleId, hookType?: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/styled`, { style, hookType }),
   changeHook: (id: number, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/script/hook`, { hookType }),
-  candidates: (id: number, exclude: string[] = []) =>
-    request<{ candidates: ContentCandidate[]; exhausted: boolean; insights: FormatInsight[] }>('GET', `/projects/${id}/candidates${exclude.length ? `?exclude=${encodeURIComponent(exclude.join(','))}` : ''}`),
+  candidates: (id: number, exclude: string[] = [], count = 5) =>
+    request<{ candidates: VoicedCandidate[]; exhausted: boolean; insights: FormatInsight[]; voiceJob: CandidateVoiceJob | null }>(
+      'GET',
+      `/projects/${id}/candidates?count=${count}${exclude.length ? `&exclude=${encodeURIComponent(exclude.join(','))}` : ''}`,
+    ),
+  candidateVoices: (id: number, keys: string[]) => request<CandidateVoiceJob>('POST', `/projects/${id}/candidates/voice`, { keys }),
+  candidateVoiceStatus: (id: number) => request<CandidateVoiceJob | null>('GET', `/projects/${id}/candidates/voice`),
+  makeCandidate: (id: number, style: StyleId, hookType: HookType) =>
+    request<{ project: ProjectDetail; renderId: number; notes: string[] }>('POST', `/projects/${id}/candidates/make`, { style, hookType }),
+  aiInfo: () => request<AiInfo>('GET', '/ai'),
+  createFromFiles: (files: UploadFile[], memo: string) => request<{ id: number; aiFields: string[]; problems: string[] }>('POST', '/projects/from-files', { files, memo }),
   selectCandidate: (id: number, style: StyleId, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/candidates/select`, { style, hookType }),
   blogCompare: (id: number) =>
     request<{ options: { style: BlogStyle; info: BlogStyleInfo; post: { title: string; markdown: string; html: string }; pending: ExpertQuestion[]; lint: LintIssue[] }[]; selected: string }>('GET', `/projects/${id}/blog/compare`),

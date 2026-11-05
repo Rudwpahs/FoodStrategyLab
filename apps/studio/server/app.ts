@@ -5,8 +5,9 @@ import { ZodError } from 'zod';
 import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
 import { DATA_DIR } from './config.ts';
-import { AUDIO_DIR, approvedRender, cancelRender, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startRender } from './pipeline.ts';
+import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
+import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, monthlyBudgetUsd, type UploadFile } from './recipeReader.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
@@ -49,7 +50,11 @@ export interface AppDeps {
   auth?: Auth;
   /** 인스타그램 연결 (테스트에서는 가짜 Meta 서버로 바꾼다) */
   instagram?: Instagram;
+  /** 레시피 사진·파일 읽기 (테스트에서는 가짜 Claude로 바꾼다) */
+  recipeReader?: RecipeReader;
 }
+
+const FROM_FILES = '/api/projects/from-files';
 
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
@@ -69,9 +74,12 @@ const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
 
 export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const app = express();
-  app.use(express.json({ limit: '2mb' }));
+  // 레시피 사진·파일 올리기만 큰 요청(최대 40MB)을 받는다. 나머지는 2MB
+  const smallJson = express.json({ limit: '2mb' });
+  app.use((req, res, next) => (req.path === FROM_FILES ? next() : smallJson(req, res, next)));
   const auth = deps.auth ?? new Auth(repo.db);
   const ig = deps.instagram ?? new Instagram(repo.db);
+  const reader = deps.recipeReader ?? new RecipeReader(repo.db);
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
@@ -177,6 +185,33 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/projects', (_req, res) => res.json(repo.listProjects()));
 
   api.post('/projects', (req, res) => res.status(201).json({ id: repo.createProject(req.body?.recipe) }));
+
+  // ── 레시피 사진·파일로 새 콘텐츠 (Claude가 적힌 그대로 옮기고, 없는 칸은 'AI 제안'으로 표시) ──
+  api.get('/ai', (_req, res) => {
+    res.json({ configured: aiConfigured(), model: process.env.CLAUDE_MODEL || DEFAULT_MODEL, spentUsd: monthSpentUsd(repo.db), budgetUsd: monthlyBudgetUsd(), maxFiles: MAX_FILES });
+  });
+  api.post('/projects/from-files', express.json({ limit: '40mb' }), async (req, res) => {
+    const body = req.body ?? {};
+    const files: UploadFile[] = Array.isArray(body.files)
+      ? body.files.map((f: Record<string, unknown>) => ({ name: String(f?.name ?? 'recipe').slice(0, 120), type: String(f?.type ?? ''), data: String(f?.data ?? '') }))
+      : [];
+    const memo = String(body.memo ?? '').slice(0, 2000);
+    const { recipe, aiFields, problems, costUsd } = await reader.read(files, memo);
+    const pid = repo.createProject(recipe);
+    // 원본 자료를 그대로 보관한다 (연구자가 읽은 결과와 대조할 수 있게)
+    const dir = path.join(DATA_DIR, 'sources', String(pid));
+    fs.mkdirSync(dir, { recursive: true });
+    const saved = files.map((f, i) => {
+      const ext = (f.type.split('/')[1] ?? 'bin').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin';
+      const rel = `sources/${pid}/${i + 1}.${ext}`;
+      fs.writeFileSync(path.join(DATA_DIR, rel), Buffer.from(f.data, 'base64'));
+      return { name: f.name, type: f.type, file: rel };
+    });
+    repo.setSource(pid, { files: saved, aiFields, problems });
+    const spent = costUsd.toFixed(4);
+    repo.logEvent(pid, 'recipe', `레시피를 자료 ${files.length}개에서 읽음 (Claude, 약 ${spent}달러)` + (aiFields.length ? ` · AI 제안: ${aiFields.join(', ')}` : ''));
+    res.status(201).json({ id: pid, aiFields, problems });
+  });
 
   api.get('/projects/:id', (req, res) => res.json(repo.getProject(id(req))));
 
@@ -532,10 +567,60 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
       .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
 
-  api.get('/projects/:id/candidates', (req, res) => {
+  api.get('/projects/:id/candidates', async (req, res) => {
     const pid = id(req);
     const exclude = String(req.query.exclude ?? '').split(',').filter(Boolean);
-    res.json({ ...contentCandidates(repo.getRecipe(pid), { exclude, recent: recentFormats(pid) }), insights: formatInsights(repo.allPublications()) });
+    const count = Math.min(5, Math.max(1, Number(req.query.count) || 3));
+    const result = contentCandidates(repo.getRecipe(pid), { exclude, recent: recentFormats(pid), count });
+    // 미리보기 타임라인: 목소리를 만들어 둔 문장은 실제 목소리 길이·파일로, 아니면 예상 길이로
+    const previews = await Promise.all(result.candidates.map((c) => previewTimeline(c.script).catch(() => null)));
+    res.json({
+      ...result,
+      candidates: result.candidates.map((c, i) => ({ ...c, timings: previews[i]?.timings ?? null, voiced: previews[i]?.voiced ?? false })),
+      voiceJob: candidateVoiceJob(pid),
+      insights: formatInsights(repo.allPublications()),
+    });
+  });
+
+  /** 후보들의 대사에 목소리 넣기 (미리보기용, 영상은 만들지 않음) */
+  api.post('/projects/:id/candidates/voice', (req, res) => {
+    const pid = id(req);
+    const recipe = repo.getRecipe(pid);
+    const keys: string[] = Array.isArray(req.body?.keys) ? req.body.keys.map(String).slice(0, 5) : [];
+    const scripts = keys.flatMap((k) => {
+      const [style, hookType] = k.split(':');
+      if (!isStyleId(style) || !isHookType(hookType)) return [];
+      try {
+        return [scriptForCandidate(recipe, style, hookType).script];
+      } catch {
+        return [];
+      }
+    });
+    if (!scripts.length) throw new HttpError(400, '목소리를 넣을 후보가 없어요.');
+    const keepAlive = process.env.KEEPALIVE === '1' ? publicOrigin(req) : undefined;
+    res.status(202).json(startCandidateVoices(pid, scripts, keepAlive));
+  });
+  api.get('/projects/:id/candidates/voice', (req, res) => {
+    res.json(candidateVoiceJob(id(req)));
+  });
+
+  /** 이 후보로 만들기: 대본을 고르고 바로 영상(검수용) 만들기를 시작한다 */
+  api.post('/projects/:id/candidates/make', (req, res) => {
+    const pid = id(req);
+    const { style, hookType } = req.body ?? {};
+    if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
+    let built;
+    try {
+      built = scriptForCandidate(repo.getRecipe(pid), style, hookType);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, built.script);
+    repo.addScriptVersion(pid, built.script, 'template', `후보 선택: ${built.title} (${STYLE_INFO[style].label} · ${HOOK_INFO[hookType].label})`);
+    const origin = `http://127.0.0.1:${req.socket.localPort}`;
+    const keepAlive = process.env.KEEPALIVE === '1' ? publicOrigin(req) : undefined;
+    const renderId = deps.startRender(repo, pid, origin, keepAlive);
+    res.status(202).json({ project: repo.getProject(pid), renderId, notes: [...built.notes, ...detached] });
   });
 
   api.post('/projects/:id/candidates/select', (req, res) => {

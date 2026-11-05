@@ -120,48 +120,59 @@ export function contentCandidates(recipe: RecipeInput, opts: CandidateOptions = 
   );
   const usedHooks = new Set<HookType>();
   const usedVisuals = new Set<string>();
+  const usedKeys = new Set<string>();
   const picked: ContentCandidate[] = [];
 
-  for (const style of styles) {
-    if (picked.length >= count) break;
-    if (!scores[style].ready) continue;
-    const ranked = suggestHooks(recipe, { preferred: STYLE_INFO[style].hooks, recent: opts.recent }).filter((h) => h.available);
-    // 연출 유형의 대표 훅을 먼저, 그다음 추천 순서
-    const ordered: HookCandidate[] = [
-      ...STYLE_INFO[style].hooks.map((t) => ranked.find((h) => h.type === t)).filter((h): h is HookCandidate => Boolean(h)),
-      ...ranked.filter((h) => !STYLE_INFO[style].hooks.includes(h.type)),
-    ];
-    const hook = ordered.find((h) => {
-      const visual = h.scenes[0]?.visual ?? 'none';
-      return !exclude.has(`${style}:${h.type}`) && !usedHooks.has(h.type) && !usedVisuals.has(visual);
-    });
-    if (!hook) continue;
-    let built;
-    try {
-      built = buildStyledScript(recipe, { style, hookType: hook.type });
-    } catch {
-      continue;
+  /**
+   * 1차: 연출 유형마다 하나씩, 훅·첫 화면이 모두 다르게.
+   * 2차(그래도 모자라면): 같은 연출 유형이라도 아직 안 쓴 훅으로 하나 더 (첫 화면은 겹쳐도 됨).
+   */
+  for (const pass of [1, 2] as const) {
+    for (const style of styles) {
+      if (picked.length >= count) break;
+      if (!scores[style].ready) continue;
+      const ranked = suggestHooks(recipe, { preferred: STYLE_INFO[style].hooks, recent: opts.recent }).filter((h) => h.available);
+      // 연출 유형의 대표 훅을 먼저, 그다음 추천 순서
+      const ordered: HookCandidate[] = [
+        ...STYLE_INFO[style].hooks.map((t) => ranked.find((h) => h.type === t)).filter((h): h is HookCandidate => Boolean(h)),
+        ...ranked.filter((h) => !STYLE_INFO[style].hooks.includes(h.type)),
+      ];
+      for (const hook of ordered) {
+        const key = `${style}:${hook.type}`;
+        const visual = hook.scenes[0]?.visual ?? 'none';
+        if (exclude.has(key) || usedKeys.has(key) || usedHooks.has(hook.type)) continue;
+        if (pass === 1 && usedVisuals.has(visual)) continue;
+        let built;
+        try {
+          built = buildStyledScript(recipe, { style, hookType: hook.type });
+        } catch {
+          continue;
+        }
+        const title = candidateTitle(recipe, style);
+        const script = { ...built.script, title };
+        usedHooks.add(hook.type);
+        usedVisuals.add(visual);
+        usedKeys.add(key);
+        picked.push({
+          key,
+          style,
+          styleLabel: STYLE_INFO[style].label,
+          hookType: hook.type,
+          hookLabel: hook.label,
+          title,
+          firstLine: hook.line,
+          firstVisual: hook.scenes[0]?.visual,
+          firstScreen: hook.firstScreen,
+          keyScenes: keyScenes(script),
+          estimatedSeconds: Math.round(estimateScriptSeconds(script)),
+          reason: [...new Set(`${scores[style].reason} · ${hook.reason}`.replace('연구자가 입력한 실제 실수가 있어요', '연구자가 입력한 흔한 실수가 있어요').split(' · '))].join(' · '),
+          needsReview: built.notes,
+          script,
+        });
+        break;
+      }
     }
-    const title = candidateTitle(recipe, style);
-    const script = { ...built.script, title };
-    usedHooks.add(hook.type);
-    usedVisuals.add(hook.scenes[0]?.visual ?? 'none');
-    picked.push({
-      key: `${style}:${hook.type}`,
-      style,
-      styleLabel: STYLE_INFO[style].label,
-      hookType: hook.type,
-      hookLabel: hook.label,
-      title,
-      firstLine: hook.line,
-      firstVisual: hook.scenes[0]?.visual,
-      firstScreen: hook.firstScreen,
-      keyScenes: keyScenes(script),
-      estimatedSeconds: Math.round(estimateScriptSeconds(script)),
-      reason: [...new Set(`${scores[style].reason} · ${hook.reason}`.replace('연구자가 입력한 실제 실수가 있어요', '연구자가 입력한 흔한 실수가 있어요').split(' · '))].join(' · '),
-      needsReview: built.notes,
-      script,
-    });
+    if (picked.length >= count) break;
   }
   return { candidates: picked, exhausted: picked.length < count };
 }

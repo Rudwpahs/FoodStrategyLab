@@ -111,8 +111,19 @@ function toPublication(r: Row): Publication {
   };
 }
 
+/** 레시피를 사진·파일에서 읽었을 때의 기록 */
+export interface RecipeSource {
+  /** 저장한 원본 파일 (DATA_DIR 기준 경로) */
+  files: { name: string; type: string; file: string; url: string }[];
+  /** AI가 제안해서 채운 칸 (연구자 확인 필요) */
+  aiFields: string[];
+  /** 읽기 어려웠던 부분·다른 메모 */
+  problems: string[];
+}
+
 export interface ProjectDetail extends ProjectSummary {
   recipe: RecipeInput;
+  source: RecipeSource | null;
   photo: ProjectPhoto | null;
   sceneMedia: SceneMedia;
   versionState: VersionState;
@@ -234,6 +245,19 @@ export class Repo {
     this.db.prepare('UPDATE projects SET expert_notes = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(next), now(), id);
     this.logEvent(id, 'notes', by ? `연구자 답변 확인 (${by})` : changed ? '연구자 답변 수정' : '연구자 답변 저장');
     return next;
+  }
+
+  getSource(id: number): RecipeSource | null {
+    const row = this.db.prepare('SELECT source_json FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    const src = JSON.parse(String(row.source_json || '{}')) as Partial<RecipeSource>;
+    if (!src.files?.length && !src.aiFields?.length) return null;
+    return { files: (src.files ?? []).map((f) => ({ ...f, url: `/media/${f.file}` })), aiFields: src.aiFields ?? [], problems: src.problems ?? [] };
+  }
+
+  setSource(id: number, src: Omit<RecipeSource, 'files'> & { files: { name: string; type: string; file: string }[] }) {
+    this.getRecipe(id);
+    this.db.prepare('UPDATE projects SET source_json = ? WHERE id = ?').run(JSON.stringify(src), id);
   }
 
   getBlogStyle(id: number): string {
@@ -436,6 +460,6 @@ export class Repo {
       createdAt: String(r.created_at),
     }));
     const approval = versionState.approvedScriptVersion !== null ? this.lastReview(id, versionState.approvedScriptVersion) : null;
-    return { ...base, recipe: this.getRecipe(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval, blogStyle: this.getBlogStyle(id), publications: this.listPublications(id) };
+    return { ...base, recipe: this.getRecipe(id), source: this.getSource(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval, blogStyle: this.getBlogStyle(id), publications: this.listPublications(id) };
   }
 }

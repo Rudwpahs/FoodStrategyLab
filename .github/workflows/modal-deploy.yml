@@ -6,6 +6,9 @@ name: Deploy to Modal
 #   STUDIO_SETUP_CODE                  : 처음 계정을 만들 때 화면에 넣을 설정 코드 (8자 이상, 직접 정함)
 # 선택 (인스타그램 공식 게시, docs/INSTAGRAM_SETUP.md):
 #   INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET : Meta 개발자 앱의 Instagram 앱 ID·비밀값
+# 선택 (레시피 사진·파일 읽기, docs/MODAL_SETUP.md):
+#   ANTHROPIC_API_KEY                  : Claude API 열쇠 (console.anthropic.com)
+#   CLAUDE_MONTHLY_BUDGET_USD          : 한 달 사용 한도(달러, 기본 3)
 # 비밀값이 없으면 아무것도 하지 않고 끝난다.
 
 on:
@@ -35,6 +38,8 @@ jobs:
       STUDIO_SETUP_CODE: ${{ secrets.STUDIO_SETUP_CODE }}
       INSTAGRAM_APP_ID: ${{ secrets.INSTAGRAM_APP_ID }}
       INSTAGRAM_APP_SECRET: ${{ secrets.INSTAGRAM_APP_SECRET }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_MONTHLY_BUDGET_USD: ${{ secrets.CLAUDE_MONTHLY_BUDGET_USD }}
     steps:
       - name: 비밀값 확인
         id: check
@@ -69,6 +74,13 @@ jobs:
           if [ -n "$INSTAGRAM_APP_ID" ] && [ -n "$INSTAGRAM_APP_SECRET" ]; then
             args+=("INSTAGRAM_APP_ID=$INSTAGRAM_APP_ID" "INSTAGRAM_APP_SECRET=$INSTAGRAM_APP_SECRET")
             echo "인스타그램 앱 정보도 저장해요."
+          fi
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            args+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+            echo "레시피 읽기(Claude API) 열쇠도 저장해요."
+          fi
+          if [ -n "$CLAUDE_MONTHLY_BUDGET_USD" ]; then
+            args+=("CLAUDE_MONTHLY_BUDGET_USD=$CLAUDE_MONTHLY_BUDGET_USD")
           fi
           modal secret create matlab-studio "${args[@]}" --force >/dev/null
 

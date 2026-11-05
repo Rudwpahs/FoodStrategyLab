@@ -12,7 +12,7 @@
 
 | 항목 | 상태 | 근거 |
 | --- | --- | --- |
-| 테스트 149개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck` |
+| 테스트 158개 · 타입 검사 | 통과 | `npm test`, `npm run typecheck` |
 | Modal 배포 코드 | 작성·로컬 검증 | `deploy/modal/app.py`, `voice_proxy.py`, `.github/workflows/modal-deploy.yml`, 안내 `docs/MODAL_SETUP.md`. 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정 스튜디오로 첫 계정·목소리 준비·영상 제작 확인 |
 | Modal 실제 배포 | ✅ 배포·응답 확인 (2026-11-05, Actions #4) | `https://rudwpahs--matlab-studio-web.modal.run`, 첫 계정 화면까지. **첫 계정·GPU 목소리·영상 1편·제작 중 깨워 두기는 미확인** |
 | 인스타그램 공식 게시 | 구현·모의 검증 | `docs/INSTAGRAM_SETUP.md`. 실제 연결·게시는 Meta 앱과 사용자 확인이 필요 |

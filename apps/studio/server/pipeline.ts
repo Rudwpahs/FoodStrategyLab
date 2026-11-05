@@ -66,6 +66,53 @@ export async function generateVoice(script: Script, shouldStop: () => boolean = 
   return { provider, generated };
 }
 
+/** 후보 미리보기용 목소리 작업 (콘텐츠마다 하나) */
+export interface CandidateVoiceJob {
+  status: 'running' | 'done' | 'failed';
+  done: number;
+  total: number;
+  error: string;
+}
+const candidateVoiceJobs = new Map<number, CandidateVoiceJob>();
+export const candidateVoiceJob = (projectId: number) => candidateVoiceJobs.get(projectId) ?? null;
+
+/**
+ * 후보 영상 여러 개의 대사에 맛조수 목소리를 넣는다 (미리보기에서 바로 들을 수 있게).
+ * 같은 문장은 한 번만 만들고(캐시), 받아쓰기(어절 시간)까지 미리 해 둔다.
+ * 영상(MP4)은 만들지 않는다: 미리보기는 브라우저가 그리고, 고른 후보 하나만 서버에서 렌더한다.
+ */
+export function startCandidateVoices(projectId: number, scripts: Script[], keepAliveOrigin?: string): CandidateVoiceJob {
+  const running = candidateVoiceJobs.get(projectId);
+  if (running?.status === 'running') return running;
+  const lines = [...new Set(scripts.flatMap((s) => s.scenes.map((sc) => sc.line)))];
+  const job: CandidateVoiceJob = { status: 'running', done: 0, total: lines.length, error: '' };
+  candidateVoiceJobs.set(projectId, job);
+  const stopKeepAlive = keepAliveOrigin ? keepAwake(keepAliveOrigin) : () => undefined;
+  void (async () => {
+    try {
+      const provider = await ttsProvider();
+      if (provider === 'none') throw new Error('목소리 도구가 연결되지 않았어요. 목소리 없이 미리보기만 보여 드려요.');
+      for (const line of lines) {
+        const a = await synthesize(line, AUDIO_DIR);
+        const bounds = await cachedSpeechBounds(a.file).catch(() => null);
+        if (bounds?.silent) {
+          fs.rmSync(a.file, { force: true });
+          throw new Error(`"${line.slice(0, 20)}…" 대사의 음성이 비어 있어요. 다시 시도해 주세요.`);
+        }
+        await measuredWords(a.file, line).catch(() => undefined);
+        job.done++;
+      }
+      job.status = 'done';
+    } catch (e) {
+      job.status = 'failed';
+      job.error = (e as Error).message || '목소리를 만들지 못했어요.';
+    } finally {
+      stopKeepAlive();
+    }
+  })();
+  return job;
+}
+
 type VideoRenderer = typeof import('@mat-lab/video/render');
 let rendererPromise: Promise<VideoRenderer> | null = null;
 // 렌더러(웹팩·크롬)는 무거우므로 처음 제작할 때 불러온다.

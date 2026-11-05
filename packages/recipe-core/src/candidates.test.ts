@@ -90,3 +90,15 @@ describe('콘텐츠 후보 3가지', () => {
     expect(instagramCaption(pilot, c.script, true, [])).toContain('검토한');
   });
 });
+
+describe('후보 5개 (사진으로 만들기)', () => {
+  it('샘플 레시피마다 후보 5개: 훅이 모두 다르고, 대본은 원본 대조를 통과한다', () => {
+    for (const r of SAMPLE_RECIPES) {
+      const { candidates } = contentCandidates(r, { count: 5 });
+      expect(candidates).toHaveLength(5);
+      expect(new Set(candidates.map((c) => c.key)).size).toBe(5);
+      expect(new Set(candidates.map((c) => c.hookType)).size).toBe(5);
+      for (const c of candidates) expect(checkScript(r, c.script).filter((i) => i.level === 'error')).toEqual([]);
+    }
+  });
+});
