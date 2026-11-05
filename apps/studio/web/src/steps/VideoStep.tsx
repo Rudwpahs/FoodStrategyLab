@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
+import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
 import { BlogChoice } from '../components/BlogChoice.tsx';
 import { useApp } from '../App.tsx';
@@ -94,13 +95,16 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
               {project.photo ? '사진 바꾸기' : '사진 올리기'}
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept={PHOTO_ACCEPT}
                 hidden
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
+                  const picked = e.target.files?.[0];
                   e.target.value = '';
-                  if (!file) return;
-                  const p = await run(async () => api.uploadPhoto(project.id, file, await photoColor(file)), '완성 사진을 올렸습니다');
+                  if (!picked) return;
+                  const p = await run(async () => {
+                    const file = await heicToJpeg(picked);
+                    return api.uploadPhoto(project.id, file, await photoColor(file));
+                  }, '완성 사진을 올렸습니다');
                   if (p) setProject(p);
                 }}
               />

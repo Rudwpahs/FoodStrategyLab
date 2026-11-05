@@ -2,6 +2,7 @@ import React from 'react';
 import { clipGroups } from '@mat-lab/recipe-core';
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
+import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 
 /**
  * 생성 AI 클립 올리기. 클립 번호는 'AI 영상 프롬프트 팩'과 같다 (약 8초 묶음).
@@ -47,13 +48,13 @@ export const ClipUploads: React.FC<{ project: ProjectDetail; setProject: (p: Pro
               {media ? '바꾸기' : '올리기'}
               <input
                 type="file"
-                accept="video/mp4,video/webm,image/jpeg,image/png,image/webp"
+                accept={`video/mp4,video/webm,${PHOTO_ACCEPT}`}
                 hidden
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
+                  const picked = e.target.files?.[0];
                   e.target.value = '';
-                  if (!file) return;
-                  const p = await run(() => api.uploadSceneMedia(project.id, firstId, file), `클립 ${gi + 1}을 올렸습니다`);
+                  if (!picked) return;
+                  const p = await run(async () => api.uploadSceneMedia(project.id, firstId, await heicToJpeg(picked)), `클립 ${gi + 1}을 올렸습니다`);
                   if (p) setProject(p);
                 }}
               />

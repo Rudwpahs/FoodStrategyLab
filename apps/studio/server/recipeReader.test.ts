@@ -58,6 +58,7 @@ describe('레시피 읽기 (가짜 Claude)', () => {
     expect(blocks.map((b) => b.type)).toEqual(['image', 'document', 'text', 'text']);
     expect(() => toContentBlocks([{ name: 'x.docx', type: 'application/msword', data: png }], '')).toThrow(/읽을 수 없는 형식/);
     expect(() => toContentBlocks([], '')).toThrow(/올려 주세요/);
+    expect(() => toContentBlocks([{ name: 'IMG_0001.HEIC', type: 'image/heic', data: png }], '')).toThrow(/HEIC/);
   });
 
   it('재료·분량·순서는 적힌 그대로, 없는 칸은 AI 제안으로 표시하고, 사용 금액을 기록한다 (기본: Opus 5.5)', async () => {

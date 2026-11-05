@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api, type AiInfo, type UploadFile } from '../api.ts';
 import { navigate, useApp } from '../App.tsx';
 import { EMPTY_RECIPE, RecipeForm } from '../components/RecipeForm.tsx';
+import { IMAGE_ACCEPT, heicToJpeg } from '../heic.ts';
 
 const MAX_SIDE = 2000;
 
@@ -28,11 +29,12 @@ async function toUpload(file: File): Promise<UploadFile> {
 }
 
 export const NewProjectPage: React.FC = () => {
-  const { run, meta } = useApp();
+  const { run, meta, notify } = useApp();
   const [ai, setAi] = useState<AiInfo | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [memo, setMemo] = useState('');
   const [reading, setReading] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [initial, setInitial] = useState(EMPTY_RECIPE);
   const [formKey, setFormKey] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -60,20 +62,32 @@ export const NewProjectPage: React.FC = () => {
         <div className="drop" onClick={() => input.current?.click()}>
           <div style={{ fontSize: 34 }}>📷</div>
           <b>사진 찍기 · 사진 고르기 · 파일 고르기</b>
-          <div className="muted small">손글씨·인쇄 레시피 사진, 화면 캡처, PDF, 텍스트 파일 (최대 {max}개)</div>
+          <div className="muted small">손글씨·인쇄 레시피 사진(아이폰 HEIC 포함), 화면 캡처, PDF, 텍스트 파일 (최대 {max}개)</div>
         </div>
         <input
           ref={input}
           type="file"
-          accept="image/*,application/pdf,text/plain,.txt,.md"
+          accept={`${IMAGE_ACCEPT},application/pdf,text/plain,.txt,.md`}
           multiple
           hidden
-          onChange={(e) => {
+          onChange={async (e) => {
             const picked = [...(e.target.files ?? [])];
-            setFiles((cur) => [...cur, ...picked].slice(0, max));
             e.target.value = '';
+            // 아이폰 사진(HEIC)은 고르자마자 JPG로 바꾼다 (미리보기·Claude가 읽을 수 있게)
+            setConverting(true);
+            const ok: File[] = [];
+            for (const f of picked) {
+              try {
+                ok.push(await heicToJpeg(f));
+              } catch (err) {
+                notify((err as Error).message, true);
+              }
+            }
+            setConverting(false);
+            setFiles((cur) => [...cur, ...ok].slice(0, max));
           }}
         />
+        {converting && <div className="muted small">아이폰 사진(HEIC)을 JPG로 바꾸는 중…</div>}
         {files.length > 0 && (
           <div className="source-thumbs">
             {previews.map(({ f, url }, i) => (
@@ -92,7 +106,7 @@ export const NewProjectPage: React.FC = () => {
         </label>
         <button
           className="btn primary"
-          disabled={reading || files.length === 0 || ai?.configured === false}
+          disabled={reading || converting || files.length === 0 || ai?.configured === false}
           onClick={async () => {
             setReading(true);
             const uploads = await Promise.all(files.map(toUpload));

@@ -94,8 +94,10 @@ export function toContentBlocks(files: UploadFile[], memo: string): Anthropic.Co
     } else if (type.startsWith('text/') || /\.(txt|md)$/i.test(f.name)) {
       const text = Buffer.from(f.data, 'base64').toString('utf8').slice(0, 60_000);
       blocks.push({ type: 'text', text: `[파일: ${f.name}]\n${text}` });
+    } else if (/hei[cf]/.test(type) || /\.(heic|heif)$/i.test(f.name)) {
+      throw new HttpError(400, `"${f.name}"은(는) 아이폰 사진(HEIC)이에요. 화면을 새로 고친 뒤 다시 골라 주세요 (자동으로 JPG로 바꿔 올려요).`);
     } else {
-      throw new HttpError(400, `"${f.name}"은(는) 읽을 수 없는 형식이에요. 사진(JPG·PNG), PDF, 텍스트 파일을 올려 주세요.`);
+      throw new HttpError(400, `"${f.name}"은(는) 읽을 수 없는 형식이에요. 사진(JPG·PNG·HEIC), PDF, 텍스트 파일을 올려 주세요.`);
     }
   }
   blocks.push({ type: 'text', text: `${memo.trim() ? `연구자 메모: ${memo.trim()}\n\n` : ''}위 자료의 레시피를 정해진 형식으로 옮겨 주세요.` });
