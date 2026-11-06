@@ -101,7 +101,8 @@ export const KitchenScene: React.FC<{
   const facing = state.face === 'stove' ? faceAngle(CHEF_POS, BURNER) : faceAngle(CHEF_POS, state.camera.pos) * 0.85;
   const positions = propPositions(props.length);
   return (
-    <ThreeCanvas width={width} height={height} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
+    // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다
+    <ThreeCanvas width={width} height={height} dpr={1} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
       <CameraRig {...state.camera} />
       <MoodLights mood={state.mood} camera={state.camera} />
       <KitchenSet />

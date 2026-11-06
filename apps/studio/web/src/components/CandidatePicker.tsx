@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
-import { ShortVideo, buildTimeline, totalFrames, type VideoProps } from '@mat-lab/video';
+import { Character, ShortVideo, buildTimeline, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, type CandidateVoiceJob, type FormatInsight, type ProjectDetail, type VoicedCandidate } from '../api.ts';
 import { useApp } from '../App.tsx';
 
@@ -19,6 +19,8 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
   const [job, setJob] = useState<CandidateVoiceJob | null>(null);
   const [loading, setLoading] = useState(false);
   const [making, setMaking] = useState<string | null>(null);
+  // 3D 미리보기는 한 번에 하나만 (휴대폰에서 5개를 동시에 그리면 메모리가 넘쳐 브라우저가 멈춘다)
+  const [playing, setPlaying] = useState<string | null>(null);
   const asked = useRef(new Set<string>());
 
   const load = useCallback(
@@ -96,6 +98,8 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
             busy={making !== null}
             making={making === c.key}
             insight={insights.find((x) => x.kind === 'style' && x.key === c.style)}
+            live={playing === c.key}
+            onPlay={() => setPlaying(c.key)}
             onMake={async () => {
               setMaking(c.key);
               const r = await run(() => api.makeCandidate(project.id, c.style, c.hookType), `"${c.title}"(으)로 영상을 만들기 시작했어요`);
@@ -129,8 +133,10 @@ const CandidateCard: React.FC<{
   busy: boolean;
   making: boolean;
   insight?: FormatInsight;
+  live: boolean;
+  onPlay: () => void;
   onMake: () => void;
-}> = ({ index, candidate: c, project, chosen, busy, making, insight, onMake }) => {
+}> = ({ index, candidate: c, project, chosen, busy, making, insight, live, onPlay, onMake }) => {
   const props = useMemo<VideoProps>(() => {
     const timings = c.timings ?? buildTimeline(c.script, c.script.scenes.map(() => null));
     return { script: c.script, timings, reviewed: false, cleanDraft: true, recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
@@ -146,6 +152,7 @@ const CandidateCard: React.FC<{
       </div>
       <div style={{ fontWeight: 800, fontSize: 17 }}>{c.title}</div>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {live ? (
         <Player
           component={ShortVideo}
           inputProps={props}
@@ -157,7 +164,15 @@ const CandidateCard: React.FC<{
           // 0프레임은 맛조수가 등장하기 전이라, 첫 화면을 대표하는 0.7초 지점을 보여 준다
           initialFrame={Math.min(20, Math.max(0, totalFrames(props.timings) - 1))}
           style={{ width: 200, height: 356, borderRadius: 12, overflow: 'hidden', border: '2px solid var(--ink)' }}
+          autoPlay
         />
+        ) : (
+          <button className="candidate-cover" onClick={onPlay} aria-label={`후보 ${String.fromCharCode(65 + index)} 재생`}>
+            <Character emotion={c.script.scenes[0]?.emotion ?? 'curious'} frame={0} size={150} still />
+            <span className="candidate-cover-line">“{c.firstLine}”</span>
+            <span className="candidate-cover-play">▶ 재생</span>
+          </button>
+        )}
       </div>
       <div className="small">
         <b>첫 대사</b> “{c.firstLine}”
