@@ -1,3 +1,4 @@
+import { findAiTells } from './aiTells.ts';
 import type { ExpertNotes } from './expertBlog.ts';
 
 export interface LintIssue {
@@ -34,6 +35,16 @@ export function lintBlog(markdown: string, opts: { dish: string; notes?: ExpertN
     if (!answers.some((a) => a.includes(s) || (a.trim().length >= 8 && s.includes(a.trim())))) {
       issues.push({ level: 'error', message: `연구자 답변에 없는 1인칭 경험 문장이에요: "${s.slice(0, 40)}" — 지어낸 경험일 수 있어요.` });
     }
+  }
+
+  // AI 티 (im-not-ai 규칙): 연구자 답변 원문은 검사하지 않는다
+  // '답변 대기'·'검수 전' 같은 내부 표시 줄은 게시 전에 사라지므로 빼고 본다
+  const publishable = body
+    .split('\n')
+    .filter((l) => !l.includes('[연구자 답변 대기]') && !l.trim().startsWith('⚠️'))
+    .join('\n');
+  for (const t of findAiTells(publishable, answers)) {
+    issues.push({ level: 'warning', message: `AI 티 [${t.rule}] ${t.found} — ${t.fix}` });
   }
 
   const bangs = (body.match(/!!+/g) ?? []).length;

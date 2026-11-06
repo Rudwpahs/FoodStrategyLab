@@ -5,3 +5,4 @@ export * from './zip.ts';
 export * from './expertBlog.ts';
 export * from './consistency.ts';
 export * from './blogLint.ts';
+export * from './aiTells.ts';
