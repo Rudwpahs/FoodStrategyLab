@@ -39,6 +39,8 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private static final String PREFS = "matlab";
     private static final String KEY_URL = "studio_url";
+    /** 클라우드 스튜디오 주소 (Modal). 설치하면 바로 이 주소가 열린다. 메뉴의 '스튜디오 주소 바꾸기'로 바꿀 수 있다. */
+    private static final String DEFAULT_URL = "https://rudwpahs--matlab-studio-web.us-east.modal.run";
     private static final int REQ_FILE = 1;
 
     private WebView web;
@@ -48,8 +50,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String url = prefs().getString(KEY_URL, "");
-        if (url.isEmpty()) showSetup(null);
-        else showStudio(url);
+        showStudio(url.isEmpty() ? DEFAULT_URL : url);
     }
 
     private SharedPreferences prefs() {
@@ -70,7 +71,7 @@ public class MainActivity extends Activity {
         box.addView(title);
 
         TextView help = new TextView(this);
-        help.setText("스튜디오 주소를 입력하세요.\n예: https://studio.example.com 또는 http://내-PC-이름:5178 (Tailscale)\n\n영상과 목소리는 스튜디오 PC(또는 서버)에서 만들어지고, 이 앱은 그 화면을 휴대폰에서 보여 줘요.");
+        help.setText("스튜디오 주소를 입력하세요.\n보통은 이미 채워진 클라우드 주소 그대로 '연결하기'를 누르면 돼요.\n\n영상과 목소리는 클라우드 서버에서 만들어지고, 이 앱은 그 화면을 휴대폰에서 보여 줘요.");
         help.setTextSize(15);
         help.setPadding(0, 24, 0, 24);
         box.addView(help);
@@ -86,7 +87,7 @@ public class MainActivity extends Activity {
         final EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         input.setHint("https://");
-        input.setText(prefs().getString(KEY_URL, ""));
+        input.setText(prefs().getString(KEY_URL, DEFAULT_URL));
         box.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Button save = new Button(this);
@@ -136,7 +137,7 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    showSetup("스튜디오에 연결하지 못했어요 (" + error.getDescription() + "). 스튜디오 PC가 켜져 있는지, 주소가 맞는지 확인해 주세요.");
+                    showSetup("스튜디오에 연결하지 못했어요 (" + error.getDescription() + "). 인터넷이 연결돼 있는지 확인하고 '연결하기'를 다시 눌러 주세요. 서버가 잠들어 있으면 깨어나는 데 30초쯤 걸려요.");
                 }
             }
         });
