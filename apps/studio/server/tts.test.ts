@@ -170,3 +170,66 @@ describe('VoiceStudio 음성', () => {
     expect(cachedAudio('이희재의 맛 연구소에서 오늘도 실험!', audioDir, await voiceIdentity('edge'))).toBeNull();
   });
 });
+
+describe('목소리 고르기 · 말 빠르기', () => {
+  it('목록의 기본 목소리 이름은 예전 맛조수 이름과 같다 (이미 만든 음성을 그대로 쓴다)', async () => {
+    const { voicePresets } = await import('./voicePresets.ts');
+    const { MASCOT_REFERENCE_FILE, mascotVoiceName } = await import('./voicestudio.ts');
+    const first = voicePresets()[0]!;
+    expect(first.id).toBe('matjosu');
+    expect(first.voiceName).toBe(mascotVoiceName(fs.readFileSync(MASCOT_REFERENCE_FILE)));
+  });
+
+  it('목록에 있는 목소리가 VoiceStudio에 없으면 기준 녹음으로 먼저 만들고, 그 목소리로 요청한다', async () => {
+    const { voicePresets } = await import('./voicePresets.ts');
+    const p = voicePresets()[0]!;
+    designBody = '';
+    await synthesize('목록 목소리 시험 문장', audioDir, { voice: p.voiceName });
+    expect(designBody).toContain(p.voiceName);
+    expect(designBody).toContain('clone');
+    expect(requests.at(-1)).toMatchObject({ voice: p.voiceName, input: '목록 목소리 시험 문장' });
+  });
+
+  it('보통 빠르기는 예전과 같은 음성 이름, 다른 빠르기는 따로 저장한다', async () => {
+    writeVoiceSettings({ voicestudioVoice: 'default', tempo: 1 });
+    const normal = await voiceIdentity('voicestudio');
+    expect(normal).not.toContain('tempo');
+    writeVoiceSettings({ tempo: 1.1 });
+    const faster = await voiceIdentity('voicestudio');
+    expect(faster).toContain('tempo1.1');
+    // 목록에 없는 값은 보통으로
+    writeVoiceSettings({ tempo: 3 });
+    expect(await voiceIdentity('voicestudio')).toBe(normal);
+    writeVoiceSettings({ tempo: 1 });
+  });
+});
+
+describe('말 빠르기 바꾸기 (ffmpeg)', () => {
+  it('2배 빠르게 하면 길이가 절반이 된다', async () => {
+    const { changeTempo } = await import('@mat-lab/video/audio');
+    // 1초짜리 소리 (16kHz, 16비트 모노 WAV)
+    const rate = 16000;
+    const pcm = Buffer.alloc(rate * 2);
+    for (let i = 0; i < rate; i++) pcm.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 440) * 8000), i * 2);
+    const head = Buffer.alloc(44);
+    head.write('RIFF', 0);
+    head.writeUInt32LE(36 + pcm.length, 4);
+    head.write('WAVEfmt ', 8);
+    head.writeUInt32LE(16, 16);
+    head.writeUInt16LE(1, 20);
+    head.writeUInt16LE(1, 22);
+    head.writeUInt32LE(rate, 24);
+    head.writeUInt32LE(rate * 2, 28);
+    head.writeUInt16LE(2, 32);
+    head.writeUInt16LE(16, 34);
+    head.write('data', 36);
+    head.writeUInt32LE(pcm.length, 40);
+    const input = path.join(audioDir, 'tone.wav');
+    const output = path.join(audioDir, 'tone-fast.mp3');
+    fs.writeFileSync(input, Buffer.concat([head, pcm]));
+    await changeTempo(input, output, 2);
+    const { mp3DurationSeconds } = await import('./tts.ts');
+    expect(mp3DurationSeconds(fs.readFileSync(output))).toBeGreaterThan(0.4);
+    expect(mp3DurationSeconds(fs.readFileSync(output))).toBeLessThan(0.65);
+  });
+});

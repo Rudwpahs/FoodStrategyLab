@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { changeTempo } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
+import { VOICE_TEMPOS, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
 import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './voicestudio.ts';
 
 /**
@@ -28,6 +30,18 @@ export function resetTtsDetection() {
 /** 지금 쓰는 VoiceStudio 목소리 프로필 이름 (환경 변수 > 스튜디오 화면에서 고른 것 > 기본) */
 export function voicestudioVoice(): string {
   return ttsSettings().voicestudio.voiceOverride || readVoiceSettings().voicestudioVoice || 'default';
+}
+
+/** 말 빠르기 배수 (설정 화면에서 고름, 1 = 보통) */
+export function voiceTempo(): number {
+  const t = readVoiceSettings().tempo;
+  return isVoiceTempo(t) ? t : 1;
+}
+
+/** 목소리·빠르기를 설정과 다르게 쓸 때 (설정 화면의 '들어보기') */
+export interface VoiceOverride {
+  voice?: string;
+  tempo?: number;
 }
 
 async function voicestudioUrl(): Promise<string | null> {
@@ -72,7 +86,11 @@ export function ttsProvider(): Promise<TtsProvider> {
 
 export function describeVoice(provider: TtsProvider): string {
   const s = ttsSettings();
-  if (provider === 'voicestudio') return `VoiceStudio · ${voicestudioVoice()}`;
+  if (provider === 'voicestudio') {
+    const v = voicestudioVoice();
+    const tempo = voiceTempo();
+    return `${presetByVoiceName(v)?.label ?? v}${tempo !== 1 ? ` · ${VOICE_TEMPOS.find((t) => t.value === tempo)?.label}` : ''}`;
+  }
   if (provider === 'edge') return `edge-tts · ${s.edge.voice}`;
   return '음성 없음 (자막만)';
 }
@@ -91,16 +109,18 @@ function run(cmd: string, args: string[]): Promise<void> {
  * 지금 쓰는 목소리의 정체: 음성 도구 + 엔진 + 목소리 프로필 ID + 설정.
  * 같은 이름으로 목소리를 다시 만들거나 엔진이 바뀌면 값이 달라져서, 예전 음성 캐시를 쓰지 않는다.
  */
-export async function voiceIdentity(provider: TtsProvider): Promise<string | null> {
+export async function voiceIdentity(provider: TtsProvider, override: VoiceOverride = {}): Promise<string | null> {
   const s = ttsSettings();
   if (provider === 'edge') return ['edge', s.edge.voice, s.edge.rate, s.edge.pitch].join('|');
   if (provider !== 'voicestudio') return null;
   const url = await voicestudioUrl();
   if (!url) return null;
   const engine = (await engineInfo(url)).chosen ?? 'none';
-  const voice = voicestudioVoice();
+  const voice = override.voice ?? voicestudioVoice();
   const profileId = (await listProfiles(url).catch(() => [])).find((p) => p.name === voice)?.id ?? 'builtin';
-  return ['vs', engine, voice, profileId, s.voicestudio.speed].join('|');
+  const tempo = override.tempo ?? voiceTempo();
+  // 보통 빠르기(1)는 예전과 같은 이름 → 이미 만든 음성을 그대로 쓴다
+  return ['vs', engine, voice, profileId, s.voicestudio.speed, ...(tempo !== 1 ? [`tempo${tempo}`] : [])].join('|');
 }
 
 /** 목소리 정체 + 문장으로 캐시 파일 이름을 만든다 */
@@ -108,14 +128,13 @@ export function audioKey(text: string, identity: string): string {
   return crypto.createHash('sha1').update(`${identity}|${text}`).digest('hex').slice(0, 16);
 }
 
-async function voicestudioSpeech(text: string, out: string) {
+async function voicestudioSpeech(text: string, out: string, voice: string) {
   const { speed, apiKey } = ttsSettings().voicestudio;
   const url = await voicestudioUrl();
   if (!url) throw new Error('VoiceStudio에 연결할 수 없습니다. 앱을 켜 주세요.');
   // 상업 이용 가능한 엔진만 쓴다 (기본 OmniVoice는 비상업 라이선스)
   const model = (await engineInfo(url)).chosen;
   if (!model) throw new Error('상업적으로 쓸 수 있는 음성 엔진(VoxCPM2 등)이 설치되어 있지 않습니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
-  const voice = voicestudioVoice();
   // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
   // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
   const timeoutMs = Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000;
@@ -191,18 +210,38 @@ export async function measuredWords(file: string, line: string): Promise<[number
   return words ?? undefined;
 }
 
-/** 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초) */
-export async function synthesize(text: string, audioDir: string): Promise<{ file: string; seconds: number }> {
+/**
+ * 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초)
+ * override: 설정과 다른 목소리·빠르기로 (설정 화면의 '들어보기')
+ */
+export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
-  const identity = await voiceIdentity(provider);
+  const voice = override.voice ?? voicestudioVoice();
+  const tempo = override.tempo ?? voiceTempo();
+  // 고른 목소리가 VoiceStudio에 아직 없으면 기준 녹음으로 먼저 만든다 (목소리 정체에 프로필 ID가 들어가므로 먼저)
+  if (provider === 'voicestudio') {
+    const url = await voicestudioUrl();
+    if (url) await ensurePresetVoice(url, voice);
+  }
+  const identity = await voiceIdentity(provider, { voice, tempo });
   if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
   if (!fs.existsSync(file)) {
     const tmp = `${file}.tmp`;
     if (provider === 'voicestudio') {
-      await voicestudioSpeech(text, tmp);
+      await voicestudioSpeech(text, tmp, voice);
+      // 말 빠르기 (음높이는 그대로)
+      if (tempo !== 1) {
+        const raw = `${tmp}.raw.mp3`;
+        fs.renameSync(tmp, raw);
+        try {
+          await changeTempo(raw, tmp, tempo);
+        } finally {
+          fs.rmSync(raw, { force: true });
+        }
+      }
     } else {
       const e = ttsSettings().edge;
       const args = ['--voice', e.voice, `--rate=${e.rate}`, `--pitch=${e.pitch}`, '--text', text, '--write-media', tmp];

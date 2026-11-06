@@ -49,11 +49,31 @@ export interface RenderStatus extends RenderRow {
   baseUrl: string;
 }
 
+export interface VoicePreset {
+  id: string;
+  label: string;
+  note: string;
+  voiceName: string;
+}
+export type VoiceSampleResult = { url: string; seconds: number } | { error: string };
+/** 모든 목소리로 같은 문장 들어 보기 */
+export interface VoiceSamples {
+  status: 'running' | 'done';
+  text: string;
+  tempo: number;
+  items: Record<string, VoiceSampleResult | null>;
+}
+
 export interface VoiceInfo {
   voicestudio: { state: 'ok' | 'starting'; url: string; version: string } | { state: 'offline' };
   profiles: { id: string; name: string; kind: string; audioUrl: string | null }[];
   engines: { active: string; chosen: string | null; available: string[] } | null;
   selected: string;
+  /** 고른 목소리 (목록에 있는 목소리면 그 id) */
+  selectedPreset: string | null;
+  presets: VoicePreset[];
+  tempo: number;
+  tempos: { value: number; label: string }[];
   provider: 'voicestudio' | 'edge' | 'none';
   describe: string;
 }
@@ -97,6 +117,10 @@ export const api = {
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
   designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),
   voiceSample: (text?: string) => request<{ url: string; seconds: number }>('POST', '/voice/sample', { text }),
+  setVoicePreset: (id: string) => request<{ selected: string; selectedPreset: string }>('PUT', '/voice/preset', { id }),
+  setVoiceTempo: (tempo: number) => request<{ tempo: number }>('PUT', '/voice/tempo', { tempo }),
+  startVoiceSamples: (text: string) => request<VoiceSamples>('POST', '/voice/samples', { text }),
+  voiceSamples: () => request<VoiceSamples | null>('GET', '/voice/samples'),
   meta: () => request<Meta>('GET', '/meta'),
   list: () => request<ProjectSummary[]>('GET', '/projects'),
   get: (id: number) => request<ProjectDetail>('GET', `/projects/${id}`),

@@ -24,7 +24,7 @@
 
 ```
 npm ci            # 설치 (Node 22.13 이상)
-npm test          # Vitest 전체 (현재 163개 통과)
+npm test          # Vitest 전체 (현재 168개 통과)
 npm run typecheck # tsc
 npm run dev       # 개발 서버 http://localhost:5178
 npm run start     # 화면 묶음을 만든 뒤 빠른 실행 모드
@@ -39,7 +39,7 @@ npm run user:add -- 아이디 이름   # 로그인 계정 (비밀번호는 입�
 2. **승인은 대본 버전에 묶인다.** 대본·원본·훅을 바꾸면 새 버전이 되고 승인이 풀린다. 내보내기(ZIP)·게시 기록은 승인된 최신 버전의 영상만 가능하다.
 3. **"검토/검증" 문구는 이희재가 승인한 결과물에만.** 승인 전 영상은 상태 문구 없이(`cleanDraft`) 만든다.
 4. **연구자의 실제 경험은 연구자 답변 원문만 쓴다.** 블로그에 경험을 지어 넣지 않는다. 답이 없으면 "답변 대기"로 남긴다.
-5. **비상업 라이선스 음성 모델(OmniVoice 등)은 쓰지 않는다.** VoxCPM2·MOSS-TTS-Nano 등 상업 이용 가능한 엔진만.
+5. **비상업 라이선스 음성 모델(OmniVoice 등)은 쓰지 않는다.** VoxCPM2·MOSS-TTS-Nano 등 상업 이용 가능한 엔진만. 기본은 VoxCPM2 맛조수 목소리. 고를 수 있는 목소리도 모두 VoxCPM2이고 저장소의 기준 녹음으로 고정한다(`tools/setup/voices.json`, `voicePresets.ts`).
 6. **비밀값(비밀번호·토큰·API 키)을 저장소·로그·채팅에 남기지 않는다.**
 
 ## 사용자 승인이 필요한 일 (먼저 묻기)

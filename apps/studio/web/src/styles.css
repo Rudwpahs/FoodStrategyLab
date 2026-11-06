@@ -155,3 +155,14 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .source-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .source-thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--line); }
 .drop { border: 2px dashed var(--line); border-radius: 16px; padding: 22px; text-align: center; background: #fffdf9; cursor: pointer; }
+
+/* 목소리 고르기 */
+.voice-options { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.voice-option { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; min-width: 0; }
+.voice-option.on { border-color: var(--red); background: rgba(232, 85, 58, 0.06); }
+.voice-pick { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.voice-pick input { margin-top: 4px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg-btn { padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--white); color: var(--ink); font: inherit; cursor: pointer; }
+.seg-btn.on { border-color: var(--red); background: var(--red); color: var(--white); font-weight: 700; }
+.seg-btn:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }

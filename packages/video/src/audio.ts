@@ -57,3 +57,12 @@ export async function normalizeLoudness(input: string, output: string): Promise<
 export async function extractFrame(video: string, seconds: number, output: string, width = 360): Promise<void> {
   await ff(['-hide_banner', '-y', '-ss', seconds.toFixed(3), '-i', path.resolve(video), '-frames:v', '1', '-vf', `scale=${width}:-2`, path.resolve(output)]);
 }
+
+/**
+ * 말 빠르기 바꾸기 (음높이는 그대로): 0.5~2.0배. MP3로 저장한다.
+ * 목소리 엔진(VoxCPM2)의 속도 설정은 요청한 만큼 정확히 바뀌지 않아서, 만든 뒤에 맞춘다.
+ */
+export async function changeTempo(input: string, output: string, tempo: number): Promise<void> {
+  const t = Math.min(2, Math.max(0.5, tempo));
+  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-af', `atempo=${t.toFixed(3)}`, '-codec:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', path.resolve(output)]);
+}

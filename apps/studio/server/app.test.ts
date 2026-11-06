@@ -376,3 +376,20 @@ describe('MP3 길이 측정', () => {
     expect(mp3DurationSeconds(buf)).toBeCloseTo(3, 5);
   });
 });
+
+describe('목소리 고르기', () => {
+  it('목록의 목소리와 빠르기를 고르고, 목록에 없는 값은 거절한다', async () => {
+    const info = await call('GET', '/voice');
+    expect(info.body.presets[0].id).toBe('matjosu');
+    expect(info.body.tempos.map((t: { value: number }) => t.value)).toEqual([0.9, 1, 1.1, 1.2]);
+    expect((await call('PUT', '/voice/preset', { id: 'nope' })).status).toBe(400);
+    const picked = await call('PUT', '/voice/preset', { id: 'matjosu' });
+    expect(picked.body.selectedPreset).toBe('matjosu');
+    expect((await call('PUT', '/voice/tempo', { tempo: 1.7 })).status).toBe(400);
+    expect((await call('PUT', '/voice/tempo', { tempo: 1.1 })).body.tempo).toBe(1.1);
+    const after = await call('GET', '/voice');
+    expect(after.body.selectedPreset).toBe('matjosu');
+    expect(after.body.tempo).toBe(1.1);
+    await call('PUT', '/voice/tempo', { tempo: 1 });
+  });
+});

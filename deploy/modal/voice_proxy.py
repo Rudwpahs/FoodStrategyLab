@@ -52,20 +52,20 @@ def forward(method: str, path: str, headers: dict, body: bytes, base: str, timeo
     return status, keep, out
 
 
-def reference_voice_name(wav: bytes) -> str:
-    """기준 녹음 → 목소리 이름 (Node의 mascotVoiceName과 같은 규칙: sha1 앞 6자)"""
+def reference_voice_name(wav: bytes, prefix: str = "맛조수") -> str:
+    """기준 녹음 → 목소리 이름 (Node의 presetVoiceName과 같은 규칙: 이름-sha1 앞 6자)"""
     import hashlib
 
-    return f"맛조수-{hashlib.sha1(wav).hexdigest()[:6]}"
+    return f"{prefix}-{hashlib.sha1(wav).hexdigest()[:6]}"
 
 
-def ensure_reference_profile(base: str, wav: bytes, ref_text: str, timeout: float = 600) -> str:
+def ensure_reference_profile(base: str, wav: bytes, ref_text: str, timeout: float = 600, prefix: str = "맛조수") -> str:
     """VoiceStudio에 기준 녹음 목소리가 없으면 만든다. 목소리 이름을 돌려준다.
     GPU가 여러 대여도 각자 같은 녹음으로 만들므로 목소리가 같다."""
     import json as _json
     import uuid
 
-    name = reference_voice_name(wav)
+    name = reference_voice_name(wav, prefix)
     with urllib.request.urlopen(f"{base}/profiles", timeout=timeout) as r:
         if any(p.get("name") == name for p in _json.loads(r.read())):
             return name

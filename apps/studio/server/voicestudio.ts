@@ -152,6 +152,8 @@ export async function createVoiceFromReference(url: string, name: string, wav: B
 export interface StudioVoiceSettings {
   /** VoiceStudio 목소리 프로필 이름 */
   voicestudioVoice?: string;
+  /** 말 빠르기 배수 (1 = 보통, voicePresets.ts의 VOICE_TEMPOS 중 하나) */
+  tempo?: number;
 }
 
 const settingsFile = () => path.join(DATA_DIR, 'settings.json');

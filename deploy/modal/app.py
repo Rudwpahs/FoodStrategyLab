@@ -88,8 +88,8 @@ voice_image = (
         f"cd {VS_DIR} && .venv/bin/python -c \"import torch, voxcpm; print('torch', torch.__version__)\"",
     )
     .add_local_file(Path(__file__).parent / "voice_proxy.py", "/root/voice_proxy.py", copy=True)
-    # 맛조수 기준 녹음: GPU마다 이 녹음으로 같은 목소리를 만든다
-    .add_local_file(REPO_ROOT / "tools/setup/matjosu-reference.wav", "/root/matjosu-reference.wav", copy=True)
+    # 목소리 기준 녹음들과 목록(tools/setup/voices.json): GPU마다 이 녹음으로 같은 목소리를 만든다
+    .add_local_dir(REPO_ROOT / "tools/setup", "/root/setup", copy=True, ignore=["*.ts"])
     .env(
         {
             "OMNIVOICE_DEVICE": "cuda",
@@ -103,9 +103,13 @@ voice_image = (
     )
 )
 
+def _voice_manifest(root: str = "/root/setup") -> list:
+    """고를 수 있는 목소리 목록 (apps/studio/server/voicePresets.ts 와 같은 파일)"""
+    with open(f"{root}/voices.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
 VS_LOCAL_DATA = "/root/vsdata"
-# apps/studio/server/voicestudio.ts 의 MASCOT_REFERENCE_TEXT 와 같게
-MASCOT_REFERENCE_TEXT = "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
 VS_SAVED_DATA = "/voice/data"
 VS_PORT = 3900
 
@@ -143,15 +147,19 @@ class Voice:
             if time.time() > deadline:
                 raise RuntimeError("VoiceStudio가 준비되지 않았어요 (모델 불러오기 시간 초과)")
             time.sleep(3)
-        # 기준 녹음으로 맛조수 목소리 준비 (이미 있으면 그대로)
+        # 기준 녹음으로 고를 수 있는 목소리를 모두 준비 (이미 있으면 그대로)
         import sys
 
         sys.path.insert(0, "/root")
         from voice_proxy import ensure_reference_profile
 
-        with open("/root/matjosu-reference.wav", "rb") as f:
-            name = ensure_reference_profile(f"http://127.0.0.1:{VS_PORT}", f.read(), MASCOT_REFERENCE_TEXT)
-        print(f"목소리 '{name}' 준비됨")
+        for entry in _voice_manifest():
+            try:
+                with open(f"/root/setup/{entry['file']}", "rb") as f:
+                    name = ensure_reference_profile(f"http://127.0.0.1:{VS_PORT}", f.read(), entry["refText"], prefix=entry["name"])
+                print(f"목소리 '{name}' 준비됨")
+            except Exception as e:  # 한 목소리가 실패해도 나머지는 쓸 수 있게
+                print(f"목소리 '{entry.get('name')}' 준비 실패: {e}")
 
     def _save(self) -> None:
         """목소리 프로필 등을 저장소로 복사한다. SQLite 파일은 쓰는 중이어도 일관되게 복사(백업 API)."""
@@ -329,11 +337,16 @@ def web() -> None:
     def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
         return Voice().request.remote(method, path, headers, body)
 
-    # 기준 녹음이 바뀌면 엔진·목소리 목록 기억도 새로 (파일 이름에 녹음 지문)
+    # 목소리 목록·기준 녹음이 바뀌면 엔진·목소리 목록 기억도 새로 (파일 이름에 지문)
     import hashlib
 
-    with open("/app/tools/setup/matjosu-reference.wav", "rb") as f:
-        ref_tag = hashlib.sha1(f.read()).hexdigest()[:6]
+    h = hashlib.sha1()
+    with open("/app/tools/setup/voices.json", "rb") as f:
+        h.update(f.read())
+    for entry in _voice_manifest("/app/tools/setup"):
+        with open(f"/app/tools/setup/{entry['file']}", "rb") as f:
+            h.update(f.read())
+    ref_tag = h.hexdigest()[:6]
     serve(VOICE_PROXY_PORT, call_voice, f"/data/voice-meta-{VS_COMMIT[:8]}-{ref_tag}.json")
     env = _studio_env(public_url, instance)
     # npx를 거치지 않고 tsx를 바로 실행한다 (끌 때 신호가 스튜디오까지 전달되게)

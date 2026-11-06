@@ -11,7 +11,17 @@ import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, mo
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
-import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
+import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
+import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
+
+/** 목소리 후보를 같은 문장으로 들어 보기 (목소리마다 결과 또는 이유) */
+type VoiceSampleResult = { url: string; seconds: number } | { error: string };
+interface VoiceSamplesJob {
+  status: 'running' | 'done';
+  text: string;
+  tempo: number;
+  items: Record<string, VoiceSampleResult | null>;
+}
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 const id = (req: Request) => {
@@ -138,6 +148,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
   app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
 
+  // 목소리 후보 들어 보기 작업 (한 번에 하나)
+  let samplesJob: VoiceSamplesJob | null = null;
   const api = express.Router();
 
   api.get('/meta', async (_req, res) => {
@@ -151,8 +163,73 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const profiles = vs.state === 'ok' ? await listProfiles(vs.url).catch(() => []) : [];
     const engines = vs.state === 'ok' ? await engineInfo(vs.url).catch(() => null) : null;
     const provider = await ttsProvider().catch(() => 'none' as const);
-    res.json({ voicestudio: vs, profiles, engines, selected: voicestudioVoice(), provider, describe: describeVoice(provider) });
+    res.json({
+      voicestudio: vs,
+      profiles,
+      engines,
+      selected: voicestudioVoice(),
+      selectedPreset: presetByVoiceName(voicestudioVoice())?.id ?? null,
+      presets: voicePresets().map((p) => ({ id: p.id, label: p.label, note: p.note, voiceName: p.voiceName })),
+      tempo: voiceTempo(),
+      tempos: VOICE_TEMPOS,
+      provider,
+      describe: describeVoice(provider),
+    });
   });
+
+  /** 목소리 고르기 (저장소에 기준 녹음이 있는 목소리 중 하나) */
+  api.put('/voice/preset', (req, res) => {
+    const preset = presetById(String(req.body?.id ?? ''));
+    if (!preset) throw new HttpError(400, '모르는 목소리예요.');
+    writeVoiceSettings({ voicestudioVoice: preset.voiceName });
+    resetTtsDetection();
+    res.json({ selected: preset.voiceName, selectedPreset: preset.id });
+  });
+
+  /** 말 빠르기 (음높이는 그대로) */
+  api.put('/voice/tempo', (req, res) => {
+    const tempo = Number(req.body?.tempo);
+    if (!isVoiceTempo(tempo)) throw new HttpError(400, '고를 수 있는 빠르기가 아니에요.');
+    writeVoiceSettings({ tempo });
+    resetTtsDetection();
+    res.json({ tempo: voiceTempo() });
+  });
+
+  /**
+   * 모든 목소리로 같은 문장을 만들어 비교해 듣는다 (설정은 바꾸지 않는다).
+   * 클라우드 GPU가 깨어나는 데 몇 분 걸릴 수 있어 뒤에서 만들고, 화면은 몇 초마다 결과를 확인한다.
+   */
+  api.post('/voice/samples', (req, res) => {
+    if (samplesJob?.status === 'running') return res.json(samplesJob);
+    const text = String(req.body?.text ?? '').trim().slice(0, 200) || '이희재의 맛 연구소, 오늘의 실험!';
+    const tempo = isVoiceTempo(Number(req.body?.tempo)) ? Number(req.body.tempo) : voiceTempo();
+    const presets = voicePresets();
+    if (!presets.length) throw new HttpError(409, '고를 수 있는 목소리 목록이 없어요.');
+    const job: VoiceSamplesJob = { status: 'running', text, tempo, items: Object.fromEntries(presets.map((p) => [p.id, null])) };
+    samplesJob = job;
+    const stopKeepAlive = process.env.KEEPALIVE === '1' ? keepAwake(publicOrigin(req)) : () => undefined;
+    void (async () => {
+      // 여러 목소리를 동시에 (클라우드에서는 GPU 여러 대가 나눠 맡는다)
+      const parallel = Math.max(1, Number(process.env.VOICE_PARALLEL) || 1);
+      let next = 0;
+      const worker = async () => {
+        while (next < presets.length) {
+          const p = presets[next++]!;
+          try {
+            const a = await synthesize(text, AUDIO_DIR, { voice: p.voiceName, tempo });
+            job.items[p.id] = { url: `/media/audio/${path.basename(a.file)}`, seconds: Math.round(a.seconds * 10) / 10 };
+          } catch (e) {
+            job.items[p.id] = { error: (e as Error).message || '만들지 못했어요.' };
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(parallel, presets.length) }, worker));
+      job.status = 'done';
+      stopKeepAlive();
+    })();
+    res.status(202).json(job);
+  });
+  api.get('/voice/samples', (_req, res) => res.json(samplesJob));
 
   api.put('/voice', (req, res) => {
     const voice = String(req.body?.voice ?? '').trim();
