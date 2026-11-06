@@ -3,8 +3,56 @@
     "id": "matjosu",
     "name": "맛조수",
     "label": "맛조수 (기본)",
-    "note": "밝고 높은 귀여운 목소리",
+    "note": "지금 목소리 · 밝고 아주 높은 톤",
     "file": "matjosu-reference.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "matjosu-low1",
+    "name": "맛조수낮게",
+    "label": "맛조수 조금 낮게",
+    "note": "같은 목소리, 톤만 조금 낮게",
+    "file": "voices/matjosu-low1.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "matjosu-low2",
+    "name": "맛조수더낮게",
+    "label": "맛조수 더 낮게",
+    "note": "같은 목소리, 톤을 더 낮게",
+    "file": "voices/matjosu-low2.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "calm-female",
+    "name": "차분한여성",
+    "label": "차분한 여성",
+    "note": "중간 톤 · 또박또박",
+    "file": "voices/calm-female.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "low-female",
+    "name": "부드러운여성",
+    "label": "부드러운 여성",
+    "note": "낮은 톤 · 편안하게",
+    "file": "voices/low-female.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "bright-male",
+    "name": "밝은남성",
+    "label": "밝은 남성",
+    "note": "중간 톤 · 경쾌하게",
+    "file": "voices/bright-male.wav",
+    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
+  },
+  {
+    "id": "calm-male",
+    "name": "차분한남성",
+    "label": "차분한 남성",
+    "note": "낮은 톤 · 믿음직하게",
+    "file": "voices/calm-male.wav",
     "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
   }
 ]
