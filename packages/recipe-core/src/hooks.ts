@@ -383,7 +383,8 @@ const BUILDERS: Record<HookType, Builder> = {
   story: (f) => {
     if (!f.story) return { missing: '음식 이야기·유래·연구자의 실제 경험' };
     const line = firstSentence(f.story);
-    return { line, firstScreen: '완성 음식 + 이야기 카드', scenes: [scene('intro', 'curious', line, 'result', { title: '맛 연구소 이야기' })], needsReview: [], uses: ['음식 이야기'] };
+    // 첫 화면 카드에는 무슨 음식 이야기인지 바로 보이게 요리 이름을 쓴다 ('맛 연구소 이야기'만으로는 알 수 없다)
+    return { line, firstScreen: '완성 음식 + 이야기 카드', scenes: [scene('intro', 'curious', line, 'result', { title: `${f.dish} 이야기` })], needsReview: [], uses: ['음식 이야기'] };
   },
   'expert-view': (f) => {
     if (!f.tip && !f.causeEffect) return { missing: '전문가 팁 또는 핵심 원리' };

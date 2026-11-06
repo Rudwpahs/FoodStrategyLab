@@ -78,8 +78,12 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
           <ol>{r.steps.map((s, idx) => <li key={idx}>{s}</li>)}</ol>
           <h3>핵심 원리</h3>
           <p>{r.principle}</p>
-          <h3>전문가 팁</h3>
-          <ul>{r.tips.map((t, idx) => <li key={idx}>{t}</li>)}</ul>
+          {r.tips.length > 0 && (
+            <>
+              <h3>전문가 팁</h3>
+              <ul>{r.tips.map((t, idx) => <li key={idx}>{t}</li>)}</ul>
+            </>
+          )}
         </div>
         <div className="card">
           <h2>
