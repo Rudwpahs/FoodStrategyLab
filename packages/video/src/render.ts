@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +45,25 @@ async function withGlFallback<T>(fn: () => Promise<T>): Promise<T> {
 export function renderConcurrency(): number | undefined {
   const wanted = Number(process.env.REMOTION_CONCURRENCY);
   if (!(wanted > 0)) return undefined;
-  return Math.max(1, Math.min(Math.floor(wanted), os.cpus().length));
+  return Math.max(1, Math.min(Math.floor(wanted), visibleCores()));
+}
+
+/**
+ * Remotion이 세는 방법과 똑같이 센 코어 수: nproc와 os.availableParallelism() 중 작은 값.
+ * (os.cpus()는 컨테이너 밖 서버 전체 코어 수를 보여 줄 수 있어, 그 값으로 맞추면 Remotion이 거절한다)
+ */
+let nprocCache: number | null | undefined;
+export function visibleCores(): number {
+  const node = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  if (nprocCache === undefined) {
+    try {
+      const n = parseInt(execSync('nproc', { stdio: 'pipe' }).toString().trim(), 10);
+      nprocCache = Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      nprocCache = null;
+    }
+  }
+  return Math.max(1, nprocCache === null ? node : Math.min(nprocCache, node));
 }
 
 export interface RenderVideoOptions {
@@ -62,6 +81,7 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
 }
 
 async function renderVideoOnce({ inputProps, outputLocation, onProgress, frameRange, cancelSignal }: RenderVideoOptions): Promise<void> {
+  console.log(`[렌더] 보이는 CPU ${visibleCores()}개 · 동시에 그리는 프레임 ${renderConcurrency() ?? '기본값'}`);
   const url = await getServeUrl();
   const composition = await selectComposition({ serveUrl: url, id: 'ShortVideo', inputProps, browserExecutable, chromiumOptions });
   await renderMedia({
