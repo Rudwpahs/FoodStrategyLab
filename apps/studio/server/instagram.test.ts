@@ -184,6 +184,19 @@ describe('인스타그램 연결 (가짜 Meta 서버)', () => {
   });
 });
 
+describe('인스타그램 연결 요청 표 (state)', () => {
+  it('로그인하는 사이 서버가 다시 켜져도(새 Instagram 객체) 서명된 state로 이어서 연결된다', async () => {
+    const before = new Instagram(repo.db);
+    const url = new URL(before.authorizeUrl(`${studio}/api/instagram/callback`));
+    const state = url.searchParams.get('state')!;
+    // 다시 켜진 서버: 메모리는 비어 있다 → 서명만 맞으면 된다 (토큰 교환 단계까지 간다)
+    const after = new Instagram(repo.db, async () => new Response('{"error":{"message":"stop here"}}', { status: 400 }));
+    await expect(after.completeLogin('CODE', state)).rejects.not.toThrow(/만료/);
+    // 서명을 바꾸면 거절
+    await expect(after.completeLogin('CODE', `${state.split('.')[0]}.AAAA`)).rejects.toThrow(/만료/);
+  });
+});
+
 describe('인스타그램 릴스 게시 (가짜 Meta 서버)', () => {
   it('승인 전 영상은 올릴 수 없고, 확인 없이는 올리지 않는다', async () => {
     const pid = Number((await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).json.id);

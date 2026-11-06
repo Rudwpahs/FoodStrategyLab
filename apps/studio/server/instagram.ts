@@ -116,6 +116,26 @@ export function checkCaption(caption: string): string | null {
   return null;
 }
 
+// ───────────── 연결 요청 표 (state) ─────────────
+
+function signState(cfg: IgConfig, payload: string): string {
+  return crypto.createHmac('sha256', `matlab-instagram-state:${cfg.appSecret}`).update(payload).digest('base64url');
+}
+
+function readState(cfg: IgConfig, state: string): { redirectUri: string; expires: number } | null {
+  const [payload, sig] = state.split('.');
+  if (!payload || !sig) return null;
+  const want = Buffer.from(signState(cfg, payload));
+  const got = Buffer.from(sig);
+  if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
+  try {
+    const d = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { r?: string; e?: number };
+    return typeof d.r === 'string' && typeof d.e === 'number' ? { redirectUri: d.r, expires: d.e } : null;
+  } catch {
+    return null;
+  }
+}
+
 // ───────────── 연결·게시 ─────────────
 
 interface Account {
@@ -138,7 +158,8 @@ export interface IgStatus {
 type Fetch = typeof fetch;
 
 export class Instagram {
-  private states = new Map<string, { expires: number; redirectUri: string }>();
+  /** 이미 쓴 state (같은 서버 안에서 두 번 쓰지 못하게) */
+  private usedStates = new Set<string>();
 
   constructor(
     private db: Db,
@@ -189,11 +210,14 @@ export class Instagram {
     return { configured, connected: Boolean(a), username: a?.username ?? '', expiresAt: a?.expiresAt ?? '', problem };
   }
 
-  /** 로그인 창 주소. state는 10분 동안 한 번만 쓸 수 있다 (다른 사이트의 위조 요청 방지) */
+  /**
+   * 로그인 창 주소. state는 앱 비밀값으로 서명한 10분짜리 표 (다른 사이트의 위조 요청 방지).
+   * 서버 메모리에만 두면 로그인하는 사이 서버가 다시 켜질 때(배포·잠들기) '만료'로 실패해서, 서명으로 확인한다.
+   */
   authorizeUrl(redirectUri: string): string {
     const cfg = this.cfg();
-    const state = crypto.randomBytes(18).toString('base64url');
-    this.states.set(state, { expires: Date.now() + 10 * 60_000, redirectUri });
+    const payload = Buffer.from(JSON.stringify({ r: redirectUri, e: Date.now() + 10 * 60_000, n: crypto.randomBytes(9).toString('base64url') })).toString('base64url');
+    const state = `${payload}.${signState(cfg, payload)}`;
     const q = new URLSearchParams({ client_id: cfg.appId, redirect_uri: redirectUri, response_type: 'code', scope: IG_SCOPES.join(','), state });
     return `${cfg.authorize}?${q}`;
   }
@@ -201,9 +225,9 @@ export class Instagram {
   /** 로그인 창에서 돌아온 코드로 장기 토큰을 받아 저장한다 */
   async completeLogin(code: string, state: string): Promise<{ username: string }> {
     const cfg = this.cfg();
-    const s = this.states.get(state);
-    this.states.delete(state);
+    const s = this.usedStates.has(state) ? null : readState(cfg, state);
     if (!s || Date.now() > s.expires) throw new HttpError(400, '연결 요청이 만료됐어요. 스튜디오에서 다시 "인스타그램 연결"을 눌러 주세요.');
+    this.usedStates.add(state);
     const form = new URLSearchParams({ client_id: cfg.appId, client_secret: cfg.appSecret, grant_type: 'authorization_code', redirect_uri: s.redirectUri, code: code.replace(/#_$/, '') });
     const short = await this.json(`${cfg.oauth}/oauth/access_token`, { method: 'POST', body: form });
     // 문서 예시는 { data: [ { access_token, user_id, permissions } ] }, 실제로는 평평한 형태도 있다
