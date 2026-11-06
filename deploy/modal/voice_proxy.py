@@ -161,8 +161,7 @@ def make_handler(call: Call, cache_file: str):
         def _handle(self) -> None:
             body = self._read_body()
             method, path = self.command, self.path
-            # 상태 확인은 GPU를 깨우지 않고 바로 답한다 (실제 요청 때 깨어남)
-            if path in ("/health", "/vibevoice/health"):
+            if path == "/health":
                 return self._json(200, {"status": "ok", "version": "modal"})
             key = path if method == "GET" and path in CACHEABLE else None
             if key:

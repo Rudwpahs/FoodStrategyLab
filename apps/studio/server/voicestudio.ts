@@ -152,10 +152,6 @@ export async function createVoiceFromReference(url: string, name: string, wav: B
 export interface StudioVoiceSettings {
   /** VoiceStudio 목소리 프로필 이름 */
   voicestudioVoice?: string;
-  /** 음성 엔진: 맛조수 목소리(VoiceStudio·VoxCPM2, 기본) 또는 VibeVoice(실험) */
-  engine?: 'voicestudio' | 'vibevoice';
-  /** VibeVoice 목소리 (kr-woman · kr-man) */
-  vibevoiceSpeaker?: string;
 }
 
 const settingsFile = () => path.join(DATA_DIR, 'settings.json');

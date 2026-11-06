@@ -11,17 +11,7 @@ import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, mo
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
 import { HttpError, type Publication, type Repo } from './repo.ts';
-import { chosenEngine, describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
-import { VIBEVOICE_MODEL, VIBEVOICE_SPEAKERS, isVibeVoiceSpeaker, vibevoiceSpeaker, vibevoiceUrl, type VibeVoiceSpeaker } from './vibevoice.ts';
-
-type CompareResult = { url: string; seconds: number; tookSeconds: number } | { error: string };
-interface CompareJob {
-  status: 'running' | 'done';
-  text: string;
-  speaker: VibeVoiceSpeaker;
-  voxcpm: CompareResult | null;
-  vibevoice: CompareResult | null;
-}
+import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 const id = (req: Request) => {
@@ -148,8 +138,6 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
   app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
 
-  // 두 엔진 비교 듣기 작업 (한 번에 하나)
-  let compareJob: CompareJob | null = null;
   const api = express.Router();
 
   api.get('/meta', async (_req, res) => {
@@ -163,67 +151,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const profiles = vs.state === 'ok' ? await listProfiles(vs.url).catch(() => []) : [];
     const engines = vs.state === 'ok' ? await engineInfo(vs.url).catch(() => null) : null;
     const provider = await ttsProvider().catch(() => 'none' as const);
-    res.json({
-      voicestudio: vs,
-      profiles,
-      engines,
-      selected: voicestudioVoice(),
-      provider,
-      describe: describeVoice(provider),
-      engine: chosenEngine(),
-      vibevoice: { configured: !!vibevoiceUrl(), model: VIBEVOICE_MODEL, speakers: VIBEVOICE_SPEAKERS, speaker: vibevoiceSpeaker() },
-    });
+    res.json({ voicestudio: vs, profiles, engines, selected: voicestudioVoice(), provider, describe: describeVoice(provider) });
   });
-
-  /** 음성 엔진 고르기: 맛조수 목소리(VoxCPM2, 기본) 또는 VibeVoice(실험) */
-  api.put('/voice/engine', (req, res) => {
-    const engine = req.body?.engine === 'vibevoice' ? 'vibevoice' : req.body?.engine === 'voicestudio' ? 'voicestudio' : null;
-    if (!engine) throw new HttpError(400, '엔진을 고르세요.');
-    if (engine === 'vibevoice' && !vibevoiceUrl()) throw new HttpError(409, '이 서버에는 VibeVoice가 설치되어 있지 않아요.');
-    const speaker = req.body?.speaker;
-    if (speaker !== undefined && !isVibeVoiceSpeaker(speaker)) throw new HttpError(400, '모르는 목소리예요.');
-    writeVoiceSettings({ engine, ...(speaker ? { vibevoiceSpeaker: speaker } : {}) });
-    resetTtsDetection();
-    res.json({ engine: chosenEngine(), speaker: vibevoiceSpeaker() });
-  });
-
-  /**
-   * 같은 문장을 두 엔진으로 만들어 나란히 들어 본다 (설정은 바꾸지 않는다).
-   * 클라우드 GPU가 깨어나는 데 몇 분 걸릴 수 있어 뒤에서 만들고, 화면은 몇 초마다 결과를 확인한다.
-   * 각 엔진은 따로 실패할 수 있다 → 엔진마다 결과 또는 오류.
-   */
-  api.post('/voice/compare', (req, res) => {
-    if (compareJob?.status === 'running') return res.json(compareJob);
-    const text = String(req.body?.text ?? '').trim().slice(0, 200) || '이희재의 맛 연구소, 오늘의 실험!';
-    const speaker = isVibeVoiceSpeaker(req.body?.speaker) ? req.body.speaker : vibevoiceSpeaker();
-    const job: CompareJob = { status: 'running', text, speaker, voxcpm: null, vibevoice: null };
-    compareJob = job;
-    const stopKeepAlive = process.env.KEEPALIVE === '1' ? keepAwake(publicOrigin(req)) : () => undefined;
-    const timed = async (make: () => Promise<{ file: string; seconds: number }>): Promise<CompareResult> => {
-      const t = Date.now();
-      try {
-        const a = await make();
-        return { url: `/media/audio/${path.basename(a.file)}`, seconds: Math.round(a.seconds * 10) / 10, tookSeconds: Math.round((Date.now() - t) / 100) / 10 };
-      } catch (e) {
-        return { error: (e as Error).message || '만들지 못했어요.' };
-      }
-    };
-    void (async () => {
-      const vs = await findVoiceStudio();
-      await Promise.all([
-        (async () => {
-          job.voxcpm = vs.state === 'ok' ? await timed(() => synthesize(text, AUDIO_DIR, { provider: 'voicestudio' })) : { error: '맛조수 목소리 엔진(VoiceStudio)이 꺼져 있어요.' };
-        })(),
-        (async () => {
-          job.vibevoice = vibevoiceUrl() ? await timed(() => synthesize(text, AUDIO_DIR, { provider: 'vibevoice', speaker })) : { error: '이 서버에는 VibeVoice가 설치되어 있지 않아요.' };
-        })(),
-      ]);
-      job.status = 'done';
-      stopKeepAlive();
-    })();
-    res.status(202).json(job);
-  });
-  api.get('/voice/compare', (_req, res) => res.json(compareJob));
 
   api.put('/voice', (req, res) => {
     const voice = String(req.body?.voice ?? '').trim();

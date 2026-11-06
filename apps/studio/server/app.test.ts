@@ -376,31 +376,3 @@ describe('MP3 길이 측정', () => {
     expect(mp3DurationSeconds(buf)).toBeCloseTo(3, 5);
   });
 });
-
-describe('목소리 엔진 고르기', () => {
-  it('기본은 맛조수 목소리이고, VibeVoice가 없는 서버에서는 고를 수 없다', async () => {
-    delete process.env.VIBEVOICE_URL;
-    const info = await call('GET', '/voice');
-    expect(info.body.engine).toBe('voicestudio');
-    expect(info.body.vibevoice.configured).toBe(false);
-    expect(info.body.vibevoice.speakers.map((s: { id: string }) => s.id)).toEqual(['kr-woman', 'kr-man']);
-    expect((await call('PUT', '/voice/engine', { engine: 'vibevoice' })).status).toBe(409);
-    expect((await call('PUT', '/voice/engine', { engine: 'nope' })).status).toBe(400);
-  });
-
-  it('비교 듣기: 엔진마다 결과나 이유를 따로 알려준다 (설정은 그대로)', async () => {
-    delete process.env.VIBEVOICE_URL;
-    const started = await call('POST', '/voice/compare', { text: '비교 문장', speaker: 'kr-man' });
-    expect(started.status).toBe(202);
-    let job = started.body;
-    for (let i = 0; i < 50 && job.status === 'running'; i++) {
-      await new Promise((r) => setTimeout(r, 50));
-      job = (await call('GET', '/voice/compare')).body;
-    }
-    expect(job.status).toBe('done');
-    expect(job.text).toBe('비교 문장');
-    expect(job.vibevoice.error).toMatch(/VibeVoice/);
-    expect(job.voxcpm).toBeTruthy();
-    expect((await call('GET', '/voice')).body.engine).toBe('voicestudio');
-  });
-});

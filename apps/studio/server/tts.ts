@@ -5,7 +5,6 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { ttsSettings } from './config.ts';
-import { VIBEVOICE_MODEL, vibevoiceLabel, vibevoiceSpeaker, vibevoiceSpeech, vibevoiceUp, vibevoiceUrl, type VibeVoiceSpeaker } from './vibevoice.ts';
 import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './voicestudio.ts';
 
 /**
@@ -14,12 +13,7 @@ import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './
  * - edge: edge-tts 파이썬 패키지 (Microsoft Edge 읽어주기 음성)
  * 둘 다 없으면 음성 없이 자막만으로 영상을 만든다.
  */
-export type TtsProvider = 'voicestudio' | 'vibevoice' | 'edge' | 'none';
-
-/** 설정에서 고른 음성 엔진 (기본: 맛조수 목소리) */
-export function chosenEngine(): 'voicestudio' | 'vibevoice' {
-  return readVoiceSettings().engine === 'vibevoice' ? 'vibevoice' : 'voicestudio';
-}
+export type TtsProvider = 'voicestudio' | 'edge' | 'none';
 
 let detected: Promise<TtsProvider> | null = null;
 let detectedAt = 0;
@@ -58,12 +52,6 @@ export function ttsProvider(): Promise<TtsProvider> {
   if (detected && Date.now() - detectedAt > DETECT_TTL_MS) detected = null;
   if (!detected) detectedAt = Date.now();
   detected ??= (async (): Promise<TtsProvider> => {
-    // 설정 화면에서 VibeVoice(실험)를 골랐으면 그것만 쓴다 (몰래 다른 목소리로 바꾸지 않는다)
-    if (chosenEngine() === 'vibevoice') {
-      if (!vibevoiceUrl()) throw new Error('VibeVoice 서버가 설정되어 있지 않아요. 설정에서 맛조수 목소리(VoxCPM2)로 돌아가 주세요.');
-      if (await vibevoiceUp()) return 'vibevoice';
-      throw new Error('VibeVoice에 연결할 수 없어요. 잠시 뒤 다시 시도하거나, 설정에서 맛조수 목소리(VoxCPM2)로 돌아가 주세요.');
-    }
     if (choice === 'voicestudio') {
       if (await voicestudioUp()) return 'voicestudio';
       throw new Error('VoiceStudio에 연결할 수 없습니다. VoiceStudio 앱을 켜고, 모델 준비가 끝날 때까지 기다려 주세요.');
@@ -85,7 +73,6 @@ export function ttsProvider(): Promise<TtsProvider> {
 export function describeVoice(provider: TtsProvider): string {
   const s = ttsSettings();
   if (provider === 'voicestudio') return `VoiceStudio · ${voicestudioVoice()}`;
-  if (provider === 'vibevoice') return `VibeVoice (실험) · ${vibevoiceLabel()}`;
   if (provider === 'edge') return `edge-tts · ${s.edge.voice}`;
   return '음성 없음 (자막만)';
 }
@@ -107,7 +94,6 @@ function run(cmd: string, args: string[]): Promise<void> {
 export async function voiceIdentity(provider: TtsProvider): Promise<string | null> {
   const s = ttsSettings();
   if (provider === 'edge') return ['edge', s.edge.voice, s.edge.rate, s.edge.pitch].join('|');
-  if (provider === 'vibevoice') return vibevoiceIdentity(vibevoiceSpeaker());
   if (provider !== 'voicestudio') return null;
   const url = await voicestudioUrl();
   if (!url) return null;
@@ -115,10 +101,6 @@ export async function voiceIdentity(provider: TtsProvider): Promise<string | nul
   const voice = voicestudioVoice();
   const profileId = (await listProfiles(url).catch(() => [])).find((p) => p.name === voice)?.id ?? 'builtin';
   return ['vs', engine, voice, profileId, s.voicestudio.speed].join('|');
-}
-
-function vibevoiceIdentity(speaker: VibeVoiceSpeaker): string {
-  return ['vibevoice', VIBEVOICE_MODEL, speaker].join('|');
 }
 
 /** 목소리 정체 + 문장으로 캐시 파일 이름을 만든다 */
@@ -209,18 +191,11 @@ export async function measuredWords(file: string, line: string): Promise<[number
   return words ?? undefined;
 }
 
-/**
- * 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초)
- * force: 설정과 상관없이 이 엔진으로 (설정 화면의 '두 엔진 비교 듣기')
- */
-export async function synthesize(
-  text: string,
-  audioDir: string,
-  force?: { provider: 'voicestudio' } | { provider: 'vibevoice'; speaker: VibeVoiceSpeaker },
-): Promise<{ file: string; seconds: number }> {
-  const provider = force?.provider ?? (await ttsProvider());
+/** 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초) */
+export async function synthesize(text: string, audioDir: string): Promise<{ file: string; seconds: number }> {
+  const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
-  const identity = force?.provider === 'vibevoice' ? vibevoiceIdentity(force.speaker) : await voiceIdentity(provider);
+  const identity = await voiceIdentity(provider);
   if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
@@ -228,8 +203,6 @@ export async function synthesize(
     const tmp = `${file}.tmp`;
     if (provider === 'voicestudio') {
       await voicestudioSpeech(text, tmp);
-    } else if (provider === 'vibevoice') {
-      await vibevoiceSpeech(text, tmp, postSlow, force?.provider === 'vibevoice' ? force.speaker : vibevoiceSpeaker());
     } else {
       const e = ttsSettings().edge;
       const args = ['--voice', e.voice, `--rate=${e.rate}`, `--pitch=${e.pitch}`, '--text', text, '--write-media', tmp];
