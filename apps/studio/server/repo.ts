@@ -1,4 +1,5 @@
 import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
+import type { CheckedSuggestion } from './recipeReader.ts';
 import {
   checkScript,
   ChecklistSchema,
@@ -119,6 +120,8 @@ export interface RecipeSource {
   aiFields: string[];
   /** 읽기 어려웠던 부분·다른 메모 */
   problems: string[];
+  /** AI가 낸 주제·원리 후보 (근거 확인 결과 포함). 첫 번째가 레시피에 들어간 것 */
+  suggestions: CheckedSuggestion[];
   /** 연구자가 AI 제안 칸을 확인한 기록 (확인 전에는 승인할 수 없다) */
   aiConfirmedBy?: string;
   aiConfirmedAt?: string;
@@ -259,6 +262,7 @@ export class Repo {
       files: (src.files ?? []).map((f) => ({ ...f, url: `/media/${f.file}` })),
       aiFields: src.aiFields ?? [],
       problems: src.problems ?? [],
+      suggestions: src.suggestions ?? [],
       ...(src.aiConfirmedAt ? { aiConfirmedBy: src.aiConfirmedBy ?? '', aiConfirmedAt: src.aiConfirmedAt } : {}),
     };
   }

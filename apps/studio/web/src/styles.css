@@ -152,6 +152,9 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .candidate { border-radius: 16px; padding: 14px; }
 /* AI가 읽은 레시피 */
 .ai-field { background: #fff7e6; border-left: 4px solid var(--warn); padding: 6px 10px; border-radius: 8px; }
+.suggestion { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid #eadfcd; border-radius: 10px; background: #fffdf8; }
+.suggestion.current { border-color: var(--warn); background: #fff7e6; }
+.suggestion .btn, .suggestion .badge { justify-self: start; }
 .source-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .source-thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1.5px solid var(--line); }
 .drop { border: 2px dashed var(--line); border-radius: 16px; padding: 22px; text-align: center; background: #fffdf9; cursor: pointer; }

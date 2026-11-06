@@ -8,7 +8,7 @@ name: Deploy to Modal
 #   INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET : Meta 개발자 앱의 Instagram 앱 ID·비밀값
 # 선택 (레시피 사진·파일 읽기, docs/MODAL_SETUP.md):
 #   ANTHROPIC_API_KEY                  : Claude API 열쇠 (console.anthropic.com)
-#   CLAUDE_MONTHLY_BUDGET_USD          : 한 달 사용 한도(달러, 기본 20)
+#   CLAUDE_MONTHLY_BUDGET_USD          : 한 달 사용 한도(달러, 기본 100)
 #   CLAUDE_MODEL                       : 모델 (기본 claude-opus-5-5, 아끼려면 claude-haiku-5-5)
 # 비밀값이 없으면 아무것도 하지 않고 끝난다.
 

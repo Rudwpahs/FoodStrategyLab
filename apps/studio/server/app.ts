@@ -279,7 +279,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       ? body.files.map((f: Record<string, unknown>) => ({ name: String(f?.name ?? 'recipe').slice(0, 120), type: String(f?.type ?? ''), data: String(f?.data ?? '') }))
       : [];
     const memo = String(body.memo ?? '').slice(0, 2000);
-    const { recipe, aiFields, problems, costUsd } = await reader.read(files, memo);
+    const { recipe, aiFields, problems, suggestions, costUsd } = await reader.read(files, memo);
     const pid = repo.createProject(recipe);
     // 원본 자료를 그대로 보관한다 (연구자가 읽은 결과와 대조할 수 있게)
     const dir = path.join(DATA_DIR, 'sources', String(pid));
@@ -290,9 +290,14 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       fs.writeFileSync(path.join(DATA_DIR, rel), Buffer.from(f.data, 'base64'));
       return { name: f.name, type: f.type, file: rel };
     });
-    repo.setSource(pid, { files: saved, aiFields, problems });
+    repo.setSource(pid, { files: saved, aiFields, problems, suggestions });
     const spent = costUsd.toFixed(4);
-    repo.logEvent(pid, 'recipe', `레시피를 자료 ${files.length}개에서 읽음 (Claude, 약 ${spent}달러)` + (aiFields.length ? ` · AI 제안: ${aiFields.join(', ')}` : ''));
+    const grounded = suggestions.filter((x) => x.grounded).length;
+    repo.logEvent(
+      pid,
+      'recipe',
+      `레시피를 자료 ${files.length}개에서 읽음 (Claude, 약 ${spent}달러)` + (aiFields.length ? ` · AI 제안: ${aiFields.join(', ')} · 주제 후보 ${suggestions.length}개 중 근거 확인 ${grounded}개` : ''),
+    );
     res.status(201).json({ id: pid, aiFields, problems });
   });
 

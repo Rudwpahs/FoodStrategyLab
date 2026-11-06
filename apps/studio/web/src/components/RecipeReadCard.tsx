@@ -71,6 +71,43 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
             <span className="badge review">AI 제안 · 확인 필요</span> <b>{FIELD_LABELS[f] ?? f}</b>: {value(f)}
           </div>
         ))}
+        {src.suggestions.length > 0 && (
+          <div className="stack" style={{ gap: 6 }}>
+            <div className="small">
+              <b>AI가 낸 주제 후보</b> <span className="muted">— 레시피의 어느 부분에서 나왔는지 함께 보여 드려요</span>
+            </div>
+            {src.suggestions.map((s, i) => {
+              const current = s.topic === r.topic && s.principle === r.principle;
+              return (
+                <div key={i} className={`suggestion small${current ? ' current' : ''}`}>
+                  <div>
+                    <b>{s.topic}</b>
+                  </div>
+                  <div>{s.principle}</div>
+                  <div className="muted">
+                    근거: {s.evidenceLabel} “{s.evidenceQuote}” · {CATEGORY_LABELS[s.category]}
+                  </div>
+                  {!s.grounded && <div className="issue warning small">확인 필요: {s.notes.join(' / ')}</div>}
+                  {current ? (
+                    <span className="badge">지금 쓰는 제안</span>
+                  ) : (
+                    !src.aiConfirmedAt && (
+                      <button
+                        className="btn small ghost"
+                        onClick={async () => {
+                          const next = { ...r, topic: s.topic, principle: s.principle, category: s.category };
+                          if ((await run(() => api.updateRecipe(project.id, next), '주제를 바꿨어요')) !== undefined) await onConfirmed();
+                        }}
+                      >
+                        이 주제로 바꾸기
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         {src.aiFields.length > 0 &&
           (src.aiConfirmedAt ? (
             <div className="small">
