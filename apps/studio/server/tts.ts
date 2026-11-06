@@ -7,7 +7,7 @@ import path from 'node:path';
 import { changeTempo } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
 import { VOICE_TEMPOS, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
-import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings } from './voicestudio.ts';
+import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
 
 /**
  * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
@@ -142,8 +142,11 @@ async function voicestudioSpeech(text: string, out: string, voice: string) {
   const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
   // VoiceStudio가 다른 음성을 만드는 중이면 429(바쁨, 다시 시도해도 안전)를 준다 → 잠시 기다렸다 다시 요청
   const retryMs = Number(process.env.VOICESTUDIO_RETRY_MS) || 15_000;
+  // 막 켜진 GPU가 엔진을 불러오는 중이면 '엔진 없음(400 not available)'으로 잘못 답할 때가 있다 → 3번까지 다시
+  const engineStarting = (r: { status: number; body: Buffer }) => r.status === 400 && /not available|not installed/i.test(r.body.toString('utf8'));
   let res = await postSlow(`${url}/v1/audio/speech`, payload, headers, timeoutMs);
-  for (let tries = 0; res.status === 429 && tries < 40; tries++) {
+  for (let tries = 0, starting = 0; (res.status === 429 && tries < 40) || (engineStarting(res) && starting < 3); tries++) {
+    if (engineStarting(res)) starting++;
     await new Promise((r) => setTimeout(r, retryMs));
     res = await postSlow(`${url}/v1/audio/speech`, payload, headers, timeoutMs);
   }
@@ -196,7 +199,7 @@ export async function measuredWords(file: string, line: string): Promise<[number
     form.append('language', 'ko');
     form.append('response_format', 'verbose_json');
     form.append('timestamp_granularities[]', 'word');
-    const res = await fetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000) });
+    const res = await slowFetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} }, Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000);
     if (res.ok) {
       const data = (await res.json()) as { words?: { start: number; end: number }[] };
       const expected = line.trim().split(/\s+/).filter(Boolean).length;

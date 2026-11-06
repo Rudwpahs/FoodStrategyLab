@@ -14,6 +14,7 @@ const mp3 = Buffer.concat(Array.from({ length: 50 }, () => frame));
 
 const requests: Record<string, unknown>[] = [];
 let busyTimes = 0;
+let notAvailableTimes = 0;
 const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: 'default', kind: 'design' }];
 let designBody = '';
 let engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }, { id: 'moss-tts-nano', available: false }];
@@ -63,6 +64,11 @@ beforeAll(async () => {
         if (busyTimes > 0) {
           busyTimes--;
           json(429, { error: { message: 'worker pool is saturated, safe to retry' } });
+          return;
+        }
+        if (notAvailableTimes > 0) {
+          notAvailableTimes--;
+          json(400, { error: { message: "Engine 'voxcpm2' is not available: voxcpm package not installed." } });
           return;
         }
         requests.push(parsed);
@@ -159,6 +165,20 @@ describe('VoiceStudio 음성', () => {
     expect(fs.existsSync(a.file)).toBe(true);
     expect(requests.length).toBe(before + 1);
     expect(busyTimes).toBe(0);
+  });
+
+  it('막 켜진 GPU가 엔진 없음(400)으로 잘못 답하면 잠시 뒤 다시 요청한다', async () => {
+    process.env.VOICESTUDIO_RETRY_MS = '20';
+    notAvailableTimes = 2;
+    const before = requests.length;
+    const a = await synthesize('엔진 준비 중에 온 문장', audioDir);
+    expect(fs.existsSync(a.file)).toBe(true);
+    expect(requests.length).toBe(before + 1);
+    expect(notAvailableTimes).toBe(0);
+    // 계속 안 되면 3번 다시 해 본 뒤 알린다
+    notAvailableTimes = 10;
+    await expect(synthesize('계속 엔진 없음', audioDir)).rejects.toThrow(/not available/);
+    notAvailableTimes = 0;
   });
 
   it('같은 문장은 캐시를 써서 다시 요청하지 않는다', async () => {

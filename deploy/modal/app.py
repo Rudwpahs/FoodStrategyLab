@@ -160,6 +160,9 @@ class Voice:
                 print(f"목소리 '{name}' 준비됨")
             except Exception as e:  # 한 목소리가 실패해도 나머지는 쓸 수 있게
                 print(f"목소리 '{entry.get('name')}' 준비 실패: {e}")
+        # 요청을 받기 전에 목소리 엔진을 한 번 실제로 돌려 둔다.
+        # (막 켜진 GPU에서 엔진을 불러오는 중에 첫 요청이 오면 '엔진 없음(400)'으로 잘못 답하는 일이 있었다)
+        _warm_up(f"http://127.0.0.1:{VS_PORT}", _voice_manifest())
 
     def _save(self) -> None:
         """목소리 프로필 등을 저장소로 복사한다. SQLite 파일은 쓰는 중이어도 일관되게 복사(백업 API)."""
@@ -203,6 +206,30 @@ class Voice:
             self._save()
         finally:
             self.proc.terminate()
+
+
+def _warm_up(base: str, manifest: list, tries: int = 6) -> None:
+    """짧은 문장 하나를 첫 목소리로 만들어 엔진(VoxCPM2)을 메모리에 올린다. 실패하면 잠시 뒤 다시."""
+    import hashlib
+
+    voice = "default"
+    if manifest:
+        with open(f"/root/setup/{manifest[0]['file']}", "rb") as f:
+            voice = f"{manifest[0]['name']}-{hashlib.sha1(f.read()).hexdigest()[:6]}"
+    body = json.dumps({"model": "voxcpm2", "voice": voice, "input": "준비 완료!", "response_format": "wav", "language": "ko"}).encode()
+    for i in range(tries):
+        req = urllib.request.Request(f"{base}/v1/audio/speech", data=body, method="POST", headers={"content-type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                r.read()
+            print("목소리 엔진 준비 끝 (시험 문장 성공)")
+            return
+        except urllib.error.HTTPError as e:
+            print(f"목소리 엔진 준비 중 ({i + 1}/{tries}): {e.code} {e.read()[:200]!r}")
+        except OSError as e:
+            print(f"목소리 엔진 준비 중 ({i + 1}/{tries}): {e}")
+        time.sleep(10)
+    print("목소리 엔진 시험 문장이 계속 실패했어요. 요청은 그대로 받아요.")
 
 
 def _health(base: str) -> str:

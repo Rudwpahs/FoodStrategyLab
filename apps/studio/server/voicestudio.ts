@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { DATA_DIR } from './config.ts';
 
@@ -26,6 +28,50 @@ async function probe(url: string): Promise<VoiceStudioStatus | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * 오래 걸릴 수 있는 VoiceStudio 요청 (fetch와 같은 모양으로 쓴다).
+ * 내장 fetch는 응답 헤더를 5분까지만 기다리는데, 클라우드 GPU는 처음 켜질 때 그보다 오래 걸릴 수 있다.
+ * 그래서 node:http로 보내고, 전체 시간 제한(timeoutMs)만 둔다.
+ */
+export async function slowFetch(
+  target: string,
+  init: { method?: string; headers?: Record<string, string>; body?: FormData | string },
+  timeoutMs: number,
+): Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown>; arrayBuffer(): Promise<ArrayBuffer> }> {
+  // FormData는 Request로 한 번 감싸 여러 부분(multipart) 본문과 헤더를 얻는다
+  const req0 = new Request(target, { method: init.method ?? 'GET', headers: init.headers, body: init.body });
+  const body = init.body === undefined ? undefined : Buffer.from(await req0.arrayBuffer());
+  const hdrs: Record<string, string> = {};
+  req0.headers.forEach((v, k) => (hdrs[k] = v));
+  if (body) hdrs['content-length'] = String(body.length);
+  const u = new URL(target);
+  const lib = u.protocol === 'https:' ? https : http;
+  const { status, buf } = await new Promise<{ status: number; buf: Buffer }>((resolve, reject) => {
+    const req = lib.request(u, { method: init.method ?? 'GET', headers: hdrs }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => {
+        clearTimeout(timer);
+        resolve({ status: res.statusCode ?? 0, buf: Buffer.concat(chunks) });
+      });
+      res.on('error', reject);
+    });
+    const timer = setTimeout(() => req.destroy(new Error(`목소리 엔진 응답이 ${Math.round(timeoutMs / 60000)}분 안에 오지 않았습니다.`)), timeoutMs);
+    req.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    req.end(body);
+  });
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => buf.toString('utf8'),
+    json: async () => JSON.parse(buf.toString('utf8')) as unknown,
+    arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  };
 }
 
 let lastUrl: string | null = null;
@@ -63,7 +109,7 @@ export interface VoiceProfile {
 }
 
 export async function listProfiles(url: string): Promise<VoiceProfile[]> {
-  const res = await fetch(`${url}/profiles`, { headers: headers(), signal: AbortSignal.timeout(infoTimeout(5000)) });
+  const res = await slowFetch(`${url}/profiles`, { headers: headers() }, infoTimeout(5000));
   if (!res.ok) throw new Error(`VoiceStudio 목소리 목록을 불러오지 못했습니다 (${res.status})`);
   const rows = (await res.json()) as { id: string | number; name: string; kind?: string; audio_url?: string | null }[];
   return rows.map((r) => ({ id: String(r.id), name: r.name, kind: r.kind ?? '', audioUrl: r.audio_url ? `${url}${r.audio_url}` : null }));
@@ -85,7 +131,7 @@ export interface EngineInfo {
 
 export async function engineInfo(url: string): Promise<EngineInfo> {
   // 모델을 처음 불러오는 동안에는 응답이 늦을 수 있다
-  const res = await fetch(`${url}/engines/tts`, { headers: headers(), signal: AbortSignal.timeout(infoTimeout(60000)) });
+  const res = await slowFetch(`${url}/engines/tts`, { headers: headers() }, infoTimeout(60000));
   if (!res.ok) throw new Error(`VoiceStudio 엔진 목록을 불러오지 못했습니다 (${res.status})`);
   const d = (await res.json()) as { active: string; backends: { id: string; available: boolean }[] };
   const available = d.backends.filter((b) => b.available).map((b) => b.id);
@@ -109,12 +155,15 @@ export async function createDesignedVoice(url: string, name: string, description
   if (!engines.available.includes('voxcpm2')) {
     throw new Error('목소리 디자인에는 VoxCPM2 엔진이 필요합니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
   }
-  const speech = await fetch(`${url}/v1/audio/speech`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers() },
-    body: JSON.stringify({ model: 'voxcpm2', voice: 'default', language: 'ko', response_format: 'wav', description, input: MASCOT_REFERENCE_TEXT }),
-    signal: AbortSignal.timeout(1_800_000),
-  });
+  const speech = await slowFetch(
+    `${url}/v1/audio/speech`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers() },
+      body: JSON.stringify({ model: 'voxcpm2', voice: 'default', language: 'ko', response_format: 'wav', description, input: MASCOT_REFERENCE_TEXT }),
+    },
+    1_800_000,
+  );
   if (!speech.ok) throw new Error(`기준 녹음을 만들지 못했습니다 (${speech.status}): ${(await speech.text().catch(() => '')).slice(0, 200)}`);
   const wav = Buffer.from(await speech.arrayBuffer());
   return createVoiceFromReference(url, name, wav);
@@ -138,7 +187,7 @@ export async function createVoiceFromReference(url: string, name: string, wav: B
   form.append('ref_text', refText);
   form.append('language', 'Auto');
   form.append('ref_audio', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'matjosu-reference.wav');
-  const created = await fetch(`${url}/profiles`, { method: 'POST', body: form, headers: headers(), signal: AbortSignal.timeout(300000) });
+  const created = await slowFetch(`${url}/profiles`, { method: 'POST', body: form, headers: headers() }, Math.max(300_000, infoTimeout(300_000)));
   if (!created.ok) {
     const detail = await created.text().catch(() => '');
     throw new Error(`목소리를 만들지 못했습니다 (${created.status}): ${detail.slice(0, 200)}`);
