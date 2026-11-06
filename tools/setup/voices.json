@@ -8,19 +8,11 @@
     "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
   },
   {
-    "id": "matjosu-low1",
+    "id": "matjosu-low",
     "name": "맛조수낮게",
-    "label": "맛조수 조금 낮게",
-    "note": "같은 목소리, 톤만 조금 낮게",
-    "file": "voices/matjosu-low1.wav",
-    "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
-  },
-  {
-    "id": "matjosu-low2",
-    "name": "맛조수더낮게",
-    "label": "맛조수 더 낮게",
-    "note": "같은 목소리, 톤을 더 낮게",
-    "file": "voices/matjosu-low2.wav",
+    "label": "맛조수 낮게",
+    "note": "같은 목소리, 톤만 낮게",
+    "file": "voices/matjosu-low.wav",
     "refText": "이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?"
   },
   {
