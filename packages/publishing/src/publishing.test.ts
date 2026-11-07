@@ -15,6 +15,16 @@ describe('블로그 원고', () => {
     expect(post.markdown).toContain('검토일 2026-11-03');
   });
 
+  it('원리·실수 문단은 본문 문체(~습니다)에 맞추고, 순서·팁 목록과 분량은 원본 그대로 둔다', () => {
+    const photo = { ...recipe, principle: '두부와 배추를 함께 볶으면 청국장의 짠맛이 희석된다', commonMistake: '청국장을 처음부터 오래 볶으면 냄새가 강해진다.', tips: ['청국장은 마지막에 넣는다'] };
+    const md = buildBlogPost({ recipe: photo, review }).markdown;
+    expect(md).toContain('두부와 배추를 함께 볶으면 청국장의 짠맛이 희석됩니다.');
+    expect(md).toContain('청국장을 처음부터 오래 볶으면 냄새가 강해집니다.');
+    expect(md).toContain('- 청국장은 마지막에 넣는다');
+    recipe.steps.forEach((s, i) => expect(md).toContain(`${i + 1}. ${s}`));
+    expect(md).not.toContain('30초 실험실, 오늘의 질문은');
+  });
+
   it('검수 전이면 게시 금지 문구를 넣는다', () => {
     const post = buildBlogPost({ recipe, review: null });
     expect(post.markdown).toContain('검수 전 초안');

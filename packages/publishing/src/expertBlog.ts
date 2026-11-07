@@ -1,4 +1,4 @@
-import { BRAND, CATEGORY_LABELS, extractQuantities, formatIngredient, recipeText, splitSentences, type RecipeInput } from '@mat-lab/recipe-core';
+import { BRAND, CATEGORY_LABELS, extractQuantities, formal, formatIngredient, recipeText, splitSentences, type RecipeInput } from '@mat-lab/recipe-core';
 import { groupIngredients, kstDate, markdownToHtml, type BlogPost, type ReviewInfo } from './blog.ts';
 
 /**
@@ -127,7 +127,8 @@ export function buildExpertBlog(input: { recipe: RecipeInput; style: BlogStyle; 
 
   for (const key of SECTION_ORDER[style]) {
     if (key === 'principle') {
-      md.push(`## ${BRAND.notePhrase}`, '', ...splitSentences(recipe.principle).flatMap((s) => [s, '']));
+      // 원리 문장만 끝맺음을 본문 문체로 고른다 (연구자 답변 문단은 손대지 않는다)
+      md.push(`## ${BRAND.notePhrase}`, '', ...splitSentences(recipe.principle).flatMap((s) => [formal(s), '']));
       continue;
     }
     if (key === 'ingredients') {

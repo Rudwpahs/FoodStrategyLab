@@ -1,4 +1,4 @@
-import { BRAND, CATEGORY_LABELS, formatIngredient, type RecipeInput } from '@mat-lab/recipe-core';
+import { BRAND, CATEGORY_LABELS, formalParagraph, formatIngredient, type RecipeInput } from '@mat-lab/recipe-core';
 
 export interface ReviewInfo {
   reviewer: string;
@@ -42,11 +42,12 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
 
   const md: string[] = [];
   md.push(`# ${title}`, '');
-  md.push(`안녕하세요, **${BRAND.labName}**입니다. ${BRAND.slogan}, 오늘의 질문은 이것입니다.`, '');
+  md.push(`안녕하세요, **${BRAND.labName}**입니다. 오늘은 이 질문을 함께 풀어 보겠습니다.`, '');
   md.push(`> **${recipe.topic}**`, '');
   md.push(image(images.thumbnail, '썸네일'), '');
-  md.push(`## ${BRAND.notePhrase}`, '', recipe.principle, '');
-  if (recipe.commonMistake) md.push(`## 이런 실수, 해보셨나요?`, '', recipe.commonMistake, '');
+  // 원리·실수 문단은 본문 문체(~습니다)에 맞춰 끝맺음만 고른다. 재료·순서·팁 목록은 원본 그대로 둔다
+  md.push(`## ${BRAND.notePhrase}`, '', formalParagraph(recipe.principle), '');
+  if (recipe.commonMistake) md.push(`## 이런 실수, 해보셨나요?`, '', formalParagraph(recipe.commonMistake), '');
   if (recipe.ingredients.length) {
     md.push(`## 재료`, '');
     for (const [group, items] of groupIngredients(recipe.ingredients)) {

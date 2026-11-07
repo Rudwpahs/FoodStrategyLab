@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAND, SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, contentCandidates, plainDishName, spoken, type RecipeInput } from './index.ts';
+import { BRAND, SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, contentCandidates, formal, plainDishName, spoken, type RecipeInput } from './index.ts';
 
 /**
  * 대본이 사람이 말하는 것처럼 들리는지 (맛조수 말투, 이름 반복, 앞뒤 연결).
@@ -115,4 +115,17 @@ describe('연출 엔진 대본이 자연스럽게 들린다', () => {
     const { script } = buildStyledScript(spinach, { style: 'experiment', hookType: 'question' });
     expect(script.scenes.filter((s) => s.line.includes(spinach.topic))).toHaveLength(1);
   });
+});
+
+describe('블로그 문단: 글말 끝맺음만 합니다체로', () => {
+  it.each([
+    ['청국장의 짠맛이 희석된다', '청국장의 짠맛이 희석됩니다.'],
+    ['냄새가 강해진다.', '냄새가 강해집니다.'],
+    ['물을 붓는다', '물을 붓습니다.'],
+    ['반죽을 만든다', '반죽을 만듭니다.'],
+    ['이것이 핵심이다', '이것이 핵심입니다.'],
+    ['떫은맛이 줄어듭니다', '떫은맛이 줄어듭니다.'],
+    ['전이 눅눅해졌어요.', '전이 눅눅해졌어요.'],
+    ['반죽은 꼭 찬물!', '반죽은 꼭 찬물!'],
+  ])('%s → %s', (from, to) => expect(formal(from)).toBe(to));
 });

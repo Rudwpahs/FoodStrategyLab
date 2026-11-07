@@ -228,3 +228,28 @@ export function spoken(sentence: string): string {
   const out = haeyo(stem) ?? hamnida(stem);
   return `${out}${punct || '.'}`;
 }
+
+/**
+ * 블로그처럼 글로 읽는 문단: 반말 글말 끝맺음(~한다, ~된다)만 합니다체로 맞춘다.
+ * 이미 ~습니다/~요로 끝나거나 끝맺음이 없는 문장은 그대로 두고, 마침표만 채운다.
+ * "청국장의 짠맛이 희석된다" → "청국장의 짠맛이 희석됩니다."
+ */
+export function formal(sentence: string): string {
+  const t = sentence.trim();
+  const m = t.match(/^([\s\S]*?)([.!?。]*)$/);
+  const body = (m?.[1] ?? t).trim();
+  const punct = (m?.[2] ?? '').replace('。', '.');
+  if (!body) return t;
+  if (body.endsWith('니다') || body.endsWith('요')) return `${body}${punct || '.'}`;
+  if (!body.endsWith('다')) return t;
+  const stem = stemOf(body);
+  return stem ? `${hamnida(stem)}${punct || '.'}` : t;
+}
+
+/** 문단 안의 문장마다 formal()을 적용한다 */
+export function formalParagraph(text: string): string {
+  return text
+    .split(/(?<=[.!?。])\s+/)
+    .map((s) => formal(s))
+    .join(' ');
+}

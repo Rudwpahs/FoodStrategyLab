@@ -24,7 +24,7 @@
 
 ```
 npm ci            # 설치 (Node 22.13 이상)
-npm test          # Vitest 전체 (현재 206개 통과)
+npm test          # Vitest 전체 (현재 215개 통과)
 npm run typecheck # tsc
 npm run dev       # 개발 서버 http://localhost:5178
 npm run start     # 화면 묶음을 만든 뒤 빠른 실행 모드
