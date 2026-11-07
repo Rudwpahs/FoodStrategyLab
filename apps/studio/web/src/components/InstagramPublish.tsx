@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { instagramCaptionChecks, type IgCheck } from '@mat-lab/recipe-core';
 import { api, type InstagramJob, type InstagramStatus } from '../api.ts';
 import { useApp } from '../App.tsx';
 
@@ -21,6 +22,11 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
   const [caption, setCaption] = useState('');
   const [job, setJob] = useState<InstagramJob | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checks, setChecks] = useState<IgCheck[]>([]);
+  // 체험용 릴스: 팔로워가 아닌 사람에게 먼저 보여 주고, 반응을 보고 공개를 정한다
+  const [trial, setTrial] = useState(false);
+  // 레시피 카드(캐러셀) 장수: 영상과 따로 '넘겨 보는 레시피' 게시물로 올릴 수 있다
+  const [cards, setCards] = useState(0);
 
   const load = useCallback(() => api.instagram().then(setSt).catch(() => setSt(null)), []);
   useEffect(() => {
@@ -34,6 +40,8 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
       .instagramDraft(renderId)
       .then((d) => {
         setCaption((c) => c || d.caption);
+        setChecks(d.checks ?? []);
+        setCards(d.cards ?? 0);
         if (d.job) setJob(d.job);
       })
       .catch(() => undefined);
@@ -109,17 +117,18 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
   }
 
   const running = job && job.status !== 'published' && job.status !== 'failed';
-  const publish = async (confirmDuplicate = false) => {
+  const publish = async (confirmDuplicate = false, kind: 'reel' | 'carousel' = 'reel'): Promise<void> => {
     if (!renderId) return;
-    if (!confirmDuplicate && !confirm(`@${st.username} 계정에 이 영상을 실제로 게시합니다.\n올린 뒤에는 인스타그램 앱에서만 지울 수 있어요. 올릴까요?`)) return;
+    const what = kind === 'carousel' ? `레시피 카드 ${cards}장을 넘겨 보는 게시물로` : trial ? '이 영상을 체험용 릴스로(팔로워가 아닌 사람에게 먼저)' : '이 영상을';
+    if (!confirmDuplicate && !confirm(`@${st.username} 계정에 ${what} 실제로 게시합니다.\n올린 뒤에는 인스타그램 앱에서만 지울 수 있어요. 올릴까요?`)) return;
     setBusy(true);
     try {
-      setJob(await api.instagramPublish(renderId, caption, confirmDuplicate));
+      setJob(await api.instagramPublish(renderId, caption, confirmDuplicate, kind === 'reel' && trial, kind));
     } catch (e) {
       const msg = (e as Error).message;
-      if (!confirmDuplicate && msg.includes('이미 인스타그램에 올렸어요') && confirm(`${msg}\n\n그래도 한 번 더 올릴까요?`)) {
+      if (!confirmDuplicate && msg.includes('이미 인스타그램에') && confirm(`${msg}\n\n그래도 한 번 더 올릴까요?`)) {
         setBusy(false);
-        return publish(true);
+        return publish(true, kind);
       }
       notify(msg, true);
     } finally {
@@ -151,10 +160,26 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
             설명 글 ({caption.length}/2200자)
             <textarea rows={6} value={caption} onChange={(e) => setCaption(e.target.value)} disabled={Boolean(running)} />
           </label>
+          <div className="stack ig-checks">
+            <b className="small">올리기 전 점검</b>
+            {[...checks, ...instagramCaptionChecks(caption)].map((c, i) => (
+              <div key={i} className={`small ig-check ${c.level}`}>
+                {c.level === 'ok' ? '✓' : c.level === 'warn' ? '!' : '✕'} {c.text}
+              </div>
+            ))}
+          </div>
+          <label className="check small">
+            <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} disabled={Boolean(running)} /> 체험용 릴스로 올리기 — 팔로워가 아닌 사람에게 먼저 보여 주고, 반응이 좋으면 인스타그램 앱에서 전체 공개로 바꿔요 (첫 장면 시험용)
+          </label>
           <div className="row">
-            <button className="btn primary" disabled={busy || Boolean(running) || !caption.trim()} onClick={() => publish()}>
+            <button className="btn primary" disabled={busy || Boolean(running) || !caption.trim() || instagramCaptionChecks(caption).some((c) => c.level === 'error')} onClick={() => publish()}>
               인스타그램에 올리기
             </button>
+            {cards >= 2 && (
+              <button className="btn" disabled={busy || Boolean(running) || !caption.trim() || instagramCaptionChecks(caption).some((c) => c.level === 'error')} onClick={() => publish(false, 'carousel')} title="영상과 따로, 넘겨 보는 레시피 카드 게시물로 올려요 (같은 설명 글)">
+                레시피 카드 {cards}장 올리기
+              </button>
+            )}
             {job && (
               <span className={`badge${job.status === 'failed' ? ' error' : ''}`}>
                 {STEP[job.status]}
@@ -163,6 +188,8 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
             )}
           </div>
           {job?.status === 'failed' && <div className="issue error">{job.message}</div>}
+          {job?.note && <div className="issue warning small">{job.note}</div>}
+          {job?.status === 'published' && job.trial && <div className="muted small">체험용 릴스예요. 인스타그램 앱의 릴스 → 체험용에서 반응을 보고 전체 공개로 바꿀 수 있어요.</div>}
           {job?.status === 'published' && job.permalink && (
             <a href={job.permalink} target="_blank" rel="noreferrer">
               올린 릴스 보기

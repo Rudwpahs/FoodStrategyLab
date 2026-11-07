@@ -180,3 +180,9 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .diff .before { color: #8a7a6a; text-decoration: line-through; text-decoration-color: #d9a3a3; }
 .diff .after { color: #1f5f3f; }
 .diff .rejected { color: #a05a2c; font-style: italic; }
+
+/* 인스타그램 올리기 전 점검 */
+.ig-checks { gap: 4px; padding: 8px 10px; border: 1px solid #eadfcd; border-radius: 10px; background: #fffdf8; }
+.ig-check.ok { color: #2f7d55; }
+.ig-check.warn { color: #a05a2c; }
+.ig-check.error { color: #b3261e; font-weight: 600; }

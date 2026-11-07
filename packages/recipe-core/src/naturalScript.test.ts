@@ -88,6 +88,8 @@ describe('연출 엔진 대본이 자연스럽게 들린다', () => {
         expect(lines.split(BRAND.labName).length - 1, `${r.dishName}/${c.key}`).toBe(1);
         expect(lines).not.toContain('에 따르면');
         expect(lines).not.toContain(BRAND.tipPhrase);
+        // 엔딩은 매번 같은 말로 끝난다 (고정 엔딩)
+        expect(c.script.scenes.at(-1)!.line.endsWith(BRAND.signOff)).toBe(true);
       }
   });
 

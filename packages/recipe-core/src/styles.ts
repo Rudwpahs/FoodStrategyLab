@@ -189,7 +189,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       body.push(brand());
       body.push(explain(0, '원인은요,')!);
       body.push(ingredients()!, steps((n, r) => `바른 순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
-      body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.labName}였어요.`));
+      body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.signOff}`));
       break;
     }
     case 'comedy': {
@@ -199,14 +199,14 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       body.push({ type: 'question', emotion: failed ? 'disappointed' : 'curious', line: `${BRAND.callName}! ${ask}`, visual: 'react' });
       body.push(explain(0, '노트에 답이 있었어요!')!, explain(1)!);
       body.push(steps((n, r) => `${failed ? '이번엔 제대로!' : '그럼 만들어 볼게요!'} ${count(n, r)}${restNote(r)}!`)!);
-      body.push(signature(`${failed ? '대성공! ' : ''}${BRAND.labName}, 다음 실험에서 만나요!`));
+      body.push(signature(`${failed ? '대성공! ' : ''}${BRAND.signOff}`));
       break;
     }
     case 'experiment': {
       body.push(brand());
       body.push({ ...explain(0)!, visual: 'sizzle' }, explain(1)!);
       body.push(ingredients()!, steps((n, r) => `순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
-      body.push(signature(`오늘의 실험 노트, 저장해 두세요! ${BRAND.labName}였어요.`));
+      body.push(signature(`실험 노트는 저장해 두세요! ${BRAND.signOff}`));
       break;
     }
     case 'before-after': {
@@ -218,12 +218,12 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       } else {
         body.push(explain(0)!);
       }
-      body.push(tipScene()!, signature(`완성 사진처럼 만들었다면 저장! ${BRAND.labName}였어요.`));
+      body.push(tipScene()!, signature(`완성 사진처럼 만들었다면 저장! ${BRAND.signOff}`));
       break;
     }
     case 'sensory': {
       body.push(ingredients()!, steps((n, r) => (r > 0 ? `핵심 ${n}단계${restNote(r)}!` : `${n}단계면 끝!`))!, tipScene()!);
-      body.push(signature(`${BRAND.labName}, 저장해 두고 만들어 보세요!`));
+      body.push(signature(`저장해 두고 만들어 보세요! ${BRAND.signOff}`));
       break;
     }
     case 'story': {
@@ -232,7 +232,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       if (story.length > 1) body.push({ type: 'explain', emotion: 'curious', line: story.slice(1, 3).join(' '), cardTitle: '맛 연구소 이야기' });
       else notes.push('이야기가 짧아 이야기 장면 하나로 구성했어요. 연구자의 경험담을 더 입력하면 이야기 장면이 늘어나요.');
       body.push(explain(0)!, ingredients()!, steps((n, r) => `만드는 법은 ${n}단계${restNote(r)}!`)!);
-      body.push(signature(`이야기가 있는 요리, ${BRAND.labName}였어요.`));
+      body.push(signature(`이야기가 있는 요리였어요. ${BRAND.signOff}`));
       break;
     }
   }

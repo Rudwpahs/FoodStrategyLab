@@ -3,7 +3,8 @@ import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
+import { cachedSpeechBounds, extractFrame, normalizeLoudness, toJpeg } from '@mat-lab/video/audio';
+import { recipeCardPages } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
@@ -270,6 +271,20 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     await renderer.renderStillImage('Cover', cover, path.join(outDir, 'cover.png'));
     await renderer.renderStillImage('SquareThumb', cover, path.join(outDir, 'thumbnail.png'));
     await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
+    // 넘겨 보는 레시피 카드 (인스타그램 캐러셀용, JPEG). 실패해도 영상 제작은 끝낸다
+    set('레시피 카드 묶음', 0.9);
+    try {
+      const pages = recipeCardPages(recipe);
+      for (let i = 0; i < pages.length; i++) {
+        const png = path.join(outDir, `carousel-${String(i + 1).padStart(2, '0')}.png`);
+        await renderer.renderStillImage('CarouselCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval, page: i }, png);
+        await toJpeg(png, png.replace(/\.png$/, '.jpg'));
+        fs.rmSync(png);
+      }
+      await toJpeg(path.join(outDir, 'cover.png'), path.join(outDir, 'cover.jpg')).catch(() => undefined);
+    } catch (e) {
+      console.warn('[레시피 카드 묶음] 만들지 못함:', (e as Error).message);
+    }
 
     if (photo) fs.copyFileSync(path.join(DATA_DIR, photo.file), path.join(outDir, `photo${path.extname(photo.file)}`));
     // 게시 묶음(ZIP)은 승인 후 내려받을 때 만든다 (그때의 승인·블로그 선택을 반영)

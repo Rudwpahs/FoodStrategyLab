@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./render": "./src/render.ts",
     "./timeline": "./src/timeline.ts",
-    "./audio": "./src/audio.ts"
+    "./audio": "./src/audio.ts",
+    "./cards": "./src/cardPages.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

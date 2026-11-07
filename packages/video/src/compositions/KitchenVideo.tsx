@@ -370,13 +370,14 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
       <KitchenScene width={width} height={height} frame={0} state={state} food={food} props={[]} />
-      <BrandBadge scale={square ? 0.8 : 1} />
+      {/* 세로 표지: 프로필 격자는 가운데 3:4(위아래 240px씩 잘림)만 보여서, 글씨는 모두 그 안(330~1600)에 둔다 */}
+      <BrandBadge scale={square ? 0.8 : 1} top={square ? undefined : 330} />
       <div
         style={{
           position: 'absolute',
           left: 50,
           right: 50,
-          top: square ? 170 : 300,
+          top: square ? 170 : 440,
           textAlign: 'center',
           fontFamily: FONT_FAMILY,
           fontWeight: 950,
@@ -390,6 +391,34 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
       >
         {title}
       </div>
+      {!square && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 1596,
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: FONT_FAMILY,
+              fontWeight: 850,
+              fontSize: 38,
+              color: COLORS.ink,
+              background: COLORS.yellow,
+              border: `5px solid ${COLORS.ink}`,
+              borderRadius: 999,
+              padding: '10px 30px',
+              letterSpacing: -1,
+            }}
+          >
+            🧪 {BRAND.series} · 레시피 {BRAND.researcherTitle} {BRAND.researcher}
+          </div>
+        </div>
+      )}
     </AbsoluteFill>
   );
 };

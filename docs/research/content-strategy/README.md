@@ -6,6 +6,7 @@
 | --- | --- |
 | [sources.md](sources.md) | 공식·연구 자료 55건, 핵심 발견 F1~F15 |
 | [reels-analysis.md](reels-analysis.md) | 숏폼 사례 40건 (영상 미시청 — 제목·썸네일·자동 프레임만) |
+| [instagram-cases.md](instagram-cases.md) | 인스타그램만 다시 조사 (한국 20건·해외/캐릭터 22건·공식 규칙) → 스튜디오에 넣은 것 |
 | [hook-library.md](hook-library.md) | 훅 15종, 호두정과 15가지 훅 비교, A/B 방법 |
 | [editing-playbook.md](editing-playbook.md) | 화면·자막·음향·캐릭터 연출, 연출 유형 6종 |
 | [character-brand-research.md](character-brand-research.md) · [character-brand-guide.md](character-brand-guide.md) | 맛조수·이희재 브랜드 연구와 운영 기준 |

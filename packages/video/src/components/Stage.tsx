@@ -38,11 +38,11 @@ export const LabBackground: React.FC<{ counterTop?: number; height?: number }> =
 );
 
 /** 좌상단 브랜드 배지 (모든 장면에 고정) */
-export const BrandBadge: React.FC<{ scale?: number }> = ({ scale = 1 }) => (
+export const BrandBadge: React.FC<{ scale?: number; top?: number }> = ({ scale = 1, top }) => (
   <div
     style={{
       position: 'absolute',
-      top: (scale === 1 ? 232 : 120) * scale,
+      top: top ?? (scale === 1 ? 232 : 120) * scale,
       left: 56 * scale,
       display: 'flex',
       alignItems: 'center',

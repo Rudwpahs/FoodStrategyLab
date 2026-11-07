@@ -1,7 +1,7 @@
 import { BRAND } from './brand.ts';
-import { causeEffect, findSensory } from './korean.ts';
-import { splitSentences } from './format.ts';
-import { suggestHooks, type HookCandidate, type HookType, type RecentFormat } from './hooks.ts';
+import { causeEffect, findSensory, spoken } from './korean.ts';
+import { formatIngredient, splitSentences } from './format.ts';
+import { plainDishName, suggestHooks, type HookCandidate, type HookType, type RecentFormat } from './hooks.ts';
 import { STYLE_IDS, STYLE_INFO, buildStyledScript, type StyleId } from './styles.ts';
 import { estimateScriptSeconds } from './generator/template.ts';
 import { VISUAL_LABELS, type Category, type RecipeInput, type Script, type Visual } from './types.ts';
@@ -184,22 +184,74 @@ export function scriptForCandidate(recipe: RecipeInput, style: StyleId, hookType
   return { script: { ...built.script, title }, notes: built.notes, title };
 }
 
-/** 인스타그램 설명: 후보 첫 대사로 시작 (매체에 맞는 표현). '검토한'은 승인 후에만. */
-export function instagramCaption(recipe: RecipeInput, script: Script, reviewed: boolean, tags: string[]): string {
-  const hookLine = script.scenes.find((s) => s.hook)?.line ?? recipe.topic;
+/** 인스타그램 해시태그는 5개까지 (2025-12 @creators 공지 보도: 게시물당 5개. 검색 키워드는 본문에 쓴다) */
+export const IG_MAX_HASHTAGS = 5;
+export const IG_MAX_CAPTION = 2200;
+
+/** 인스타그램 해시태그 5개: 연구소 → 요리 이름 → 요리 이름+레시피 → 나머지 */
+export function instagramTags(recipe: RecipeInput, tags: string[]): string[] {
+  // 검색에 쓰이는 말은 꾸미는 말을 뺀 요리 이름 ("바삭한 김치전" → #김치전레시피)
+  const full = (recipe.dishName || '').replace(/[\s·#]/g, '');
+  const dish = plainDishName(recipe.dishName || '').replace(/[\s·#]/g, '');
+  const lab = BRAND.labName.replace(/\s/g, '');
+  const all = [lab, full, dish ? `${dish}레시피` : '', ...tags].map((t) => t.replace(/[\s·#]/g, '')).filter(Boolean);
+  return [...new Set(all)].slice(0, IG_MAX_HASHTAGS);
+}
+
+/**
+ * 인스타그램 설명 글. 실제 요리 계정 사례에서 꾸준히 보인 구성을 따른다 (docs/research/content-strategy/instagram-cases.md):
+ * - 첫 줄은 영상의 첫 대사(훅)
+ * - 재료·만드는 법을 본문에 그대로 (인스타그램 검색이 본문 글자를 본다, 저장할 이유가 된다). 재료·분량·순서는 원본 그대로
+ * - 저장·보내기·댓글을 하나씩 부탁 (추천 신호: 도달 대비 보내기·저장)
+ * - 역할을 분명히: 레시피는 조리기능장, 진행은 AI 캐릭터 (AI 표시)
+ * - 해시태그 5개 이하
+ * '검토한'은 승인 후에만 쓴다. 2,200자를 넘으면 만드는 법부터 블로그로 넘긴다.
+ */
+export function instagramCaption(recipe: RecipeInput, script: Script | null, reviewed: boolean, tags: string[]): string {
+  const dish = recipe.dishName || recipe.topic;
+  const hookLine = script?.scenes.find((s) => s.hook)?.line ?? recipe.topic;
+  const principle = splitSentences(recipe.principle)[0];
   const tip = recipe.tips[0];
-  const lines = [
-    hookLine,
-    '',
-    tip ? `💡 ${BRAND.tipPhrase}: ${tip}` : '',
-    '전체 재료와 순서는 블로그에 정리했어요. 나중에 만들 때 꺼내 보게 저장해 두세요.',
-    '',
-    reviewed
-      ? `${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 요리 지식을 캐릭터 애니메이션으로 풀었습니다.`
-      : `${BRAND.researcherTitle} ${BRAND.researcher}의 요리 지식을 캐릭터 애니메이션으로 풀었습니다. (검수 전 초안)`,
-    '🤖 맛조수는 AI 캐릭터이고, 음성은 AI 합성입니다. 조리 지식은 이희재 연구자의 자료입니다.',
-    '',
-    tags.map((t) => `#${t}`).join(' '),
+  const ingredientLines: string[] = [];
+  let group: string | undefined;
+  for (const i of recipe.ingredients) {
+    if (i.group && i.group !== group) ingredientLines.push(`(${i.group})`);
+    group = i.group;
+    ingredientLines.push(`- ${formatIngredient(i)}`);
+  }
+  const stepLines = recipe.steps.map((s, i) => `${i + 1}. ${s}`);
+  const credit = [
+    reviewed ? `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 레시피예요.` : `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}의 레시피예요. (검수 전 초안)`,
+    `진행: ${BRAND.character} (AI 캐릭터 · AI 합성 음성)`,
   ];
-  return lines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim();
+  const hashtags = instagramTags(recipe, tags).map((t) => `#${t}`).join(' ');
+
+  const build = (withSteps: boolean, withIngredients: boolean) =>
+    [
+      hookLine,
+      '',
+      `🧪 ${BRAND.series} · ${dish}`,
+      principle ? spoken(principle) : '',
+      '',
+      ...(withIngredients && ingredientLines.length ? ['[재료]', ...ingredientLines, ''] : []),
+      ...(withSteps && stepLines.length ? ['[만드는 법]', ...stepLines, ''] : []),
+      !withSteps || !withIngredients ? '전체 재료와 만드는 법은 블로그에 정리했어요.' : '',
+      tip ? `💡 ${BRAND.tipPhrase}: ${tip}` : '',
+      '',
+      '📌 저장해 두면 만들 때 바로 꺼내 볼 수 있어요.',
+      `📤 ${plainDishName(dish)} 좋아하는 사람에게 보내 주세요.`,
+      '💬 다음에 실험해 볼 요리를 댓글로 알려 주세요!',
+      '',
+      ...credit,
+      '',
+      hashtags,
+    ]
+      .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
+      .join('\n')
+      .trim();
+  for (const [steps, ingredients] of [[true, true], [false, true], [false, false]] as const) {
+    const text = build(steps, ingredients);
+    if (text.length <= IG_MAX_CAPTION) return text;
+  }
+  return build(false, false).slice(0, IG_MAX_CAPTION);
 }

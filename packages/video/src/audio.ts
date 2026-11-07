@@ -53,6 +53,11 @@ export async function normalizeLoudness(input: string, output: string): Promise<
   await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
 }
 
+/** PNG → JPEG (인스타그램 표지·이미지는 JPEG만 받는다) */
+export async function toJpeg(input: string, output: string): Promise<void> {
+  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-q:v', '2', path.resolve(output)]);
+}
+
 /** 영상의 특정 시각 프레임을 작은 이미지로 저장 (자막 확인용) */
 export async function extractFrame(video: string, seconds: number, output: string, width = 360): Promise<void> {
   await ff(['-hide_banner', '-y', '-ss', seconds.toFixed(3), '-i', path.resolve(video), '-frames:v', '1', '-vf', `scale=${width}:-2`, path.resolve(output)]);

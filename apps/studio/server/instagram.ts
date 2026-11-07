@@ -101,13 +101,17 @@ export interface IgJob {
   message: string;
   permalink: string;
   startedAt: string;
+  /** 체험용 릴스로 올렸는지 */
+  trial?: boolean;
+  /** 참고할 점 (예: AI 라벨을 앱에서 켜야 함) */
+  note?: string;
 }
 
 const jobs = new Map<string, IgJob>();
 export const getIgJob = (id: string) => jobs.get(id) ?? null;
 export const activeIgJob = (projectId: number) => [...jobs.values()].find((j) => j.projectId === projectId && !['published', 'failed'].includes(j.status)) ?? null;
 
-/** 인스타그램 설명 글 한도 (2,200자, 해시태그 30개) */
+/** 인스타그램 설명 글 한도 (2,200자, 해시태그 30개 — 5개 넘으면 화면 점검에서 경고만 한다) */
 export function checkCaption(caption: string): string | null {
   if (!caption.trim()) return '설명 글을 넣어 주세요.';
   if (caption.length > 2200) return `설명 글은 2,200자까지예요 (지금 ${caption.length}자).`;
@@ -270,6 +274,12 @@ export class Instagram {
     projectId: number;
     renderId: number;
     videoFile: string;
+    /** 표지 이미지 (JPEG). 있으면 cover_url로 보낸다 (thumb_offset보다 우선) */
+    coverFile?: string;
+    /** 체험용 릴스: 팔로워가 아닌 사람에게 먼저 보여 준다 (trial_params) */
+    trial?: boolean;
+    /** 있으면 릴스 대신 이 이미지들(JPEG, 2~10장)을 캐러셀로 올린다 (레시피 카드) */
+    imageFiles?: string[];
     caption: string;
     publicOrigin: string;
     beforePublish: () => void;
@@ -277,7 +287,7 @@ export class Instagram {
     onFailed?: (message: string) => void;
   }): Promise<IgJob> {
     if (activeIgJob(input.projectId)) throw new HttpError(409, '이미 올리고 있어요. 끝날 때까지 기다려 주세요.');
-    const job: IgJob = { id: crypto.randomUUID(), projectId: input.projectId, renderId: input.renderId, status: 'uploading', message: '인스타그램에 영상을 보내는 중', permalink: '', startedAt: new Date().toISOString() };
+    const job: IgJob = { id: crypto.randomUUID(), projectId: input.projectId, renderId: input.renderId, status: 'uploading', message: '인스타그램에 영상을 보내는 중', permalink: '', startedAt: new Date().toISOString(), ...(input.trial ? { trial: true } : {}) };
     jobs.set(job.id, job);
     let a: Account;
     let cfg: IgConfig;
@@ -288,12 +298,18 @@ export class Instagram {
       const acc = this.account();
       if (!acc) throw new HttpError(409, '인스타그램 계정을 먼저 연결해 주세요.');
       a = acc;
-      if (!fs.existsSync(input.videoFile)) throw new HttpError(404, '영상 파일을 찾을 수 없어요. 영상을 다시 만들어 주세요.');
+      if (input.imageFiles) {
+        if (input.imageFiles.length < 2 || input.imageFiles.length > 10 || !input.imageFiles.every((f) => fs.existsSync(f))) throw new HttpError(404, '레시피 카드 이미지를 찾을 수 없어요. 영상을 다시 만들어 주세요.');
+      } else if (!fs.existsSync(input.videoFile)) throw new HttpError(404, '영상 파일을 찾을 수 없어요. 영상을 다시 만들어 주세요.');
     } catch (e) {
       jobs.delete(job.id);
       throw e;
     }
-    const link = issuePublicLink(input.videoFile);
+    const link = input.imageFiles ? '' : issuePublicLink(input.videoFile);
+    const coverLink = !input.imageFiles && input.coverFile && fs.existsSync(input.coverFile) ? issuePublicLink(input.coverFile) : '';
+    const imageLinks = (input.imageFiles ?? []).map((f) => issuePublicLink(f));
+    // AI 정보 라벨 (맛조수는 AI 캐릭터, 음성은 AI 합성). 끄려면 IG_AI_LABEL=0
+    const aiLabel = process.env.IG_AI_LABEL !== '0';
     const auth = { authorization: `Bearer ${a.token}`, 'content-type': 'application/json' };
     const api = (p: string) => `${cfg.graph}/${cfg.version}/${p}`;
     const pollMs = Number(process.env.IG_POLL_MS) || 30_000;
@@ -314,14 +330,39 @@ export class Instagram {
       let containerId = '';
       let publishing = false;
       try {
-        const created = await this.json(api(`${a.igUserId}/media`), {
-          method: 'POST',
-          headers: auth,
-          body: JSON.stringify({ media_type: 'REELS', video_url: `${input.publicOrigin}/public/reels/${link}.mp4`, caption: input.caption, share_to_feed: true }),
-        }, true);
+        const container: Record<string, unknown> = {
+          media_type: 'REELS',
+          video_url: `${input.publicOrigin}/public/reels/${link}.mp4`,
+          caption: input.caption,
+          share_to_feed: !input.trial,
+          ...(coverLink ? { cover_url: `${input.publicOrigin}/public/reels/${coverLink}.jpg` } : {}),
+          ...(input.trial ? { trial_params: { graduation_strategy: 'MANUAL' } } : {}),
+        };
+        const create = (body: Record<string, unknown>) => this.json(api(`${a.igUserId}/media`), { method: 'POST', headers: auth, body: JSON.stringify(body) }, true);
+        let created: Record<string, unknown>;
+        if (input.imageFiles) {
+          // 캐러셀: 이미지마다 항목 컨테이너 → 묶음 컨테이너 (공식 순서)
+          set('uploading', '레시피 카드를 보내는 중');
+          const children: string[] = [];
+          for (const l of imageLinks) {
+            const c = await create({ image_url: `${input.publicOrigin}/public/reels/${l}.jpg`, is_carousel_item: true });
+            children.push(String(c.id ?? ''));
+          }
+          created = await create({ media_type: 'CAROUSEL', children: children.join(','), caption: input.caption });
+        } else try {
+          created = await create(aiLabel ? { ...container, is_ai_generated: true } : container);
+        } catch (e) {
+          if (input.trial && e instanceof HttpError && /trial/i.test(e.message)) {
+            throw new Error('이 계정은 지금 API로 체험용 릴스를 올릴 수 없어요 (계정 조건이 안 맞을 수 있어요). [체험용으로 올리기]를 끄고 다시 올려 주세요.');
+          }
+          // AI 라벨 항목을 이 계정·버전에서 받지 않으면 라벨 없이 한 번만 다시 보낸다 (체험용 설정은 빼지 않는다: 팔로워에게 잘못 공개되지 않게)
+          if (!aiLabel || !(e instanceof HttpError) || e.status === 409 || !/is_ai_generated|param/i.test(e.message)) throw e;
+          created = await create(container);
+          job.note = 'AI 정보 라벨은 API로 붙지 않았어요. 인스타그램 앱에서 게시물의 "AI 정보" 라벨을 켜 주세요.';
+        }
         containerId = String(created.id ?? '');
         if (!containerId) throw new Error('인스타그램이 업로드 번호를 주지 않았어요.');
-        set('processing', '인스타그램이 영상을 처리하는 중 (보통 1~3분)');
+        set('processing', input.imageFiles ? '인스타그램이 레시피 카드를 처리하는 중' : '인스타그램이 영상을 처리하는 중 (보통 1~3분)');
         let code = 'IN_PROGRESS';
         for (let i = 0; i < tries && code === 'IN_PROGRESS'; i++) {
           await new Promise((r) => setTimeout(r, pollMs));
@@ -351,7 +392,9 @@ export class Instagram {
         set('failed', message);
         input.onFailed?.(message);
       } finally {
-        revokePublicLink(link);
+        if (link) revokePublicLink(link);
+        if (coverLink) revokePublicLink(coverLink);
+        for (const l of imageLinks) revokePublicLink(l);
       }
     })();
     return job;

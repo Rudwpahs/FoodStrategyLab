@@ -7,6 +7,9 @@ import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, IM_NOT_AI_COMMIT, blogQ
 import { BRAND } from '@mat-lab/recipe-core';
 import { Humanizer, verifyRewrites } from './humanize.ts';
 import { DATA_DIR } from './config.ts';
+import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
+import { toJpeg } from '@mat-lab/video/audio';
+import type { IgCheck } from '@mat-lab/recipe-core';
 import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
 import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, monthlyBudgetUsd, type UploadFile } from './recipeReader.ts';
@@ -73,6 +76,48 @@ const answerTexts = (notes: ExpertNotes) => Object.values(notes.answers).filter(
 
 const FROM_FILES = '/api/projects/from-files';
 
+/** 인스타그램 표지: 렌더 때 만든 cover.png를 JPEG로 (인스타그램 표지는 JPEG). 없으면 표지 없이 올린다 */
+async function coverJpeg(dir: string): Promise<string | undefined> {
+  const jpg = path.join(dir, 'cover.jpg');
+  if (fs.existsSync(jpg)) return jpg;
+  const png = path.join(dir, 'cover.png');
+  if (!fs.existsSync(png)) return undefined;
+  try {
+    await toJpeg(png, jpg);
+    return jpg;
+  } catch {
+    return undefined;
+  }
+}
+
+const CAROUSEL_NOTE = '레시피 카드 캐러셀';
+/** 렌더 때 만든 레시피 카드 묶음 (carousel-01.jpg …) */
+function carouselFiles(dir: string): string[] {
+  if (!dir || !fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => /^carousel-\d+\.jpg$/.test(f))
+    .sort()
+    .slice(0, 10)
+    .map((f) => path.join(dir, f));
+}
+
+/** 올리기 전 점검 중 영상·표지에 관한 것 (설명 글 점검은 화면에서 instagramCaptionChecks로 바로 한다) */
+function reelChecks(render: { outputDir: string }): IgCheck[] {
+  const out: IgCheck[] = [{ level: 'ok', text: '이희재 연구자가 승인한 최신 대본의 영상이에요' }];
+  try {
+    const timings = JSON.parse(fs.readFileSync(path.join(render.outputDir, 'timeline.json'), 'utf8')) as SceneTiming[];
+    const secs = timings.reduce((m, t) => Math.max(m, t.from + t.durationInFrames), 0) / FPS;
+    out.push(secs < 3 ? { level: 'error', text: `영상이 ${secs.toFixed(1)}초예요 (3초 이상이어야 해요).` } : secs > 90 ? { level: 'warn', text: `영상이 ${Math.round(secs)}초예요. 인스타그램은 90초 이하 짧은 릴스를 더 권해요.` } : { level: 'ok', text: `영상 길이 ${Math.round(secs)}초 (90초 이하)` });
+  } catch {
+    /* 길이를 모르면 점검하지 않는다 */
+  }
+  const hasCover = fs.existsSync(path.join(render.outputDir, 'cover.png')) || fs.existsSync(path.join(render.outputDir, 'cover.jpg'));
+  out.push(hasCover ? { level: 'ok', text: '표지 이미지를 함께 보내요 (프로필 3:4 안쪽에 제목)' } : { level: 'warn', text: '표지 이미지가 없어요. 인스타그램이 영상 첫 장면을 표지로 써요.' });
+  out.push({ level: 'ok', text: '1080×1920 · H.264 · 소리 48kHz (인스타그램 권장 규격)' });
+  return out;
+}
+
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** 인스타그램 로그인 뒤 돌아오는 화면 (외부 브라우저에서 열릴 수 있어 간단한 페이지로 보여 준다) */
@@ -119,7 +164,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   // Meta가 게시할 영상을 내려받는 임시 주소 (추측할 수 없는 열쇠, 2시간 뒤·게시 후 만료). 로그인 없이 열린다.
   app.get('/public/reels/:file', (req, res, next) => {
-    const file = resolvePublicLink(String(req.params.file).replace(/\.mp4$/, ''));
+    const file = resolvePublicLink(String(req.params.file).replace(/\.(?:mp4|jpg)$/, ''));
     if (!file) return next(new HttpError(404, '없는 주소예요.'));
     res.sendFile(file, { headers: { 'cache-control': 'no-store' } });
   });
@@ -667,7 +712,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   api.get('/renders/:id/instagram', (req, res) => {
     const { render } = approvedRender(repo, id(req));
-    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId) });
+    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render), cards: carouselFiles(render.outputDir).length });
   });
   /**
    * 실제 게시. 연구자가 승인한 최신 대본의 영상만, 화면에서 '올리기'를 다시 확인했을 때만.
@@ -679,8 +724,12 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const { render } = approvedRender(repo, id(req));
     const pid = render.projectId;
     if (activeIgJob(pid)) throw new HttpError(409, '이미 올리고 있어요. 끝날 때까지 기다려 주세요.');
-    const dup = repo.listPublications(pid).find((p) => p.platform === 'instagram' && p.status === 'published' && p.scriptVersion === render.scriptVersion);
-    if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`);
+    // 릴스와 레시피 카드(캐러셀)는 따로 센다
+    const carousel = body.kind === 'carousel';
+    const imageFiles = carousel ? carouselFiles(render.outputDir) : undefined;
+    if (carousel && (imageFiles?.length ?? 0) < 2) throw new HttpError(409, '레시피 카드 묶음이 없어요. 영상을 다시 만들면 함께 만들어져요.');
+    const dup = repo.listPublications(pid).find((p) => p.platform === 'instagram' && p.status === 'published' && p.scriptVersion === render.scriptVersion && p.note.includes(CAROUSEL_NOTE) === carousel);
+    if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 ${carousel ? '레시피 카드로 ' : ''}올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`);
     const caption = String(body.caption ?? '').trim();
     const bad = checkCaption(caption);
     if (bad) throw new HttpError(400, bad);
@@ -697,6 +746,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       projectId: pid,
       renderId: render.id,
       videoFile: path.join(render.outputDir, 'video.mp4'),
+      coverFile: await coverJpeg(render.outputDir),
+      trial: !carousel && body.trial === true,
+      imageFiles,
       caption,
       publicOrigin: origin,
       // 인스타그램 처리를 기다리는 동안 대본이 바뀌거나 승인이 풀렸으면 여기서 멈춘다
@@ -715,7 +767,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
           publishedAt: new Date().toISOString(),
           style: script.style ?? '',
           hookType: script.hookType ?? '',
-          note: '인스타그램 API로 게시',
+          note: carousel ? `인스타그램 API로 게시 (${CAROUSEL_NOTE})` : body.trial === true ? '인스타그램 API로 게시 (체험용 릴스: 팔로워가 아닌 사람에게 먼저)' : '인스타그램 API로 게시',
         });
         repo.logEvent(pid, 'publish', `인스타그램 게시 (작업 #${render.id}) ${permalink}`);
       },

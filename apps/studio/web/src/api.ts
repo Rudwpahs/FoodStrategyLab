@@ -1,4 +1,4 @@
-import type { ContentCandidate, HookCandidate, HookInfo, HookType, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
+import type { ContentCandidate, HookCandidate, HookInfo, HookType, IgCheck, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { SceneTiming, VideoProps } from '@mat-lab/video/timeline';
 import type { CandidateVoiceJob } from '../../server/pipeline.ts';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
@@ -93,6 +93,8 @@ export interface InstagramJob {
   status: 'uploading' | 'processing' | 'publishing' | 'published' | 'failed';
   message: string;
   permalink: string;
+  trial?: boolean;
+  note?: string;
 }
 
 export interface AuthState {
@@ -109,9 +111,9 @@ export const api = {
   instagram: () => request<InstagramStatus>('GET', '/instagram'),
   instagramConnect: () => request<{ url: string }>('POST', '/instagram/connect'),
   instagramDisconnect: () => request<{ ok: true }>('POST', '/instagram/disconnect'),
-  instagramDraft: (renderId: number) => request<{ caption: string; job: InstagramJob | null }>('GET', `/renders/${renderId}/instagram`),
-  instagramPublish: (renderId: number, caption: string, confirmDuplicate = false) =>
-    request<InstagramJob>('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, confirmDuplicate }),
+  instagramDraft: (renderId: number) => request<{ caption: string; job: InstagramJob | null; checks: IgCheck[]; cards: number }>('GET', `/renders/${renderId}/instagram`),
+  instagramPublish: (renderId: number, caption: string, confirmDuplicate = false, trial = false, kind: 'reel' | 'carousel' = 'reel') =>
+    request<InstagramJob>('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, confirmDuplicate, trial, kind }),
   instagramJob: (jobId: string) => request<InstagramJob>('GET', `/instagram/jobs/${jobId}`),
   setup: (input: { code: string; username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),

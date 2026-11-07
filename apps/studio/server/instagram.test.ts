@@ -23,6 +23,12 @@ const meta = {
   containerStatus: ['IN_PROGRESS', 'FINISHED'] as string[],
   lastCaption: '',
   lastAuth: '',
+  lastBody: {} as Record<string, unknown>,
+  coverBytes: 0,
+  images: 0,
+  carousel: {} as Record<string, unknown>,
+  /** true면 is_ai_generated 항목을 모르는 척한다 (라벨 없이 다시 보내는지 확인) */
+  rejectAiLabel: false,
 };
 
 let metaUrl = '';
@@ -48,7 +54,22 @@ beforeAll(async () => {
   m.post('/v26.0/1789/media', async (req, res) => {
     meta.lastAuth = String(req.headers.authorization);
     meta.lastCaption = req.body.caption;
+    meta.lastBody = req.body;
+    if (req.body.is_carousel_item) {
+      const img = await fetch(req.body.image_url);
+      if (img.ok) meta.images++;
+      return res.json({ id: `I-${meta.images}` });
+    }
+    if (req.body.media_type === 'CAROUSEL') {
+      meta.carousel = req.body;
+      return res.json({ id: 'C-1' });
+    }
     if (req.body.media_type !== 'REELS') return res.status(400).json({ error: { message: 'need REELS' } });
+    if (meta.rejectAiLabel && 'is_ai_generated' in req.body) return res.status(400).json({ error: { message: '(#100) Invalid parameter is_ai_generated' } });
+    if (req.body.cover_url) {
+      const c = await fetch(req.body.cover_url);
+      meta.coverBytes = c.ok ? (await c.arrayBuffer()).byteLength : -1;
+    }
     // Meta는 video_url을 직접 내려받는다: 로그인 없이 열려야 한다
     const v = await fetch(req.body.video_url);
     if (v.ok) {
@@ -230,6 +251,61 @@ describe('인스타그램 릴스 게시 (가짜 Meta 서버)', () => {
     expect(again.status).toBe(409);
     expect(again.text).toContain('이미 인스타그램에 올렸어요');
     expect(meta.published).toBe(1);
+  });
+
+  it('표지(cover_url)를 함께 보내고, AI 정보 라벨을 붙이고, 올리기 전 점검을 돌려준다', async () => {
+    const { renderId } = await approvedProject();
+    const dir = repo.getRender(renderId).outputDir;
+    fs.writeFileSync(path.join(dir, 'cover.jpg'), Buffer.alloc(1234, 9));
+    fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify([{ sceneId: 's1', from: 0, durationInFrames: 900, speechFrames: 800 }]));
+    const pre = await call('GET', `/renders/${renderId}/instagram`);
+    const checks = pre.json.checks as { level: string; text: string }[];
+    expect(checks.map((c) => c.text).join('\n')).toContain('영상 길이 30초');
+    expect(checks.some((c) => c.text.includes('표지 이미지를 함께'))).toBe(true);
+    const started = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption: String(pre.json.caption), confirmDuplicate: true });
+    const done = await waitJob(String(started.json.id));
+    expect(done.status).toBe('published');
+    expect(meta.coverBytes).toBe(1234);
+    expect(meta.lastBody).toMatchObject({ is_ai_generated: true, share_to_feed: true });
+    expect(meta.lastBody.trial_params).toBeUndefined();
+  });
+
+  it('체험용 릴스: trial_params를 보내고 피드에는 공유하지 않는다. AI 라벨을 거절하면 라벨 없이 한 번 더 보내고 알려 준다', async () => {
+    const { pid, renderId } = await approvedProject();
+    meta.rejectAiLabel = true;
+    const caption = String((await call('GET', `/renders/${renderId}/instagram`)).json.caption);
+    const started = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, trial: true });
+    const done = await waitJob(String(started.json.id));
+    meta.rejectAiLabel = false;
+    expect(done).toMatchObject({ status: 'published', trial: true });
+    expect(String(done.note)).toContain('AI 정보');
+    expect(meta.lastBody).toMatchObject({ share_to_feed: false, trial_params: { graduation_strategy: 'MANUAL' } });
+    expect(meta.lastBody.is_ai_generated).toBeUndefined();
+    expect(repo.listPublications(pid)[0]!.note).toContain('체험용');
+  });
+
+  it('레시피 카드 캐러셀: 이미지마다 항목을 만들고 묶어서 올린다. 릴스와 따로 센다', async () => {
+    const { pid, renderId } = await approvedProject();
+    const dir = repo.getRender(renderId).outputDir;
+    const none = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption: '레시피 카드 #요리', kind: 'carousel' });
+    expect(none.status).toBe(409);
+    for (const n of ['01', '02', '03']) fs.writeFileSync(path.join(dir, `carousel-${n}.jpg`), Buffer.alloc(100, 1));
+    const pre = await call('GET', `/renders/${renderId}/instagram`);
+    expect(pre.json.cards).toBe(3);
+    const caption = String(pre.json.caption);
+    // 릴스를 먼저 올려도 카드는 따로 올릴 수 있다
+    await waitJob(String((await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, confirmDuplicate: true })).json.id));
+    const before = meta.images;
+    const started = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, kind: 'carousel' });
+    expect(started.status).toBe(202);
+    const done = await waitJob(String(started.json.id));
+    expect(done.status).toBe('published');
+    expect(meta.images - before).toBe(3);
+    expect(meta.carousel).toMatchObject({ media_type: 'CAROUSEL', children: `I-${before + 1},I-${before + 2},I-${before + 3}`, caption });
+    const notes = repo.listPublications(pid).map((p) => p.note);
+    expect(notes.some((n) => n.includes('레시피 카드 캐러셀'))).toBe(true);
+    // 같은 카드를 다시 올리려면 확인이 필요하다
+    expect((await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, kind: 'carousel' })).status).toBe(409);
   });
 
   it('설명 글에 원본에 없는 분량을 넣으면 올릴 수 없다', async () => {

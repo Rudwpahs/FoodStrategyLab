@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SAMPLE_RECIPES, checkScript, contentCandidates, formatIngredient, instagramCaption, type RecipeInput } from './index.ts';
+import { IG_MAX_CAPTION, IG_MAX_HASHTAGS, SAMPLE_RECIPES, checkScript, contentCandidates, formatIngredient, instagramCaption, type RecipeInput } from './index.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 /** 파일럿과 같은 입력 (흔한 실수 = 검수 필요 초안) */
@@ -88,6 +88,28 @@ describe('콘텐츠 후보 3가지', () => {
     expect(draft.split('\n')[0]).toBe(c.firstLine);
     expect(draft).not.toContain('검토한');
     expect(instagramCaption(pilot, c.script, true, [])).toContain('검토한');
+  });
+
+  it('인스타그램 설명: 재료·순서를 원본 그대로 싣고, 역할(레시피·AI 진행)을 밝히고, 해시태그는 5개 이하', () => {
+    const r = SAMPLE_RECIPES[0]!;
+    const text = instagramCaption(r, null, true, ['이희재의맛연구소', '요리팁', '바삭한김치전', '실패해결', '맛조수', '요리과학']);
+    for (const i of r.ingredients) expect(text).toContain(`- ${formatIngredient(i)}`);
+    r.steps.forEach((s, n) => expect(text).toContain(`${n + 1}. ${s}`));
+    expect(text).toContain('AI 캐릭터');
+    expect(text).toContain('조리기능장 이희재');
+    expect(text).toContain('김치전 좋아하는 사람에게 보내 주세요');
+    expect(text).toContain('#김치전레시피');
+    expect(text.match(/#[^\s#]+/g)!.length).toBeLessThanOrEqual(IG_MAX_HASHTAGS);
+    expect(checkScript(r, { title: 'x', scenes: [{ id: 's1', type: 'intro', emotion: 'joy', line: text }] }).filter((i) => i.code === 'quantity')).toEqual([]);
+  });
+
+  it('인스타그램 설명이 2,200자를 넘으면 만드는 법부터 블로그로 넘긴다', () => {
+    const long = { ...SAMPLE_RECIPES[0]!, steps: Array.from({ length: 40 }, (_, i) => `아주 긴 조리 단계 설명 문장 ${i + 1}번입니다. 천천히 저어 가며 고르게 익힙니다.`) };
+    const text = instagramCaption(long, null, false, []);
+    expect(text.length).toBeLessThanOrEqual(IG_MAX_CAPTION);
+    expect(text).not.toContain('[만드는 법]');
+    expect(text).toContain('블로그에 정리했어요');
+    expect(text).toContain('[재료]');
   });
 });
 
