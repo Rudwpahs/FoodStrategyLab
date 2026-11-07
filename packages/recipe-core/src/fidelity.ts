@@ -175,6 +175,8 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
   const first = script.scenes.slice(0, 2).map((s) => s.line).join('\n');
   const last = script.scenes.at(-1)?.line ?? '';
   const all = script.scenes.map((s) => s.line).join('\n');
+  // 연구자 이름·직함은 대사가 아니라 화면 카드 제목으로 보여도 된다 (대사에서 매번 말하면 어색하다)
+  const cards = script.scenes.map((s) => s.cardTitle ?? '').join('\n');
   const engine = Boolean(script.style);
   if (!first.includes(BRAND.labName) && !(engine && all.includes(BRAND.labName))) {
     issues.push({ level: 'info', code: 'branding', message: `오프닝에 "${BRAND.labName}"이 없습니다.` });
@@ -182,10 +184,10 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
   // 원리 장면이 없는 연출(감각 중심형)은 노트 문구를, 팁 장면을 넣지 않는 연출(코미디·스토리형)은 팁 문구를 검사하지 않는다
   const noNote = script.style === 'sensory';
   const noTip = script.style === 'comedy' || script.style === 'story' || recipe.tips.length === 0;
-  if (!noNote && !all.includes(BRAND.notePhrase)) {
+  if (!noNote && !all.includes(BRAND.notePhrase) && !all.includes(BRAND.noteLead) && !cards.includes(BRAND.notePhrase)) {
     issues.push({ level: 'info', code: 'branding', message: `중간에 "${BRAND.notePhrase}" 문구가 없습니다.` });
   }
-  if (!noTip && !script.scenes.some((s) => s.type === 'tip' && s.line.includes(BRAND.tipPhrase)) && !last.includes(BRAND.tipPhrase)) {
+  if (!noTip && !script.scenes.some((s) => s.type === 'tip' && (s.line.includes(BRAND.tipPhrase) || s.cardTitle === BRAND.tipPhrase)) && !last.includes(BRAND.tipPhrase)) {
     issues.push({ level: 'info', code: 'branding', message: `엔딩에 "${BRAND.tipPhrase}" 문구가 없습니다.` });
   }
   return issues;

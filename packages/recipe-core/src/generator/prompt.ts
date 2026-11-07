@@ -27,8 +27,9 @@ export function buildAiPrompt(recipe: RecipeInput): string {
 1. 아래 원본 자료에 없는 분량·시간·온도·사실을 새로 만들지 마. 숫자는 원본 그대로 써.
 2. 가상의 설명을 "실험 결과", "연구 결과", "증명됐다"처럼 사실로 표현하지 마.
 3. 첫 장면 대사는 정확히 "${BRAND.openingLine}"로 시작해.
-4. 원리를 설명할 때 "${BRAND.notePhrase}에 따르면…" 표현을 한 번 넣어.
-5. 팁 장면은 "${BRAND.tipPhrase}!"로 시작해.
+4. 원리 장면은 "${BRAND.noteLead}"로 시작하고 cardTitle을 "${BRAND.notePhrase}"로 해. 연구자 이름은 대사에서 엔딩에 한 번만 말해.
+5. 팁 장면은 "${BRAND.tipLead}"로 시작하고 cardTitle을 "${BRAND.tipPhrase}"로 해.
+9. 대사는 소리 내어 읽는 말이야. "~한다", "~합니다" 대신 "~해요"로 끝내고, 원본 문장은 끝맺음만 말투로 바꿔. 화면 카드(cardItems)에는 원본 문장을 그대로 써.
 6. 전체 대사는 공백 제외 220자 안팎(약 30초). 한 장면 대사는 한두 문장.
 7. 캐릭터는 시청자 대신 질문하는 역할이야. 반말 대신 친근한 존댓말을 써.
 8. 포맷이 "캐릭터 코미디형"이면 캐릭터가 흔한 실수를 하는 장면(type "mistake")을 넣어.

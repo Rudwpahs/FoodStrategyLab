@@ -51,8 +51,8 @@ describe('템플릿 대본 생성', () => {
   it('브랜드 문구가 오프닝·중간·팁에 들어간다', () => {
     const script = generateTemplateScript(spinach);
     expect(script.scenes[0]?.line).toBe(BRAND.openingLine);
-    expect(script.scenes.some((s) => s.line.includes(BRAND.notePhrase))).toBe(true);
-    expect(script.scenes.some((s) => s.type === 'tip' && s.line.startsWith(BRAND.tipPhrase))).toBe(true);
+    expect(script.scenes.some((s) => s.type === 'explain' && s.cardTitle === BRAND.notePhrase && s.line.startsWith(BRAND.noteLead))).toBe(true);
+    expect(script.scenes.some((s) => s.type === 'tip' && s.cardTitle === BRAND.tipPhrase && s.line.startsWith(BRAND.tipLead))).toBe(true);
     expect(checkScript(spinach, script).filter((i) => i.code === 'branding')).toEqual([]);
   });
 

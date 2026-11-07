@@ -1,5 +1,6 @@
 import { BRAND } from '../brand.ts';
 import { formatIngredient, splitSentences } from '../format.ts';
+import { spoken } from '../korean.ts';
 import type { RecipeInput, Scene, Script } from '../types.ts';
 
 const MAX_STEPS_ON_CARD = 5;
@@ -29,7 +30,7 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
     drafts.push({
       type: 'explain',
       emotion: i === 0 ? 'surprised' : 'confident',
-      line: i === 0 ? `${BRAND.notePhrase}에 따르면, ${sentence}` : sentence,
+      line: i === 0 ? `${BRAND.noteLead} ${spoken(sentence)}` : spoken(sentence),
       cardTitle: BRAND.notePhrase,
       cardItems: [sentence],
     });
@@ -62,7 +63,7 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
 
   const tip = recipe.tips[0];
   if (tip) {
-    drafts.push({ type: 'tip', emotion: 'confident', line: `${BRAND.tipPhrase}! ${tip}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] });
+    drafts.push({ type: 'tip', emotion: 'confident', line: `${BRAND.tipLead} ${spoken(tip)}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] });
   }
 
   drafts.push({

@@ -54,8 +54,9 @@ export const CharacterPage: React.FC = () => {
         <div className="card stack">
           <h2>영상 브랜딩 규칙</h2>
           <div className="line"><b>오프닝</b>"{BRAND.openingLine}"</div>
-          <div className="line"><b>중간</b>"{BRAND.notePhrase}에 따르면…"</div>
-          <div className="line"><b>엔딩</b>"{BRAND.tipPhrase}"</div>
+          <div className="line"><b>원리</b>대사 "{BRAND.noteLead} …" · 화면 카드 "{BRAND.notePhrase}"</div>
+          <div className="line"><b>팁</b>대사 "{BRAND.tipLead} …" · 화면 카드 "{BRAND.tipPhrase}"</div>
+          <div className="line"><b>엔딩</b>"…{BRAND.labName}였어요" (연구소 이름은 대사에서 한 번만)</div>
           <div className="line"><b>설명</b>{brandDescription(true)}</div>
           <div className="muted small">'검토한' 표현은 실제 승인이 끝난 콘텐츠에만 자동으로 들어갑니다.</div>
         </div>

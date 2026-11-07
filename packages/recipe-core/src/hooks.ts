@@ -1,7 +1,7 @@
 import { BRAND } from './brand.ts';
 import { extractQuantities, recipeText } from './fidelity.ts';
 import { firstSentence, splitSentences } from './format.ts';
-import { causeEffect, compactLength, findSensory, josa } from './korean.ts';
+import { causeEffect, compactLength, findSensory, josa, spoken } from './korean.ts';
 import type { Category, Emotion, RecipeInput, Scene, SceneType, Visual } from './types.ts';
 
 /**
@@ -239,6 +239,8 @@ export interface HookCandidate {
 
 interface Facts {
   dish: string;
+  /** 꾸미는 말을 뺀 요리 이름 ("바삭한 김치전" → "김치전"): 실패 장면에서 "제 바삭한 김치전이…"처럼 앞뒤가 안 맞지 않게 */
+  plainDish: string;
   topic: string;
   principle: string[];
   causeEffect: { cause: string; effect: string } | null;
@@ -251,12 +253,21 @@ interface Facts {
   timeTip: string;
 }
 
+/** 요리 이름 앞의 꾸미는 말(바삭한, 부드러운, 잘 익은)을 뺀다. 다 빼면 원래 이름 */
+export function plainDishName(dish: string): string {
+  const words = dish.trim().split(/\s+/);
+  let i = 0;
+  while (i < words.length - 1 && /(?:한|운|은|던)$/.test(words[i]!)) i++;
+  return words.slice(i).join(' ') || dish;
+}
+
 function facts(recipe: RecipeInput): Facts {
   const principle = splitSentences(recipe.principle);
   const ce = principle.map(causeEffect).find(Boolean) ?? null;
   const timeTip = recipe.tips.find((t) => /보관|미리|한 번에|나눠|냉동|냉장|간단|빠르/.test(t)) ?? '';
   return {
     dish: recipe.dishName || recipe.topic,
+    plainDish: plainDishName(recipe.dishName || recipe.topic),
     topic: recipe.topic,
     principle,
     causeEffect: ce,
@@ -305,7 +316,7 @@ const BUILDERS: Record<HookType, Builder> = {
   mistake: (f) => {
     if (!f.mistake) return { missing: '흔한 실수 (연구자가 실제로 자주 보는 실수)' };
     // 파일럿에서 실수 문장을 통째로 말하면 약 5초 걸렸다 → 말은 짧게, 실수 내용은 카드로 (첫 3초)
-    const line = `잠깐! ${f.dish}, 이렇게 하면 안 돼요!`;
+    const line = `잠깐! ${f.plainDish}, 이렇게 하면 안 돼요!`;
     return { line, firstScreen: '실패한 음식 클로즈업 + 실수 내용 카드', scenes: [scene('mistake', 'embarrassed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   myth: (f) => {
@@ -315,7 +326,7 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   compare: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
-    const line = `${f.dish}, 이 단계를 할 때랑 안 할 때 뭐가 다를까요?`;
+    const line = `${f.plainDish}, 이 단계 하고 안 하고 차이 보실래요?`;
     return {
       line,
       firstScreen: `좌우 분할: 건너뛴 결과 vs 노트대로 한 결과, 위에 "${f.causeEffect.cause}" 카드 (설명용 연출 표시)`,
@@ -326,7 +337,7 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   'curiosity-gap': (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
-    const line = `${f.dish}, 이 한 단계에 비밀이 있대요. 어떤 단계일까요?`;
+    const line = `${f.plainDish}, 비밀은 딱 한 단계에 있대요!`;
     return {
       line,
       firstScreen: '조리 중 클로즈업 + 단계 카드 일부 가림',
@@ -338,13 +349,15 @@ const BUILDERS: Record<HookType, Builder> = {
   'problem-solve': (f) => {
     if (!f.mistake) return { missing: '흔한 실수 또는 자주 겪는 실패' };
     // 실패 내용은 화면 카드로 보여 주고, 말은 짧게 (첫 3초)
-    const line = `${f.dish}, 이런 실패 해결법 알려 드릴게요!`;
+    const line = `${f.plainDish}, 이렇게 실패했다면 해결법 있어요!`;
     return { line, firstScreen: '실패한 음식 클로즈업 + 실패 내용 카드', scenes: [scene('mistake', 'disappointed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   experiment: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
-    // 파일럿에서 약 4초 → 말은 질문만. '설명용 연출'은 화면에 표시된다
-    const line = '이 단계, 하면 뭐가 달라질까요?';
+    // 파일럿에서 약 4초 → 말은 질문만. '설명용 연출'은 화면에 표시된다.
+    // "이 단계"라고만 하면 무슨 단계인지 들리지 않으므로, 짧으면 그 단계(원리 문장의 앞부분)를 말한다
+    const cause = f.causeEffect.cause;
+    const line = compactLength(cause) <= 13 ? `${cause}, 뭐가 달라질까요?` : `${f.plainDish}, 이 단계 하나로 뭐가 달라질까요?`;
     return {
       line,
       firstScreen: `두 조건을 나란히 놓은 비교 화면, 위에 "${f.causeEffect.cause}" 카드 (설명용 연출 표시)`,
@@ -354,7 +367,7 @@ const BUILDERS: Record<HookType, Builder> = {
     };
   },
   skit: (f) => {
-    const line = `으악! 제 ${josa(f.dish, '이/가')} 왜 이렇죠?`;
+    const line = `으악! 제 ${josa(f.plainDish, '이/가')} 왜 이렇죠?`;
     return {
       line,
       firstScreen: '실패한 음식을 든 맛조수 당황',
@@ -366,7 +379,7 @@ const BUILDERS: Record<HookType, Builder> = {
   'surprising-fact': (f) => {
     const pick = f.principle.find((s) => extractQuantities(s).length > 0) ?? f.principle[0];
     if (!pick) return { missing: '핵심 원리' };
-    const line = `알고 계셨나요? ${pick}`;
+    const line = `알고 계셨나요? ${spoken(pick)}`;
     return { line, firstScreen: '핵심어·숫자를 크게 보여 주는 카드', scenes: [scene('question', 'surprised', line, 'sizzle', { title: '알고 계셨나요?' })], needsReview: [], uses: ['핵심 원리'] };
   },
   sensory: (f) => {
@@ -377,7 +390,7 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   'time-saver': (f) => {
     if (!f.timeTip) return { missing: '시간을 줄이거나 보관하는 팁' };
-    const line = `바쁜 날엔 이렇게! ${firstSentence(f.timeTip)}`;
+    const line = `바쁜 날엔 이렇게! ${spoken(firstSentence(f.timeTip))}`;
     return { line, firstScreen: '보관·준비 카드', scenes: [scene('tip', 'confident', line, 'sizzle', { title: '시간 절약 팁' })], needsReview: [], uses: ['전문가 팁'] };
   },
   story: (f) => {
