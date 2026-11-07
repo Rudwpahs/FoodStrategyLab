@@ -4,8 +4,9 @@ import type { CandidateVoiceJob } from '../../server/pipeline.ts';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
 import type { ProjectDetail, ProjectSummary, Publication, RenderRow } from '../../server/repo.ts';
 import type { FormatInsight } from '../../server/insights.ts';
+import type { HumanizeResult } from '../../server/humanize.ts';
 
-export type { CandidateVoiceJob, FormatInsight, ProjectDetail, ProjectSummary, Publication, RenderRow };
+export type { CandidateVoiceJob, FormatInsight, HumanizeResult, ProjectDetail, ProjectSummary, Publication, RenderRow };
 
 /** 후보 + 미리보기 타임라인 (목소리를 만든 문장은 실제 목소리로) */
 export type VoicedCandidate = ContentCandidate & { timings: SceneTiming[] | null; voiced: boolean };
@@ -167,9 +168,17 @@ export const api = {
       social: { instagram: string; youtubeTitle: string; youtubeDescription: string };
       consistency: ConsistencyIssue[];
       lint: LintIssue[];
+      /** 적용된 im-not-ai 윤문 문단 수 */
+      polished: number;
       expert: { style: BlogStyle; pending: ExpertQuestion[]; ready: boolean; blockers: string[] } | null;
       styles: Record<BlogStyle, BlogStyleInfo>;
     }>('GET', `/projects/${id}/blog${style ? `?style=${style}` : ''}`),
+  humanize: (id: number, target: 'blog' | 'script', opts: { style?: BlogStyle; force?: boolean } = {}) =>
+    request<HumanizeResult & { version?: number }>('POST', `/projects/${id}/humanize`, { target, ...opts }),
+  applyHumanize: (id: number, target: 'blog' | 'script', items: { id: string; before: string; after: string }[], opts: { style?: BlogStyle; version?: number } = {}) =>
+    request<{ applied: number; rejected: { id: string; reasons: string[] }[]; project?: ProjectDetail }>('POST', `/projects/${id}/humanize/apply`, { target, items, ...opts }),
+  clearPolish: (id: number) => request<{ ok: boolean }>('DELETE', `/projects/${id}/polish`),
+  aiTells: (id: number) => request<{ scenes: { id: string; tells: { rule: string; severity: string; found: string; fix: string }[] }[]; source: string }>('GET', `/projects/${id}/ai-tells`),
   expertNotes: (id: number) => request<{ notes: ExpertNotes; questions: ExpertQuestion[]; styles: Record<BlogStyle, BlogStyleInfo> }>('GET', `/projects/${id}/expert-notes`),
   saveExpertNotes: (id: number, answers: ExpertNotes['answers'], confirmBy?: string) => request<{ notes: ExpertNotes }>('PUT', `/projects/${id}/expert-notes`, { answers, confirmBy }),
   uploadPhoto: async (id: number, file: File, color: string) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
 import { api } from '../api.ts';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
+import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
@@ -15,10 +16,16 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [reviewer, setReviewer] = useState<string>(user?.displayName ?? BRAND.researcher);
   const [note, setNote] = useState('');
+  // 대사별 AI 티 (im-not-ai 규칙 검사, 0원)
+  const [tells, setTells] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     setChecklist({});
     if (!latest) return;
+    api
+      .aiTells(project.id)
+      .then((r) => setTells(Object.fromEntries(r.scenes.map((s) => [s.id, s.tells.map((t) => `[${t.rule}] ${t.found}`)]))))
+      .catch(() => setTells({}));
     run(() => api.check(project.id)).then((r) => {
       if (!r) return;
       setIssues(r.issues);
@@ -99,8 +106,14 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
                   {s.cardItems.join(' / ')}
                 </div>
               )}
+              {(tells[s.id] ?? []).length > 0 && <div className="small" style={{ color: '#a05a2c', marginTop: 4 }}>AI 티: {tells[s.id]!.join(' / ')}</div>}
             </div>
           ))}
+          {!approved && (
+            <div style={{ marginTop: 12 }}>
+              <HumanizePanel project={project} target="script" onApplied={(p) => (p ? setProject(p) : reload())} />
+            </div>
+          )}
         </div>
       </div>
 

@@ -175,3 +175,8 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .candidate-cover-line { font-size: 13px; font-weight: 700; text-align: center; line-height: 1.4; }
 .candidate-cover-play { background: var(--red); color: var(--white); border-radius: 999px; padding: 6px 16px; font-weight: 700; }
 .candidate-cover:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+/* im-not-ai 윤문 전후 */
+.diff { display: grid; gap: 2px; padding: 6px 0; border-top: 1px dashed #eadfcd; }
+.diff .before { color: #8a7a6a; text-decoration: line-through; text-decoration-color: #d9a3a3; }
+.diff .after { color: #1f5f3f; }
+.diff .rejected { color: #a05a2c; font-style: italic; }

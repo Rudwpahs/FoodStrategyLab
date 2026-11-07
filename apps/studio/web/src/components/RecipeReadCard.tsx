@@ -88,6 +88,7 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
                     근거: {s.evidenceLabel} “{s.evidenceQuote}” · {CATEGORY_LABELS[s.category]}
                   </div>
                   {!s.grounded && <div className="issue warning small">확인 필요: {s.notes.join(' / ')}</div>}
+                  {(s.styleNotes ?? []).length > 0 && <div className="muted">문체(AI 티): {s.styleNotes.join(' / ')}</div>}
                   {current ? (
                     <span className="badge">지금 쓰는 제안</span>
                   ) : (

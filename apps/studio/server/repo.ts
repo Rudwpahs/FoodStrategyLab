@@ -284,6 +284,25 @@ export class Repo {
     this.db.prepare('UPDATE projects SET source_json = ? WHERE id = ?').run(JSON.stringify(src), id);
   }
 
+  /** 블로그 윤문 (원문 문단 → 다듬은 문단) */
+  getPolish(id: number): Record<string, string> {
+    const row = this.db.prepare('SELECT polish_json FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    try {
+      const v = JSON.parse(String(row.polish_json || '{}')) as unknown;
+      if (!v || typeof v !== 'object') return {};
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'));
+    } catch {
+      return {};
+    }
+  }
+
+  setPolish(id: number, map: Record<string, string>, note: string) {
+    this.getRecipe(id);
+    this.db.prepare('UPDATE projects SET polish_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(map), now(), id);
+    this.logEvent(id, 'blog', note);
+  }
+
   getBlogStyle(id: number): string {
     const row = this.db.prepare('SELECT blog_style FROM projects WHERE id = ?').get(id) as Row | undefined;
     if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');

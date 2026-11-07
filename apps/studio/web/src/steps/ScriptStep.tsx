@@ -3,6 +3,7 @@ import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, estimate
 import { HookPicker } from '../components/HookPicker.tsx';
 import { CandidatePicker } from '../components/CandidatePicker.tsx';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
+import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { api, copyText } from '../api.ts';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
@@ -118,6 +119,7 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
         )}
       </div>
 
+      {draft && !dirty && <HumanizePanel project={project} target="script" onApplied={(p) => (p ? setProject(p) : reload())} />}
       {!draft ? (
         <div className="card empty">아직 대본이 없습니다. 위에서 대본을 만드세요.</div>
       ) : (

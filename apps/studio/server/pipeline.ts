@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
-import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
+import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
 import { cachedSpeechBounds, extractFrame, normalizeLoudness } from '@mat-lab/video/audio';
 import { DATA_DIR } from './config.ts';
@@ -318,6 +318,7 @@ export function exportPackage(repo: Repo, renderId: number): string {
   writePackage(r.outputDir, recipe, script, timings, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
     blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
     notes: repo.getExpertNotes(r.projectId),
+    polish: repo.getPolish(r.projectId),
   });
   return path.join(r.outputDir, 'package.zip');
 }
@@ -327,12 +328,14 @@ export function publishTexts(
   recipe: RecipeInput,
   script: Script,
   review: { reviewer: string; reviewedAt: string },
-  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes } = {},
+  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes; polish?: Record<string, string> } = {},
 ) {
   const images = { thumbnail: 'thumbnail.png', recipeCard: 'recipe-card.png' };
-  const post = extra.blogStyle
+  const built = extra.blogStyle
     ? buildExpertBlog({ recipe, style: extra.blogStyle, notes: extra.notes ?? { answers: {} }, review, images })
     : buildBlogPost({ recipe, review, images });
+  // 연구자가 적용한 im-not-ai 윤문 (원문 문단이 그대로일 때만 바뀐다)
+  const post = polishPost(built, extra.polish ?? {}, Object.values(extra.notes?.answers ?? {}).filter((a): a is string => Boolean(a)));
   const social = buildSocialCopy(recipe, true, post.tags);
   // 연출 엔진 대본이면 인스타그램 설명은 첫 대사로 시작한다 (매체에 맞는 표현)
   if (script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(recipe, script, true, post.tags);
@@ -360,6 +363,7 @@ export function instagramText(repo: Repo, renderId: number): string {
   return publishTexts(repo.getRecipe(render.projectId), repo.getScript(render.projectId, render.scriptVersion).script, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
     blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
     notes: repo.getExpertNotes(render.projectId),
+    polish: repo.getPolish(render.projectId),
   }).social.instagram;
 }
 
@@ -369,7 +373,7 @@ export function writePackage(
   script: Script,
   timings: SceneTiming[],
   review: { reviewer: string; reviewedAt: string },
-  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes } = {},
+  extra: { blogStyle?: BlogStyle; notes?: ExpertNotes; polish?: Record<string, string> } = {},
 ) {
   const { post, social } = publishTexts(recipe, script, review, extra);
   const texts: Record<string, string> = {

@@ -6,3 +6,6 @@ export * from './expertBlog.ts';
 export * from './consistency.ts';
 export * from './blogLint.ts';
 export * from './aiTells.ts';
+export * from './imNotAi/rules.ts';
+export * from './imNotAi/gates.ts';
+export * from './imNotAi/prompt.ts';

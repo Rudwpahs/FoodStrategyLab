@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { CATEGORIES, RecipeInputSchema, type RecipeInput } from '@mat-lab/recipe-core';
+import { findAiTells } from '@mat-lab/publishing';
 import type { Db } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -198,6 +199,8 @@ export interface CheckedSuggestion {
   grounded: boolean;
   /** 확인하면서 걸린 점 */
   notes: string[];
+  /** 문체 점검 (im-not-ai 규칙): 근거와는 별개로, AI 티가 보이면 알려 준다 */
+  styleNotes: string[];
 }
 
 /** 띄어쓰기·문장부호를 빼고 비교한다 (인용 대조용) */
@@ -230,9 +233,12 @@ export function groundSuggestions(x: ExtractedRecipe, memo = ''): CheckedSuggest
       const extra = [...new Set(numbersIn(said).filter((n) => !sourceNumbers.has(n)))];
       if (extra.length) notes.push(`레시피에 없는 숫자(${extra.join(', ')})가 들어 있어요`);
       if (HEALTH.test(said)) notes.push('건강·효능 주장이 들어 있어요');
-      return { topic: s.topic.trim(), principle: shortPrinciple(s.principle), category: s.category, evidenceLabel, evidenceQuote: quote.trim(), grounded: notes.length === 0, notes };
+      const styleNotes = findAiTells(`${s.topic}\n${s.principle}`).map((t) => `[${t.rule}] ${t.found}`);
+      return { topic: s.topic.trim(), principle: shortPrinciple(s.principle), category: s.category, evidenceLabel, evidenceQuote: quote.trim(), grounded: notes.length === 0, notes, styleNotes };
     });
-  return [...checked.filter((c) => c.grounded), ...checked.filter((c) => !c.grounded)];
+  // 근거가 확인된 것 → 그중 AI 티가 없는 것 순서 (같으면 Claude가 낸 순서)
+  const rank = (c: CheckedSuggestion) => (c.grounded ? 0 : 2) + (c.styleNotes.length ? 1 : 0);
+  return checked.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map((x) => x.c);
 }
 
 /** 읽은 결과 → 스튜디오 레시피. 어떤 칸이 AI 제안인지, 다른 제안 후보도 돌려준다 */

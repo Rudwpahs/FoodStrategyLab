@@ -3,7 +3,9 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
 import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
-import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, lintBlog, type BlogStyle } from '@mat-lab/publishing';
+import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, IM_NOT_AI_COMMIT, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, findAiTells, isPolishableLine, lintBlog, polishPost, polishableBlogLines, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
+import { BRAND } from '@mat-lab/recipe-core';
+import { Humanizer, verifyRewrites } from './humanize.ts';
 import { DATA_DIR } from './config.ts';
 import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
@@ -62,7 +64,12 @@ export interface AppDeps {
   instagram?: Instagram;
   /** 레시피 사진·파일 읽기 (테스트에서는 가짜 Claude로 바꾼다) */
   recipeReader?: RecipeReader;
+  /** im-not-ai 윤문 (테스트에서는 가짜 Claude로 바꾼다) */
+  humanizer?: Humanizer;
 }
+
+/** 연구자 답변 원문 (윤문하지 않는다 — 원칙 4) */
+const answerTexts = (notes: ExpertNotes) => Object.values(notes.answers).filter((a): a is string => Boolean(a && a.trim()));
 
 const FROM_FILES = '/api/projects/from-files';
 
@@ -90,6 +97,19 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const auth = deps.auth ?? new Auth(repo.db);
   const ig = deps.instagram ?? new Instagram(repo.db);
   const reader = deps.recipeReader ?? new RecipeReader(repo.db);
+  const humanizer = deps.humanizer ?? new Humanizer(repo.db);
+  /** 윤문하기 전 원래 블로그 원고 (style이 없으면 기본 자동 원고) */
+  const rawBlog = (pid: number, styleParam: unknown) => {
+    const project = repo.getProject(pid);
+    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const style = (BLOG_STYLES as readonly string[]).includes(String(styleParam)) ? (String(styleParam) as BlogStyle) : null;
+    const notes = repo.getExpertNotes(pid);
+    const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
+    const post = expert ?? buildBlogPost({ recipe: project.recipe, review });
+    return { project, review, style, notes, expert, post };
+  };
+  /** 윤문해도 빠지면 안 되는 말 */
+  const keepWords = (r: { dishName: string; topic: string }) => [r.dishName, BRAND.researcher, BRAND.labName, BRAND.character].filter(Boolean);
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
@@ -498,23 +518,93 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   api.get('/projects/:id/blog', (req, res) => {
     const pid = id(req);
-    const project = repo.getProject(pid);
-    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
-    const style = (BLOG_STYLES as readonly string[]).includes(String(req.query.style)) ? (String(req.query.style) as BlogStyle) : null;
-    const notes = repo.getExpertNotes(pid);
-    // style이 없으면 기존 자동 원고(A), 있으면 연구자 답변을 반영한 원고(B)
-    const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
-    const post = expert ?? buildBlogPost({ recipe: project.recipe, review });
+    // style이 없으면 기존 자동 원고(A), 있으면 연구자 답변을 반영한 원고(B). 적용한 윤문(im-not-ai)이 있으면 반영한다
+    const { project, review, style, notes, expert, post: raw } = rawBlog(pid, req.query.style);
+    const post = polishPost(raw, repo.getPolish(pid), answerTexts(notes));
     const social = buildSocialCopy(project.recipe, Boolean(review), post.tags);
     if (project.latest?.script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(project.recipe, project.latest.script, Boolean(review), post.tags);
     const consistency = project.latest
       ? checkConsistency({ recipe: project.recipe, script: project.latest.script, blogMarkdown: post.markdown, social: social.instagram, reviewed: Boolean(review), notes })
       : [];
     const lint = lintBlog(post.markdown, { dish: project.recipe.dishName || project.recipe.topic, notes });
+    for (const t of findAiTells(social.instagram)) lint.push({ level: 'warning', message: `SNS 문구 AI 티 [${t.rule}] ${t.found} — ${t.fix}` });
     // 빨간 오류(일관성·문체)가 하나라도 있으면 게시 준비가 아니다
     const errors = consistency.filter((c) => c.level === 'error').length + lint.filter((l) => l.level === 'error').length;
     const blockers = expert ? [...expert.blockers, ...(errors ? [`고쳐야 할 오류가 ${errors}개 있어요 (아래 빨간 표시).`] : [])] : [];
-    res.json({ post, social, consistency, lint, expert: expert ? { style, pending: expert.pending, ready: blockers.length === 0, blockers } : null, styles: BLOG_STYLE_INFO });
+    res.json({ post, social, consistency, lint, polished: post.polished, expert: expert ? { style, pending: expert.pending, ready: blockers.length === 0, blockers } : null, styles: BLOG_STYLE_INFO });
+  });
+
+  // ── im-not-ai 윤문: 진단(0원) → Claude 1콜 → 게이트. 결과는 [적용]을 눌러야 저장된다 ──
+  api.get('/projects/:id/ai-tells', (req, res) => {
+    const pid = id(req);
+    const script = repo.getProject(pid).latest?.script;
+    res.json({ scenes: (script?.scenes ?? []).map((s) => ({ id: s.id, tells: findAiTells(s.line) })), source: `im-not-ai ${IM_NOT_AI_COMMIT}` });
+  });
+  api.post('/projects/:id/humanize', async (req, res) => {
+    const pid = id(req);
+    const target = req.body?.target === 'script' ? 'script' : 'blog';
+    const force = Boolean(req.body?.force);
+    if (target === 'script') {
+      const project = repo.getProject(pid);
+      if (!project.latest) throw new HttpError(400, '대본이 아직 없어요.');
+      const items = project.latest.script.scenes.map((s) => ({ id: s.id, text: s.line }));
+      const result = await humanizer.run('script', items, { keep: keepWords(project.recipe), force });
+      if (result.costUsd) repo.logEvent(pid, 'script', `대사 AI 티 다듬기 (im-not-ai, 약 ${result.costUsd.toFixed(3)}달러)`);
+      return res.json({ ...result, version: project.latest.version });
+    }
+    const { project, notes, post } = rawBlog(pid, req.body?.style);
+    const lines = polishableBlogLines(post.markdown, answerTexts(notes));
+    const result = await humanizer.run('blog', lines.map((t, i) => ({ id: `p${i + 1}`, text: t })), { keep: keepWords(project.recipe), force });
+    if (result.costUsd) repo.logEvent(pid, 'blog', `블로그 AI 티 다듬기 (im-not-ai, 약 ${result.costUsd.toFixed(3)}달러)`);
+    res.json(result);
+  });
+  api.post('/projects/:id/humanize/apply', (req, res) => {
+    const pid = id(req);
+    const target = req.body?.target === 'script' ? 'script' : 'blog';
+    const raw: unknown[] = Array.isArray(req.body?.items) ? req.body.items : [];
+    const pairs = raw
+      .map((x) => x as Record<string, unknown>)
+      .map((x) => ({ id: String(x?.id ?? ''), before: String(x?.before ?? '').trim(), after: String(x?.after ?? '').trim() }))
+      .filter((p) => p.before && p.after && p.before !== p.after);
+    if (!pairs.length) throw new HttpError(400, '적용할 문장이 없어요.');
+    const project = repo.getProject(pid);
+    // 화면에서 받은 결과도 게이트를 다시 통과해야 저장한다
+    const checked = verifyRewrites(target, pairs, keepWords(project.recipe));
+    const ok = checked.filter((c) => !c.reasons.length);
+    const rejected = checked.filter((c) => c.reasons.length).map((c) => ({ id: c.id, reasons: c.reasons }));
+    if (!ok.length) throw new HttpError(400, `적용할 수 있는 문장이 없어요: ${rejected[0]?.reasons.join(' / ') ?? ''}`);
+    if (target === 'script') {
+      const latest = project.latest;
+      if (!latest || latest.version !== Number(req.body?.version)) throw new HttpError(409, '그 사이 대본이 바뀌었어요. 다시 다듬어 주세요.');
+      let n = 0;
+      const scenes = latest.script.scenes.map((s) => {
+        const hit = ok.find((p) => p.id === s.id && p.before === s.line.trim());
+        if (!hit) return s;
+        n++;
+        return { ...s, line: hit.after };
+      });
+      if (!n) throw new HttpError(409, '그 사이 대사가 바뀌었어요. 다시 다듬어 주세요.');
+      repo.addScriptVersion(pid, { ...latest.script, scenes }, 'edit', `AI 티 다듬기 (im-not-ai) 대사 ${n}개`);
+      return res.json({ project: repo.getProject(pid), applied: n, rejected });
+    }
+    const { notes, post } = rawBlog(pid, req.body?.style);
+    const protectedTexts = answerTexts(notes);
+    const current = new Set(polishableBlogLines(post.markdown, protectedTexts));
+    const map = { ...repo.getPolish(pid) };
+    let n = 0;
+    for (const p of ok) {
+      if (!current.has(p.before) || !isPolishableLine(p.before, protectedTexts)) continue;
+      map[p.before] = p.after;
+      n++;
+    }
+    if (!n) throw new HttpError(409, '그 사이 원고가 바뀌었어요. 다시 다듬어 주세요.');
+    repo.setPolish(pid, map, `블로그 AI 티 다듬기 적용 (im-not-ai) 문단 ${n}개`);
+    res.json({ applied: n, rejected });
+  });
+  api.delete('/projects/:id/polish', (req, res) => {
+    const pid = id(req);
+    repo.setPolish(pid, {}, '블로그 윤문을 원래 문장으로 되돌림');
+    res.json({ ok: true });
   });
 
   api.get('/projects/:id/expert-notes', (req, res) => {
@@ -734,7 +824,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const notes = repo.getExpertNotes(pid);
     const dish = project.recipe.dishName || project.recipe.topic;
     const options = blogStylePair(project.recipe).map((style) => {
-      const post = buildExpertBlog({ recipe: project.recipe, style, notes, review });
+      const post = polishPost(buildExpertBlog({ recipe: project.recipe, style, notes, review }), repo.getPolish(pid), answerTexts(notes));
       return { style, info: BLOG_STYLE_INFO[style], post, pending: post.pending, lint: lintBlog(post.markdown, { dish, notes }) };
     });
     res.json({ options, selected: project.blogStyle });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { BlogStyle } from '@mat-lab/publishing';
 import { api, copyHtml, copyText } from '../api.ts';
 import { ExpertNotesPanel } from '../components/ExpertNotesPanel.tsx';
+import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { PublicationsPanel } from '../components/PublicationsPanel.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
@@ -67,6 +68,8 @@ export const PublishStep: React.FC<StepProps> = ({ project, go, reload }) => {
               ))}
             </details>
           )}
+          <HumanizePanel project={project} target="blog" style={style || undefined} polished={blog.polished} onApplied={() => setTick((t) => t + 1)} />
+          {blog.polished > 0 && <div className="muted small">AI 티 다듬기로 고친 문단 {blog.polished}개가 반영된 원고예요 (복사·내보내기에도 같이 들어가요).</div>}
           <div className="blog-preview" dangerouslySetInnerHTML={{ __html: blog.post.html }} />
           <div className="row">
             <button className="btn small" onClick={() => run(() => copyText(blog.post.markdown), '마크다운을 복사했습니다')}>마크다운 복사</button>
