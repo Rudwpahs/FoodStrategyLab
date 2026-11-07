@@ -2,6 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 안드로이드 9 이하에서 공용 '다운로드' 폴더에 저장할 때만 쓴다 (10부터는 필요 없다) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <!-- 파일 고르기 창에 '사진 찍기'를 넣으려면 카메라 앱이 있는지 알아야 한다 (안드로이드 11부터는 미리 밝혀야 보인다) -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
 
     <!-- usesCleartextTraffic: 같은 집 네트워크나 Tailscale 사설망 주소(http://)로도 접속할 수 있게 -->
     <application

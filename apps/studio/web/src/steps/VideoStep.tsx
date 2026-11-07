@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
-import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
+import { ShortVideo, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
 import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
@@ -11,11 +11,15 @@ import type { StepProps } from '../pages/ProjectPage.tsx';
 export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go }) => {
   const { run, meta } = useApp();
   const [preview, setPreview] = useState<{ props: VideoProps; voiced: boolean } | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [voicing, setVoicing] = useState(false);
   const latestRender = project.renders[0];
   const [render, setRender] = useState<RenderStatus | null>(null);
 
-  const loadPreview = () => run(() => api.preview(project.id)).then((r) => r && setPreview({ props: r.props, voiced: r.voiced }));
+  const loadPreview = () => {
+    setPreviewFailed(false);
+    return run(() => api.preview(project.id)).then((r) => (r ? setPreview({ props: r.props, voiced: r.voiced }) : setPreviewFailed(true)));
+  };
 
   useEffect(() => {
     if (project.latest) loadPreview();
@@ -38,15 +42,28 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
     };
   }, [latestRender?.id]);
 
-  if (!project.latest) return <div className="card empty">먼저 대본을 만드세요.</div>;
+  if (!project.latest)
+    return (
+      <div className="card empty">
+        <div>아직 고른 영상이 없어요. [영상 고르기]에서 후보 하나를 고르세요.</div>
+        <button className="btn primary" onClick={() => go('script')}>영상 고르기로</button>
+      </div>
+    );
   const approved = project.versionState.approvedScriptVersion === project.latest.version;
   const busy = render?.status === 'queued' || render?.status === 'running';
   const ttsOn = meta?.tts.provider === 'edge' || meta?.tts.provider === 'voicestudio';
 
   return (
-    <div className="grid2" style={{ gridTemplateColumns: '400px 1fr' }}>
-      <div className="card stack" style={{ alignItems: 'center' }}>
-        <h2 style={{ alignSelf: 'flex-start' }}>미리보기</h2>
+    <div className="split">
+      <div className="card stack sticky">
+        <div className="card-head">
+          <h2>미리보기</h2>
+          {preview && (
+            <span className="muted num">
+              {preview.voiced ? '목소리 포함' : '목소리 없이'} · 약 {videoSeconds(preview.props.timings)}초
+            </span>
+          )}
+        </div>
         {preview ? (
           <Player
             key={JSON.stringify(preview.props.timings.map((t) => t.durationInFrames))}
@@ -57,37 +74,50 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             compositionHeight={1920}
             fps={30}
             controls
-            style={{ width: 340, height: 604, borderRadius: 14, overflow: 'hidden', border: '2px solid var(--ink)' }}
+            className="phone-frame"
+            style={{ width: '100%', aspectRatio: '9 / 16' }}
           />
+        ) : previewFailed ? (
+          <div className="issue error stack" style={{ gap: 8 }}>
+            미리보기를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 불러와 주세요.
+            <div>
+              <button className="btn small" onClick={loadPreview}>다시 불러오기</button>
+            </div>
+          </div>
         ) : (
-          <div className="empty">불러오는 중…</div>
+          <div className="phone-frame loading" role="status">
+            <span className="sr-only">미리보기를 불러오는 중…</span>
+          </div>
         )}
-        <div className="muted small" style={{ alignSelf: 'stretch' }}>
-          {preview?.voiced ? '음성 포함 미리보기' : '음성 없이 예상 길이로 미리보기'} · 약 {preview ? Math.round(totalFrames(preview.props.timings) / 30) : 0}초
-        </div>
-        <button
-          className="btn"
-          disabled={!ttsOn || voicing}
-          title={ttsOn ? '' : 'VoiceStudio 앱을 켜거나 pip install edge-tts 후 서버를 다시 시작하세요'}
-          onClick={async () => {
-            setVoicing(true);
-            const r = await run(() => api.voice(project.id), '음성을 만들었습니다');
-            setVoicing(false);
-            if (r) loadPreview();
-          }}
-        >
-          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 없음 — [캐릭터·목소리]에서 VoiceStudio 연결'}
-        </button>
+        {ttsOn ? (
+          <button
+            className="btn block"
+            disabled={voicing}
+            onClick={async () => {
+              setVoicing(true);
+              const r = await run(() => api.voice(project.id), '맛조수 목소리를 넣었어요');
+              setVoicing(false);
+              if (r) loadPreview();
+            }}
+          >
+            {voicing ? '목소리 넣는 중…' : `맛조수 목소리 넣기 (${meta?.tts.voice})`}
+          </button>
+        ) : (
+          meta && <div className="small muted">지금은 목소리 엔진이 꺼져 있어 목소리 없이 미리 봐요. 엔진이 켜지면 여기서 목소리를 넣을 수 있어요.</div>
+        )}
       </div>
 
       <div className="stack">
         <div className="card stack">
-          <h2>완성 사진 (선택)</h2>
+          <div className="card-head">
+            <h2>완성 사진</h2>
+            <span className="muted">선택</span>
+          </div>
           <div className="muted small">실제 완성 요리 사진을 올리면 영상 끝부분에 '완성 사진'으로 나오고, 3D 음식 색도 사진 색에 맞춰집니다.</div>
           <div className="row">
             {project.photo && (
               <>
-                <img src={project.photo.url} alt="완성 사진" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 12, border: '2px solid var(--ink)' }} />
+                <img src={project.photo.url} alt="완성 사진" style={{ width: 88, height: 88, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />
                 {project.photo.color && <span className="swatch"><i style={{ background: project.photo.color }} />{project.photo.color}</span>}
               </>
             )}
@@ -96,7 +126,8 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
               <input
                 type="file"
                 accept={PHOTO_ACCEPT}
-                hidden
+                className="sr-only"
+                aria-label={project.photo ? '완성 사진 바꾸기' : '완성 사진 올리기'}
                 onChange={async (e) => {
                   const picked = e.target.files?.[0];
                   e.target.value = '';
@@ -119,19 +150,19 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
         </div>
         <ClipUploads project={project} setProject={setProject} />
         <div className="card stack">
-          <h2>영상 만들기</h2>
+          <h2>{approved ? '영상 만들기' : '검수용 영상 만들기'}</h2>
           {!approved ? (
             <div className="issue info">
-              고른 후보로 <b>검수용 영상</b>을 먼저 만들어요. 이희재 연구자가 실제 영상을 보고 승인하면 같은 영상을 그대로 내보낼 수 있어요.
-              (영상에는 '검토' 같은 문구가 들어가지 않아요. 내려받기·게시는 승인 후에만 돼요.)
+              고른 후보로 검수용 영상을 먼저 만들어요. 이희재 연구자가 영상을 보고 승인하면 같은 영상을 그대로 내보낼 수 있어요.
+              영상에 '검토' 같은 문구는 들어가지 않고, 내려받기·게시는 승인 후에만 돼요.
             </div>
           ) : (
             <div className="muted">승인된 대본 v{project.latest.version}으로 세로 영상(1080×1920 MP4), 커버·썸네일, 레시피 카드를 만듭니다.</div>
           )}
-          <div className="muted small">내 PC에서 음성과 3D 영상을 만들어요. 그래픽카드가 없으면 20~30분 걸릴 수 있어요. 비용은 들지 않아요.</div>
+          <div className="muted small">스튜디오 서버가 목소리와 3D 영상을 만들어요. 20분~1시간쯤 걸리니, 시작해 두고 다른 일을 해도 돼요.</div>
           <div className="row">
             <button
-              className="btn primary"
+              className="btn primary big"
               disabled={busy}
               onClick={async () => {
                 const r = await run(() => api.startRender(project.id), approved ? '제작을 시작했습니다' : '검수용 영상 제작을 시작했습니다');
@@ -144,8 +175,11 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
           {render && (
             <div className="stack">
               <div className="row small">
-                <b>작업 #{render.id}</b> · 대본 v{render.scriptVersion} · {render.status === 'canceled' ? '취소됨' : render.stage || '대기'}
-                {render.status === 'failed' && <span style={{ color: 'var(--err)' }}>실패: {render.error}</span>}
+                <b className="num">작업 #{render.id}</b>
+                <span className="muted num">대본 v{render.scriptVersion}</span>
+                <span>{render.status === 'canceled' ? '취소됨' : render.stage || '대기 중'}</span>
+                {busy && <span className="num muted">{Math.round(render.progress * 100)}%</span>}
+                {render.status === 'failed' && <span className="note-err">실패: {render.error}</span>}
                 {busy && (
                   <button
                     className="btn small ghost"
@@ -160,7 +194,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
                 )}
               </div>
               {busy && (
-                <div className="progress">
+                <div className="progress" role="progressbar" aria-label="영상 만드는 진행률" aria-valuenow={Math.round(render.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
                   <div style={{ width: `${Math.round(render.progress * 100)}%` }} />
                 </div>
               )}
@@ -171,30 +205,31 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
         {render?.status === 'done' && (
           <div className="card stack">
             <div className="row">
-              <h2 style={{ margin: 0 }}>완성본 (작업 #{render.id})</h2>
+              <h2 style={{ margin: 0 }}>완성본</h2>
+              <span className="muted small num">작업 #{render.id}</span>
               <div className="spacer" />
               {approved && render.scriptVersion === project.latest.version ? (
                 <a className="btn primary" href={`/api/renders/${render.id}/download`}>게시 묶음 ZIP 내려받기</a>
               ) : render.scriptVersion !== project.latest.version ? (
-                <span className="badge review">대본이 바뀌었어요 — 다시 만들어 주세요</span>
+                <span className="badge review">대본이 바뀌었어요. 다시 만들어 주세요</span>
               ) : (
                 <span className="badge review">검수용 · 승인 후 내려받기</span>
               )}
-              <button className="btn" onClick={() => go(approved ? 'publish' : 'review')}>{approved ? '게시·기록 →' : '검수·승인으로 →'}</button>
+              <button className="btn" onClick={() => go(approved ? 'publish' : 'review')}>{approved ? '게시·기록으로' : '검수·승인으로'}</button>
             </div>
-            <div className="row" style={{ alignItems: 'flex-start' }}>
-              <video src={`${render.baseUrl}/video.mp4`} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />
-              <img src={`${render.baseUrl}/cover.png`} alt="커버" style={{ width: 160, borderRadius: 10 }} />
-              <img src={`${render.baseUrl}/thumbnail.png`} alt="썸네일" style={{ width: 200, borderRadius: 10 }} />
-              <img src={`${render.baseUrl}/recipe-card.png`} alt="레시피 카드" style={{ width: 200, borderRadius: 10 }} />
+            <div className="media-row">
+              <video src={`${render.baseUrl}/video.mp4`} controls style={{ width: 220, background: 'var(--soy)' }} />
+              <img src={`${render.baseUrl}/cover.png`} alt="커버" style={{ width: 150 }} />
+              <img src={`${render.baseUrl}/thumbnail.png`} alt="썸네일" style={{ width: 190 }} />
+              <img src={`${render.baseUrl}/recipe-card.png`} alt="레시피 카드" style={{ width: 190 }} />
             </div>
             {render.captionChecks.length > 0 && (
               <div className="stack">
                 <div className="small"><b>자막 확인</b> <span className="muted">자막마다 한 장씩: 얼굴을 가리거나 잘린 자막이 없는지 보세요.</span></div>
-                <div className="row" style={{ gap: 6 }}>
+                <div className="media-row" style={{ gap: 6 }}>
                   {render.captionChecks.map((f) => (
                     <a key={f} href={`${render.baseUrl}/caption-check/${f}`} target="_blank" rel="noreferrer">
-                      <img src={`${render.baseUrl}/caption-check/${f}`} alt={f} style={{ width: 72, borderRadius: 6, border: '1px solid var(--line)' }} />
+                      <img src={`${render.baseUrl}/caption-check/${f}`} alt={f} style={{ width: 72, display: 'block', borderRadius: 6 }} />
                     </a>
                   ))}
                 </div>

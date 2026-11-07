@@ -60,7 +60,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
     return (
       <div className="issue info stack" style={{ gap: 8 }}>
         <div>
-          공식 자동 게시: <b>설정 전</b> — Meta 개발자 앱 정보를 서버에 넣으면 여기서 바로 올릴 수 있어요 (안내: <code>docs/INSTAGRAM_SETUP.md</code>). 그 전에는 인스타그램 앱에서 올린 뒤 아래에 주소를 기록해 주세요.
+          공식 자동 게시: <b>설정 전</b>. Meta 개발자 앱 정보를 서버에 넣으면 여기서 바로 올릴 수 있어요 (안내: <code>docs/INSTAGRAM_SETUP.md</code>). 그 전에는 인스타그램 앱에서 올린 뒤 아래에 주소를 기록해 주세요.
         </div>
         <div className="small">
           Meta 앱의 <b>OAuth redirect URI</b>에 이 주소를 그대로 넣으세요:

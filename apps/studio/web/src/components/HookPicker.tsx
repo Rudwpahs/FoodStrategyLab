@@ -57,15 +57,12 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
   };
 
   return (
-    <div className="card stack">
-      <div className="row">
-        <h2 style={{ margin: 0 }}>연출과 첫 장면 고르기</h2>
-        <span className="muted small">레시피에 있는 내용만으로 후보를 만들어요. 비용 0원.</span>
-      </div>
+    <div className="stack">
+      <div className="muted small">레시피에 있는 내용만으로 후보를 만들어요. 비용은 들지 않아요.</div>
 
       <div>
-        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>① 어떤 영상으로 만들까요?</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
+        <h3>① 어떤 영상으로 만들까요?</h3>
+        <div className="option-grid">
           {STYLE_IDS.map((id) => {
             const s = styles?.[id];
             const on = id === style;
@@ -74,29 +71,31 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
                 key={id}
                 type="button"
                 onClick={() => pickStyle(id)}
-                style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: on ? '3px solid #e2533a' : '1px solid #ddd', background: on ? '#fff3ef' : '#fff', cursor: 'pointer' }}
+                className={`option ${on ? 'on' : ''}`}
+                aria-pressed={on}
+                style={{ gap: 2, padding: '10px 12px' }}
               >
-                <div style={{ fontWeight: 800 }}>{s?.label ?? id}</div>
-                <div className="small muted">{s?.summary}</div>
+                <span className="option-title">{s?.label ?? id}</span>
+                <span className="small muted">{s?.summary}</span>
               </button>
             );
           })}
         </div>
         {repetition && <div className="issue warning" style={{ marginTop: 8 }}>{repetition}</div>}
         {info && (
-          <div className="small" style={{ marginTop: 8, background: '#fffaf3', padding: 10, borderRadius: 10 }}>
+          <div className="option-note" style={{ marginTop: 8 }}>
             흐름: {info.beats.join(' → ')} · 권장 {info.seconds[0]}~{info.seconds[1]}초 (대사 길이에 맞춰 자동 조정)
           </div>
         )}
       </div>
 
       <div>
-        <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>② 첫 장면(훅)을 고르세요 — 위에서부터 추천 순서</div>
+        <h3>② 첫 장면(훅) 고르기 <span className="muted small">위에서부터 추천 순서예요</span></h3>
         <div className="stack" style={{ gap: 8 }}>
           {available.map((h) => {
             const on = h.type === chosen;
             return (
-              <label key={h.type} style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, border: on ? '3px solid #e2533a' : '1px solid #ddd', background: on ? '#fff3ef' : '#fff', cursor: 'pointer' }}>
+              <label key={h.type} className={`option ${on ? 'on' : ''}`}>
                 <input type="radio" name="hook" checked={on} onChange={() => setChosen(h.type)} />
                 <div className="stack" style={{ gap: 4 }}>
                   <div>
@@ -105,7 +104,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
                   <div className="small">첫 화면: {h.scenes[0]?.visual ? `${VISUAL_LABELS[h.scenes[0].visual]} — ` : ''}{h.firstScreen}</div>
                   <div className="small muted">추천 이유: {h.reason}</div>
                   {h.needsReview.map((n) => (
-                    <div key={n} className="small" style={{ color: '#9a5b00' }}>⚠ {n}</div>
+                    <div key={n} className="small note-warn">확인 필요: {n}</div>
                   ))}
                 </div>
               </label>
@@ -114,8 +113,8 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
         </div>
         {missing.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <button type="button" className="btn small ghost" onClick={() => setShowMissing((v) => !v)}>
-              자료가 더 있으면 쓸 수 있는 훅 {missing.length}개 {showMissing ? '▲' : '▼'}
+            <button type="button" className="btn small ghost" aria-expanded={showMissing} onClick={() => setShowMissing((v) => !v)}>
+              자료가 더 있으면 쓸 수 있는 훅 {missing.length}개 <span aria-hidden="true">{showMissing ? '▲' : '▼'}</span>
             </button>
             {showMissing && (
               <ul className="small muted">
@@ -141,7 +140,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
         )}
       </div>
       {notes.length > 0 && (
-        <div className="small" style={{ background: '#fff8e1', padding: 10, borderRadius: 10 }}>
+        <div className="issue warning small">
           {notes.map((n) => (
             <div key={n}>· {n}</div>
           ))}

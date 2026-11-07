@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
-import { Character, ShortVideo, buildTimeline, totalFrames, type VideoProps } from '@mat-lab/video';
+import { Character, ShortVideo, buildTimeline, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
 import { api, type CandidateVoiceJob, type FormatInsight, type ProjectDetail, type VoicedCandidate } from '../api.ts';
 import { useApp } from '../App.tsx';
 
@@ -10,9 +10,15 @@ const COUNT = 5;
  * 후보 영상 5개. 브라우저가 바로 그려서 보여 주고(렌더 비용 0원),
  * 서버는 대사에 맛조수 목소리만 넣는다. 고른 후보 하나만 영상(MP4)으로 만든다.
  */
-export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: ProjectDetail) => Promise<void> | void }> = ({ project, onMade }) => {
+export const CandidatePicker: React.FC<{
+  project: ProjectDetail;
+  onMade: (p: ProjectDetail) => Promise<void> | void;
+  /** 후보 묶음 전체(바깥 카드). 아래 편집 칸이 높이 변화를 따라가게 할 때 쓴다 */
+  boxRef?: React.Ref<HTMLDivElement>;
+}> = ({ project, onMade, boxRef }) => {
   const { run } = useApp();
   const [candidates, setCandidates] = useState<VoicedCandidate[]>([]);
+  const [failed, setFailed] = useState(false);
   const [seen, setSeen] = useState<string[]>([]);
   const [exhausted, setExhausted] = useState(false);
   const [insights, setInsights] = useState<FormatInsight[]>([]);
@@ -25,10 +31,14 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
 
   const load = useCallback(
     async (exclude: string[]) => {
+      setFailed(false);
       setLoading(true);
       const r = await run(() => api.candidates(project.id, exclude, COUNT));
       setLoading(false);
-      if (!r) return;
+      if (!r) {
+        setFailed(true);
+        return;
+      }
       setCandidates(r.candidates);
       setExhausted(r.exhausted);
       setInsights(r.insights);
@@ -71,22 +81,33 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
   const allVoiced = candidates.length > 0 && candidates.every((c) => c.voiced);
 
   return (
-    <div className="card stack">
-      <div className="row">
-        <h2 style={{ margin: 0 }}>후보 영상 {candidates.length || COUNT}개</h2>
-        <span className="muted small">재생해 보고 마음에 드는 영상을 고르세요. 고른 영상만 완성본으로 만들어요.</span>
+    <div className="card stack" ref={boxRef}>
+      <div className="card-head">
+        <h2>후보 영상 {candidates.length || COUNT}개</h2>
+        <span className="muted">재생해 보고 마음에 드는 영상 하나를 고르세요. 고른 영상만 완성본으로 만들어요.</span>
       </div>
       {job?.status === 'running' && (
-        <div className="issue info">
-          맛조수 목소리 넣는 중… {job.done}/{job.total}줄 · 첫 대사부터 차례로 들어가요. 처음에는 목소리 엔진이 깨어나느라 2~3분 더 걸리고, 한 줄에 30초~1분쯤 걸려요. 그동안 목소리 없이 먼저 볼 수 있어요.
-          <div style={{ height: 6, background: '#dde4f2', borderRadius: 4, marginTop: 6 }}>
-            <div style={{ width: `${job.total ? Math.round((job.done / job.total) * 100) : 0}%`, height: 6, background: '#5b7bc4', borderRadius: 4 }} />
+        <div className="issue info stack" style={{ gap: 8 }}>
+          <div>
+            <b className="num">맛조수 목소리 넣는 중 {job.done}/{job.total}줄</b>
+            <div className="small">첫 대사부터 차례로 들어가요. 처음엔 목소리 엔진이 깨어나느라 2~3분 더 걸리고, 한 줄에 30초~1분쯤 걸려요. 그동안 목소리 없이 먼저 볼 수 있어요.</div>
+          </div>
+          <div className="progress sky">
+            <div style={{ width: `${job.total ? Math.round((job.done / job.total) * 100) : 0}%` }} />
           </div>
         </div>
       )}
       {job?.status === 'failed' && <div className="issue warning">목소리를 넣지 못했어요: {job.error} 목소리 없이 고를 수 있고, 고른 영상은 만들 때 다시 목소리를 넣어요.</div>}
-      {allVoiced && <div className="muted small">🔊 모든 후보에 목소리가 들어갔어요.</div>}
-      {loading && <div className="muted">후보를 만드는 중…</div>}
+      {allVoiced && <div className="small note-ok">모든 후보에 목소리가 들어갔어요.</div>}
+      {loading && <div className="loading">후보를 만드는 중…</div>}
+      {failed && !loading && !candidates.length && (
+        <div className="issue error stack" style={{ gap: 8 }}>
+          후보 영상을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 불러와 주세요.
+          <div>
+            <button className="btn small" onClick={() => load([])}>다시 불러오기</button>
+          </div>
+        </div>
+      )}
       <div className="candidates-grid">
         {candidates.map((c, i) => (
           <CandidateCard
@@ -99,6 +120,7 @@ export const CandidatePicker: React.FC<{ project: ProjectDetail; onMade: (p: Pro
             making={making === c.key}
             insight={insights.find((x) => x.kind === 'style' && x.key === c.style)}
             live={playing === c.key}
+            voicing={job?.status === 'running'}
             onPlay={() => setPlaying(c.key)}
             onMake={async () => {
               setMaking(c.key);
@@ -134,24 +156,25 @@ const CandidateCard: React.FC<{
   making: boolean;
   insight?: FormatInsight;
   live: boolean;
+  voicing: boolean;
   onPlay: () => void;
   onMake: () => void;
-}> = ({ index, candidate: c, project, chosen, busy, making, insight, live, onPlay, onMake }) => {
+}> = ({ index, candidate: c, project, chosen, busy, making, insight, live, voicing, onPlay, onMake }) => {
+  const letter = String.fromCharCode(65 + index);
   const props = useMemo<VideoProps>(() => {
     const timings = c.timings ?? buildTimeline(c.script, c.script.scenes.map(() => null));
     return { script: c.script, timings, reviewed: false, cleanDraft: true, recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
   }, [c.script, c.timings, project.recipe, project.photo?.url, project.photo?.color]);
 
   return (
-    <div className="stack candidate" style={{ border: chosen ? '3px solid #e2533a' : '1px solid #ddd', background: chosen ? '#fff3ef' : '#fff' }}>
+    <div className={`option candidate ${chosen ? 'on' : ''}`}>
       <div className="row" style={{ gap: 6 }}>
-        <b style={{ fontSize: 18 }}>후보 {String.fromCharCode(65 + index)}</b>
+        <span className="candidate-label">후보 {letter}</span>
         <span className="badge">{c.styleLabel}</span>
-        {c.voiced ? <span className="badge approved">🔊 목소리</span> : <span className="badge draft">목소리 준비 중</span>}
         {chosen && <span className="badge review">지금 대본</span>}
       </div>
-      <div style={{ fontWeight: 800, fontSize: 17 }}>{c.title}</div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div className="candidate-title">{c.title}</div>
+      <div className="candidate-stage">
         {live ? (
         <Player
           component={ShortVideo}
@@ -163,34 +186,39 @@ const CandidateCard: React.FC<{
           controls
           // 0프레임은 맛조수가 등장하기 전이라, 첫 화면을 대표하는 0.7초 지점을 보여 준다
           initialFrame={Math.min(20, Math.max(0, totalFrames(props.timings) - 1))}
-          style={{ width: 200, height: 356, borderRadius: 12, overflow: 'hidden', border: '2px solid var(--ink)' }}
+          className="player"
+          style={{ width: '100%', maxWidth: 200, aspectRatio: '9 / 16' }}
           autoPlay
         />
         ) : (
-          <button className="candidate-cover" onClick={onPlay} aria-label={`후보 ${String.fromCharCode(65 + index)} 재생`}>
+          <button className="candidate-cover" onClick={onPlay} aria-label={`후보 ${letter} 재생`}>
             <Character emotion={c.script.scenes[0]?.emotion ?? 'curious'} frame={0} size={150} still />
             <span className="candidate-cover-line">“{c.firstLine}”</span>
-            <span className="candidate-cover-play">▶ 재생</span>
+            <span className="candidate-cover-play">
+              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path d="M2 1l9 5-9 5z" fill="currentColor" /></svg>
+              재생
+            </span>
           </button>
         )}
       </div>
-      <div className="small">
-        <b>첫 대사</b> “{c.firstLine}”
-      </div>
-      <div className="small muted">
-        {c.hookLabel} · 약 {c.estimatedSeconds}초
+      <div className="row small muted" style={{ gap: 4, columnGap: 10 }}>
+        <span>{c.hookLabel}</span>
+        {/* 재생 막대에 나오는 길이와 같은 값 (대사 길이만 세면 실제 영상보다 짧게 나온다) */}
+        <span className="num">약 {videoSeconds(props.timings)}초</span>
+        <span className={c.voiced ? 'note-ok' : ''}>{c.voiced ? '목소리 들어감' : voicing ? '목소리 넣는 중' : '목소리 없음'}</span>
       </div>
       {insight && (
-        <div className="small" style={{ background: '#eef6ff', padding: 8, borderRadius: 8 }}>
+        <div className="insight">
           지난 게시 {insight.posts}편 기록{insight.enough ? '' : ' (3편 미만이라 참고만)'}: 건너뛰기 {insight.medianSkipRate ?? '-'}% · 평균 시청 {insight.medianAvgWatch ?? '-'}초
         </div>
       )}
       {c.needsReview.map((n) => (
-        <div key={n} className="small" style={{ color: '#9a5b00' }}>
-          ⚠ {n}
+        <div key={n} className="small note-warn">
+          확인 필요: {n}
         </div>
       ))}
-      <button className="btn primary" disabled={busy} onClick={onMake}>
+      <div className="spacer" />
+      <button className={`btn block ${chosen ? '' : 'primary'}`} disabled={busy} onClick={onMake} aria-label={`후보 ${letter}: ${making ? '만드는 중' : chosen ? '이 영상으로 다시 만들기' : '이 영상으로 만들기'}`}>
         {making ? '만드는 중…' : chosen ? '이 영상으로 다시 만들기' : '이 영상으로 만들기'}
       </button>
     </div>

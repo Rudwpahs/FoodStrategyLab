@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
-import { buildTimeline, captionChunks, captionGroups, splitCaption, totalFrames, wordTimings } from './timeline.ts';
+import { buildTimeline, captionChunks, captionGroups, splitCaption, totalFrames, videoSeconds, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
 
@@ -12,6 +12,13 @@ describe('타임라인', () => {
       expect(x.speechFrames).toBeLessThanOrEqual(x.durationInFrames);
     });
     expect(totalFrames(t)).toBe(t.at(-1)!.from + t.at(-1)!.durationInFrames);
+  });
+
+  it('화면에 적는 길이(초)는 재생 막대처럼 버림한다', () => {
+    const at = (frames: number) => [{ sceneId: 's1', from: 0, durationInFrames: frames, speechFrames: 0 }];
+    expect(videoSeconds(at(1257))).toBe(41); // 41.9초 → 재생 막대 0:41
+    expect(videoSeconds(at(1230))).toBe(41);
+    expect(videoSeconds(at(1229))).toBe(40);
   });
 
   it('음성 길이가 있으면 그 길이를 기준으로 한다', () => {

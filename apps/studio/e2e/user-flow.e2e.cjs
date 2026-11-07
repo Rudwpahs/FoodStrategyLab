@@ -18,7 +18,7 @@ const log = (...a) => console.log(...a);
 
   // 2~4. 후보 → 다른 후보 → C 선택
   await go('script');
-  const titles = () => p.locator('div[style*="font-weight: 800"][style*="font-size: 17"]').allInnerTexts();
+  const titles = () => p.locator('.candidate-title').allInnerTexts();
   log('후보', JSON.stringify(await titles()));
   await p.getByText('다른 후보 3개 보기').click();
   await p.waitForTimeout(3500);

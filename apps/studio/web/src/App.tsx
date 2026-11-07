@@ -70,7 +70,7 @@ export const App: React.FC = () => {
     if (auth?.allowed) api.meta().then(setMeta).catch(() => undefined);
   }, [auth?.allowed]);
 
-  if (!auth) return <div className="empty">불러오는 중…</div>;
+  if (!auth) return <div className="loading">스튜디오를 여는 중…</div>;
   if (!auth.allowed) return <LoginPage auth={auth} onLoggedIn={checkAuth} />;
 
   const project = hash.match(/^#\/p\/(\d+)/);
@@ -80,35 +80,49 @@ export const App: React.FC = () => {
   else if (hash.startsWith('#/character')) page = <CharacterPage />;
   else page = <ProjectList />;
 
+  const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : 'list';
+  const logout = async () => {
+    await api.logout().catch(() => undefined);
+    checkAuth();
+  };
+
   return (
     <AppContext.Provider value={{ notify, run, meta, user: auth.user }}>
       <header className="topbar">
-        <a className="brand" href="#/">
-          <LogoMark size={34} />
-          <span>
-            {BRAND.labName} 스튜디오 <small>· 개인용 프로토타입</small>
-          </span>
+        <a className="brand" href="#/" aria-label={`${BRAND.labName} 스튜디오 처음 화면`}>
+          <LogoMark size={32} />
+          <span>{BRAND.labName} 스튜디오</span>
         </a>
-        <nav>
-          <a href="#/" className={!project && hash === '#/' ? 'active' : ''}>콘텐츠 목록</a>
-          <a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}>새 콘텐츠</a>
-          <a href="#/character" className={hash.startsWith('#/character') ? 'active' : ''}>캐릭터·목소리</a>
-          {auth.user && (
-            <button
-              className="btn small ghost"
-              title={`${auth.user.displayName} 로그아웃`}
-              onClick={async () => {
-                await api.logout().catch(() => undefined);
-                checkAuth();
-              }}
-            >
-              로그아웃
-            </button>
-          )}
+        <nav aria-label="주요 메뉴">
+          <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={tab === 'list' ? 'page' : undefined}>콘텐츠</a>
+          <a href="#/new" className={tab === 'new' ? 'active' : ''} aria-current={tab === 'new' ? 'page' : undefined}>새로 만들기</a>
+          <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>맛조수·목소리</a>
         </nav>
+        {auth.user && (
+          <div className="who">
+            <span className="hide-mobile">{auth.user.displayName}</span>
+            <button className="btn small ghost" onClick={logout}>로그아웃</button>
+          </div>
+        )}
       </header>
       <main>{page}</main>
-      {toast && <div className={`toast ${toast.error ? 'error' : ''}`}>{toast.text}</div>}
+      <nav className="tabbar" aria-label="주요 메뉴">
+        <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={tab === 'list' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
+          콘텐츠
+        </a>
+        <a href="#/new" className={`make ${tab === 'new' ? 'active' : ''}`} aria-current={tab === 'new' ? 'page' : undefined}>
+          <span className="bubble"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M12 6v12M6 12h12" /></svg></span>
+          새로 만들기
+        </a>
+        <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M9 3h6M10 3v5l-5 10a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3L14 8V3" /><path d="M7.5 15h9" /></svg>
+          맛조수
+        </a>
+      </nav>
+      <div aria-live="polite" role="status">
+        {toast && <div className={`toast ${toast.error ? 'error' : ''}`}>{toast.text}</div>}
+      </div>
     </AppContext.Provider>
   );
 };

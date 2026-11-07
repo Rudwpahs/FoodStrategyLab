@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createVoiceFromReference, listProfiles } from './voicestudio.ts';
 
 /**
@@ -8,7 +9,7 @@ import { createVoiceFromReference, listProfiles } from './voicestudio.ts';
  * 목소리마다 저장소에 고정한 기준 녹음이 있고, 그 녹음을 복제해 쓰므로 어디서 만들어도 같은 목소리가 난다.
  * 목록은 tools/setup/voices.json (클라우드 GPU도 같은 파일을 읽는다).
  */
-export const SETUP_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../tools/setup');
+export const SETUP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../tools/setup');
 export const VOICE_MANIFEST = path.join(SETUP_DIR, 'voices.json');
 
 interface ManifestEntry {

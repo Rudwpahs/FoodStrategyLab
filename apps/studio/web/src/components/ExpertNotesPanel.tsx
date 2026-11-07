@@ -40,7 +40,7 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
   const field = (q: ExpertQuestion, must: boolean) => (
     <label key={q.id} className="field">
       <span>
-        {must && <b style={{ color: '#e2533a' }}>필수 </b>}
+        {must && <span className="badge error" style={{ marginRight: 6 }}>필수</span>}
         {q.question}
       </span>
       <span className="hint">{q.hint}</span>
@@ -50,9 +50,9 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
 
   return (
     <div className="card stack">
-      <div className="row">
-        <h3 style={{ margin: 0 }}>이희재 연구자에게 묻기</h3>
-        <span className="muted small">답한 내용만 글에 들어가요. 해 보지 않은 일은 비워 두세요.</span>
+      <div className="card-head">
+        <h2>이희재 연구자에게 묻기</h2>
+        <span className="muted">답한 내용만 글에 들어가요. 해 보지 않은 일은 비워 두세요.</span>
       </div>
       {required.map((q) => field(q, true))}
       {optional.length > 0 && (
@@ -61,11 +61,11 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
           <div className="stack" style={{ marginTop: 8 }}>{optional.map((q) => field(q, false))}</div>
         </details>
       )}
-      <div className="small" style={{ background: notes.confirmedBy && !changed ? '#eef8f2' : '#fff8e1', padding: 10, borderRadius: 10 }}>
-        {notes.confirmedBy && !changed ? `✓ ${notes.confirmedBy} 연구자가 확인한 답변이에요 (${notes.confirmedAt ? new Date(notes.confirmedAt).toLocaleDateString('ko-KR') : ''})` : '답변을 고치면 연구자 본인 확인을 다시 받아야 해요.'}
+      <div className={`issue small ${notes.confirmedBy && !changed ? 'ok' : 'warning'}`}>
+        {notes.confirmedBy && !changed ? `${notes.confirmedBy} 연구자가 확인한 답변이에요 (${notes.confirmedAt ? new Date(notes.confirmedAt).toLocaleDateString('ko-KR') : ''})` : '답변을 고치면 연구자 본인 확인을 다시 받아야 해요.'}
       </div>
       <div className="row">
-        <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <label className={`check small ${confirm ? 'on' : ''}`} style={{ flex: '1 1 260px' }}>
           <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
           연구자 본인이 위 답변을 읽고 확인했습니다
         </label>

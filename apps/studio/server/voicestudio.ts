@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './config.ts';
 
 /**
@@ -173,7 +174,7 @@ export async function createDesignedVoice(url: string, name: string, description
  * 맛조수 기준 녹음 (저장소에 고정). 어디서 만들든 같은 목소리가 나오게 이 녹음으로 목소리를 복제한다.
  * 목소리 이름에 녹음 지문(6자)을 붙여, 다른 기준으로 만든 예전 목소리와 섞이지 않게 한다.
  */
-export const MASCOT_REFERENCE_FILE = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../tools/setup/matjosu-reference.wav');
+export const MASCOT_REFERENCE_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../tools/setup/matjosu-reference.wav');
 
 export function mascotVoiceName(wav: Buffer): string {
   return `맛조수-${crypto.createHash('sha1').update(wav).digest('hex').slice(0, 6)}`;

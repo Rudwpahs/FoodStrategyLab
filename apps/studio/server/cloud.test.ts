@@ -147,6 +147,8 @@ describe('클라우드: 제작 중 깨워 두기', () => {
     const stop = keepAwake(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 50);
     await new Promise((r) => setTimeout(r, 180));
     stop();
+    // 멈추기 직전에 보낸 요청이 도착할 시간을 준 뒤 센다
+    await new Promise((r) => setTimeout(r, 60));
     const after = hits;
     await new Promise((r) => setTimeout(r, 120));
     server.close();

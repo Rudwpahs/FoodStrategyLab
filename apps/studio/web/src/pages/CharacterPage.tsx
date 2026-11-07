@@ -26,40 +26,45 @@ export const CharacterPage: React.FC = () => {
   const [talking, setTalking] = useState(false);
 
   return (
-    <div className="stack">
-      <div className="row">
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
-          <h1>{BRAND.character} (가칭) · 브랜드 가이드</h1>
-          <div className="muted">귀엽지만 유치하지 않은 조리 연구소 조수. 성급하고 궁금한 게 많아 가끔 실수하고, 시청자 대신 질문합니다.</div>
+          <h1>{BRAND.character}</h1>
+          <div className="lead">귀엽지만 유치하지 않은 조리 연구소 조수예요. 성급하고 궁금한 게 많아 가끔 실수하고, 시청자 대신 질문해요.</div>
         </div>
-        <div className="spacer" />
-        <label className="check" style={{ alignItems: 'center' }}>
-          <input type="checkbox" checked={talking} onChange={(e) => setTalking(e.target.checked)} /> 말하는 입 모양 보기
-        </label>
       </div>
 
       <VoicePanel />
 
-      <div className="chars">
-        {EMOTIONS.map((e) => (
-          <div className="card" key={e}>
-            <Character emotion={e} frame={frame} talking={talking} size={200} />
-            <h3 style={{ marginTop: 8 }}>{EMOTION_LABELS[e]}</h3>
-            <div className="muted small">{e}</div>
-          </div>
-        ))}
-      </div>
+      <section className="card stack" aria-label="표정">
+        <div className="card-head">
+          <h2>표정 {EMOTIONS.length}가지</h2>
+          <span className="muted">대사마다 하나씩 골라 쓰여요</span>
+          <div className="spacer" />
+          <label className={`check small ${talking ? 'on' : ''}`} style={{ padding: '6px 12px' }}>
+            <input type="checkbox" checked={talking} onChange={(e) => setTalking(e.target.checked)} /> 말하는 입 모양 보기
+          </label>
+        </div>
+        <div className="chars">
+          {EMOTIONS.map((e) => (
+            <div className="char" key={e}>
+              <Character emotion={e} frame={frame} talking={talking} size={180} />
+              <div className="char-name">{EMOTION_LABELS[e]}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="grid2">
-        <div className="card stack">
+        <section className="card stack" aria-label="영상 브랜딩 규칙">
           <h2>영상 브랜딩 규칙</h2>
-          <div className="line"><b>오프닝</b>"{BRAND.openingLine}"</div>
-          <div className="line"><b>중간</b>"{BRAND.notePhrase}에 따르면…"</div>
-          <div className="line"><b>엔딩</b>"{BRAND.tipPhrase}"</div>
-          <div className="line"><b>설명</b>{brandDescription(true)}</div>
-          <div className="muted small">'검토한' 표현은 실제 승인이 끝난 콘텐츠에만 자동으로 들어갑니다.</div>
-        </div>
-        <div className="card stack">
+          <div className="line"><b>오프닝</b><div>"{BRAND.openingLine}"</div></div>
+          <div className="line"><b>중간</b><div>"{BRAND.notePhrase}에 따르면…"</div></div>
+          <div className="line"><b>엔딩</b><div>"{BRAND.tipPhrase}"</div></div>
+          <div className="line"><b>설명</b><div>{brandDescription(true)}</div></div>
+          <div className="muted small">'검토한' 표현은 실제 승인이 끝난 콘텐츠에만 자동으로 들어가요.</div>
+        </section>
+        <section className="card stack" aria-label="고정 규격">
           <h2>고정 규격</h2>
           <div className="swatches">
             {Object.entries(COLORS).slice(0, 8).map(([name, hex]) => (
@@ -67,13 +72,14 @@ export const CharacterPage: React.FC = () => {
             ))}
           </div>
           <div className="small">
-            글꼴: Pretendard (OFL, 상업 이용 가능) · 영상: 1080×1920, 30fps<br />
-            목소리: {meta ? meta.tts.voice : '…'}
+            글꼴 Pretendard (OFL, 상업 이용 가능) · 영상 1080×1920, 30fps
+            <br />
+            목소리 {meta ? meta.tts.voice : '…'}
           </div>
           <div className="muted small">
-            캐릭터는 코드로 그린 SVG라 매 영상에서 모양이 바뀌지 않습니다. 측면·3/4 시점 시트와 2D 리깅은 다음 단계 과제입니다.
+            맛조수는 코드로 그린 그림이라 영상마다 모양이 바뀌지 않아요. 옆모습·3/4 시점과 2D 리깅은 다음 단계 과제예요.
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
