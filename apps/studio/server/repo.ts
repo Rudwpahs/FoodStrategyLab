@@ -134,7 +134,10 @@ export interface ProjectDetail extends ProjectSummary {
   versions: Omit<ScriptVersion, 'script'>[];
   reviews: Review[];
   renders: RenderRow[];
+  /** 최근 작업 내역 (최신순, 최대 50건) */
   events: { type: string; message: string; createdAt: string }[];
+  /** 작업 내역 전체 건수 (events는 최근 50건만 담는다) */
+  eventCount: number;
   approval: Review | null;
   blogStyle: string;
   publications: Publication[];
@@ -484,7 +487,8 @@ export class Repo {
       message: String(r.message),
       createdAt: String(r.created_at),
     }));
+    const eventCount = Number((this.db.prepare('SELECT COUNT(*) AS n FROM events WHERE project_id = ?').get(id) as Row).n);
     const approval = versionState.approvedScriptVersion !== null ? this.lastReview(id, versionState.approvedScriptVersion) : null;
-    return { ...base, recipe: this.getRecipe(id), source: this.getSource(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, approval, blogStyle: this.getBlogStyle(id), publications: this.listPublications(id) };
+    return { ...base, recipe: this.getRecipe(id), source: this.getSource(id), photo: this.getPhoto(id), sceneMedia: this.getSceneMedia(id), versionState, latest, versions, reviews, renders, events, eventCount, approval, blogStyle: this.getBlogStyle(id), publications: this.listPublications(id) };
   }
 }

@@ -23,23 +23,22 @@
   --sky: #34558f;
   --sky-wash: #e7edf7;
 
-  /* 예전 이름 (영상 패키지와 일부 화면이 쓴다) */
-  --red: var(--gochu);
-  --red-dark: var(--gochu-deep);
-  --ink: var(--soy);
-  --muted: var(--soy-soft);
-  --white: var(--paper);
-  --cream: var(--paper-sunk);
-  --cream-deep: var(--tile-deep);
-  --mint: #7cc6a4;
-  --ok: var(--celadon);
-  --warn: var(--doenjang);
-  --err: var(--gochu);
-
   --r-surface: 16px;
   --r-control: 10px;
   --r-pill: 999px;
-  --topbar-h: 56px;
+
+  /* 아이폰의 상태 막대·노치·홈 막대 자리 (index.html의 viewport-fit=cover와 짝). 다른 기기에서는 0 */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  /* 화면 양옆 여백. 가로로 돌린 아이폰에서는 노치만큼 더 띄운다 */
+  --gutter: 20px;
+  --pad-l: max(var(--gutter), var(--safe-l));
+  --pad-r: max(var(--gutter), var(--safe-r));
+  /* 위 막대 높이 = 막대 + 상태 막대 자리 (붙어 다니는 단계 막대·스크롤 위치도 이 값을 쓴다) */
+  --bar-h: 56px;
+  --topbar-h: calc(var(--bar-h) + var(--safe-t));
   --tabbar-h: 64px;
 
   font-family: Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
@@ -67,7 +66,7 @@ code { font-size: 0.92em; background: var(--paper-sunk); border: 1px solid var(-
   position: sticky; top: 0; z-index: 20;
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 16px;
-  padding: 0 max(20px, calc((100% - 1080px) / 2));
+  padding: var(--safe-t) max(var(--pad-r), calc((100% - 1080px) / 2)) 0 max(var(--pad-l), calc((100% - 1080px) / 2));
   background: color-mix(in srgb, var(--tile) 88%, transparent);
   backdrop-filter: saturate(1.4) blur(10px);
   -webkit-backdrop-filter: saturate(1.4) blur(10px);
@@ -75,9 +74,8 @@ code { font-size: 0.92em; background: var(--paper-sunk); border: 1px solid var(-
 }
 .topbar .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; letter-spacing: -0.02em; text-decoration: none; white-space: nowrap; min-width: 0; }
 .topbar .brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.topbar .brand small { font-weight: 600; color: var(--soy-soft); font-size: 13px; letter-spacing: 0; }
-.topbar nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
-.topbar nav a { text-decoration: none; padding: 7px 14px; border-radius: var(--r-pill); font-weight: 650; color: var(--soy-soft); }
+.topbar nav { margin-left: auto; display: flex; gap: 4px; align-items: center; flex: none; }
+.topbar nav a { text-decoration: none; padding: 7px 14px; border-radius: var(--r-pill); font-weight: 650; color: var(--soy-soft); white-space: nowrap; }
 .topbar nav a:hover { color: var(--soy); background: var(--tile-deep); }
 .topbar nav a.active { color: var(--paper); background: var(--soy); }
 .topbar .who { margin-left: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--soy-soft); flex: none; }
@@ -90,7 +88,7 @@ code { font-size: 0.92em; background: var(--paper-sunk); border: 1px solid var(-
 /* 휴대폰 아래 탭 */
 .tabbar { display: none; }
 
-main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 96px; }
+main { max-width: 1120px; margin: 0 auto; padding: 28px var(--pad-r) 96px var(--pad-l); }
 
 /* ── 글자 ── */
 h1 { font-size: 28px; line-height: 1.25; margin: 0; letter-spacing: -0.035em; font-weight: 820; }
@@ -251,16 +249,14 @@ label.option > input { margin-top: 3px; }
 .back::before { content: ''; width: 7px; height: 7px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
 .project-head { display: grid; grid-template-columns: 1fr auto; gap: 12px 20px; align-items: center; }
 .project-head .dish { font-size: 14px; font-weight: 700; color: var(--gochu-deep); margin-bottom: 4px; }
-.project-head .tools { display: flex; align-items: center; gap: 8px; }
 
 /* 단계 (실제 순서가 있는 작업이라 번호를 붙인다) */
 .steps {
   position: sticky; top: var(--topbar-h); z-index: 15;
-  display: flex; gap: 0; margin: 20px -20px 22px; padding: 10px 20px;
+  display: flex; gap: 0; margin: 20px calc(-1 * var(--pad-r)) 22px calc(-1 * var(--pad-l)); padding: 10px var(--pad-r) 10px var(--pad-l);
   background: color-mix(in srgb, var(--tile) 92%, transparent);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   overflow-x: auto; scrollbar-width: none;
-  counter-reset: step;
 }
 .steps::-webkit-scrollbar { display: none; }
 .steps button {
@@ -295,7 +291,7 @@ label.option > input { margin-top: 3px; }
 
 .toast {
   /* 가운데 정렬은 left·right + margin auto로 (left 50%면 휴대폰에서 화면 절반 폭에 갇혀 글이 세로로 길어진다) */
-  position: fixed; left: 0; right: 0; bottom: 24px; margin-inline: auto; width: fit-content; z-index: 60;
+  position: fixed; left: 0; right: 0; bottom: calc(24px + var(--safe-b)); margin-inline: auto; width: fit-content; z-index: 60;
   background: var(--soy); color: var(--paper); padding: 12px 20px; border-radius: 12px; font-weight: 600;
   max-width: min(520px, calc(100vw - 32px)); box-shadow: 0 8px 28px rgba(36, 28, 23, 0.22);
   animation: toast-in 0.2s ease-out;
@@ -390,7 +386,7 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 로그인 */
-.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.login { min-height: 100vh; display: grid; place-items: center; padding: max(24px, var(--safe-t)) max(16px, var(--safe-r)) max(24px, var(--safe-b)) max(16px, var(--safe-l)); }
 .login-card { width: 100%; max-width: 400px; padding: 24px; }
 .login-title { font-size: 20px; letter-spacing: -0.02em; }
 
@@ -402,6 +398,8 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
 .char { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 14px; background: var(--paper-sunk); min-width: 0; }
 .char svg { max-width: 100%; height: auto; }
 .char-name { font-weight: 720; font-size: 14px; }
+/* 이름이 아직 정해지지 않았다는 표시 '(가칭)' */
+.tentative { font-size: 0.6em; font-weight: 650; color: var(--soy-soft); letter-spacing: 0; }
 
 .scene-tools { display: flex; gap: 2px; margin-left: auto; }
 .publish-grid { align-items: start; }
@@ -426,17 +424,22 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
   .chars { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* 좁은 PC 창 (휴대폰 화면 바로 위): 로그인한 이름까지 한 줄에 들어가게 메뉴 간격을 줄인다 */
+@media (min-width: 681px) and (max-width: 760px) {
+  .topbar { gap: 12px; }
+  .topbar nav a { padding-inline: 10px; }
+}
+
 /* ── 휴대폰 ── */
 @media (max-width: 680px) {
-  :root { --topbar-h: 52px; font-size: 15.5px; }
-  .topbar { padding: 0 16px; }
+  :root { --bar-h: 52px; --gutter: 16px; font-size: 15.5px; }
   .topbar nav { display: none; }
   .topbar .who { margin-left: auto; }
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     display: grid; grid-template-columns: repeat(3, 1fr);
-    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(var(--tabbar-h) + var(--safe-b));
+    padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
     background: var(--paper); border-top: 1px solid var(--line);
   }
   .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; font-size: 12px; font-weight: 650; color: var(--soy-soft); }
@@ -444,14 +447,14 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
   .tabbar a.active { color: var(--gochu); }
   .tabbar a.make .bubble { width: 40px; height: 30px; border-radius: 12px; background: var(--gochu); color: #fff; display: grid; place-items: center; }
   .tabbar a.make.active .bubble { box-shadow: 0 0 0 3px var(--gochu-wash); }
-  main { padding: 18px 16px calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom)); }
-  .toast { bottom: calc(var(--tabbar-h) + 14px + env(safe-area-inset-bottom)); }
+  main { padding: 18px var(--pad-r) calc(var(--tabbar-h) + 40px + var(--safe-b)) var(--pad-l); }
+  .toast { bottom: calc(var(--tabbar-h) + 14px + var(--safe-b)); }
   h1 { font-size: 23px; }
   h2 { font-size: 18px; }
   .card { padding: 16px; border-radius: 14px; }
   .page-head { margin-bottom: 16px; }
   .hide-mobile { display: none !important; }
-  .steps { margin: 14px -16px 16px; padding: 8px 16px; }
+  .steps { margin: 14px calc(-1 * var(--pad-r)) 16px calc(-1 * var(--pad-l)); padding: 8px var(--pad-r) 8px var(--pad-l); }
   .steps button { flex: 1 1 auto; gap: 6px; padding-right: 6px; }
   /* 마지막 단계도 누르는 폭 36px: 막대 끝 여백 안으로 10px 넓힌다 (포커스 테두리가 잘리지 않는 폭) */
   .steps button:last-child { flex: none; padding-right: 10px; margin-right: -10px; }
@@ -463,7 +466,7 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
   .list-item .title { font-size: 16px; }
   .row > input[type='text'], .row > input[type='url'] { width: 100% !important; flex: 1 1 100% !important; }
   /* 후보 영상은 옆으로 넘겨 본다 */
-  .candidates-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; margin: 0 -16px; padding: 2px 16px 10px; scrollbar-width: thin; }
+  .candidates-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; margin: 0 calc(-1 * var(--pad-r)) 0 calc(-1 * var(--pad-l)); padding: 2px var(--pad-r) 10px var(--pad-l); scrollbar-width: thin; }
   .candidates-grid > .candidate { flex: 0 0 82%; scroll-snap-align: center; }
   .chars { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .compare ul, .compare ol { padding-left: 18px; }
@@ -474,7 +477,7 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
   .char { padding: 8px 4px; }
   .blog-preview { padding: 14px 16px; }
   .stamp { width: 54px; height: 54px; font-size: 12.5px; }
-  html { scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+  html { scroll-padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 16px); }
   .btn.small { min-height: 40px; }
   .ing-x { width: 40px; }
   .scene-head select { min-height: 40px; }

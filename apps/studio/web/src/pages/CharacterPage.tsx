@@ -29,7 +29,9 @@ export const CharacterPage: React.FC = () => {
     <div className="stack" style={{ gap: 18 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
-          <h1>{BRAND.character}</h1>
+          <h1>
+            {BRAND.character} <span className="tentative">(가칭)</span>
+          </h1>
           <div className="lead">귀엽지만 유치하지 않은 조리 연구소 조수예요. 성급하고 궁금한 게 많아 가끔 실수하고, 시청자 대신 질문해요.</div>
         </div>
       </div>

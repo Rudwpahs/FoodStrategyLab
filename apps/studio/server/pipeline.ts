@@ -72,6 +72,8 @@ export interface CandidateVoiceJob {
   done: number;
   total: number;
   error: string;
+  /** 이 작업이 목소리를 넣는 후보 ('연출:훅'). 작업 중에 새로 본 후보는 들어 있지 않다 */
+  keys: string[];
 }
 const candidateVoiceJobs = new Map<number, CandidateVoiceJob>();
 export const candidateVoiceJob = (projectId: number) => candidateVoiceJobs.get(projectId) ?? null;
@@ -89,7 +91,8 @@ export function startCandidateVoices(projectId: number, scripts: Script[], keepA
   const ordered: string[] = [];
   for (let i = 0; i < longest; i++) for (const s of scripts) if (s.scenes[i]) ordered.push(s.scenes[i]!.line);
   const lines = [...new Set(ordered)];
-  const job: CandidateVoiceJob = { status: 'running', done: 0, total: lines.length, error: '' };
+  const keys = scripts.flatMap((s) => (s.style && s.hookType ? [`${s.style}:${s.hookType}`] : []));
+  const job: CandidateVoiceJob = { status: 'running', done: 0, total: lines.length, error: '', keys };
   candidateVoiceJobs.set(projectId, job);
   const stopKeepAlive = keepAliveOrigin ? keepAwake(keepAliveOrigin) : () => undefined;
   void (async () => {

@@ -186,11 +186,11 @@ export class RecipeReader {
 
   async read(files: UploadFile[], memo = ''): Promise<{ recipe: RecipeInput; aiFields: string[]; problems: string[]; costUsd: number }> {
     if (this.parse === claudeParse && !aiConfigured()) {
-      throw new HttpError(409, '레시피 읽기(Claude API)가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요. 그 전에는 "직접 입력"을 써 주세요.');
+      throw new HttpError(409, '레시피 읽기(Claude API)가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요. 그 전에는 [새로 만들기]의 "직접 입력하기"를 써 주세요.');
     }
     const budget = monthlyBudgetUsd();
     const spent = monthSpentUsd(this.db);
-    if (spent >= budget) throw new HttpError(429, `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`);
+    if (spent >= budget) throw new HttpError(429, `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 [새로 만들기]의 "직접 입력하기"를 써 주세요.`);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const content = toContentBlocks(files, memo);
     let out;

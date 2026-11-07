@@ -120,7 +120,8 @@ export const CandidatePicker: React.FC<{
             making={making === c.key}
             insight={insights.find((x) => x.kind === 'style' && x.key === c.style)}
             live={playing === c.key}
-            voicing={job?.status === 'running'}
+            // 작업 중에 '다른 후보 보기'로 새로 본 후보는 지금 작업에 들어 있지 않다
+            voicing={job?.status === 'running' && job.keys.includes(c.key)}
             onPlay={() => setPlaying(c.key)}
             onMake={async () => {
               setMaking(c.key);

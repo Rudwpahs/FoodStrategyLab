@@ -17,9 +17,15 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   const [reviewer, setReviewer] = useState<string>(user?.displayName ?? BRAND.researcher);
   const [note, setNote] = useState('');
   const [checkFailed, setCheckFailed] = useState(false);
+  // '다시 검사하기'를 누를 때마다 1씩 늘려 원본 대조 검사를 다시 한다
+  const [checkTry, setCheckTry] = useState(0);
 
+  // 대본·원본이 바뀌면 확인 항목을 처음부터 (다시 검사만 할 때는 체크한 항목을 그대로 둔다)
   useEffect(() => {
     setChecklist({});
+  }, [latest?.version, project.recipe]);
+
+  useEffect(() => {
     if (!latest) return;
     let live = true;
     setIssues(null);
@@ -35,7 +41,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
     return () => {
       live = false;
     };
-  }, [latest?.version, project.recipe]);
+  }, [latest?.version, project.recipe, checkTry]);
 
   // 이 대본 버전의 영상 길이: 목소리가 있으면 실제 목소리 길이로 (후보 카드·미리보기·완성 영상과 같은 값)
   const [saved, setSaved] = useState<{ version: number; timings: SceneTiming[] } | null>(null);
@@ -69,8 +75,9 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   const hasRender = Boolean(render);
   // 사진에서 읽은 레시피의 AI 제안 칸은 확인해야 승인할 수 있다
   const aiPending = Boolean(project.source?.aiFields.length && !project.source.aiConfirmedAt);
-  const approver = project.approval?.reviewer ?? '';
-  const byResearcher = !approver || approver.includes(BRAND.researcher);
+  // 도장에는 실제로 승인한 사람만 쓴다 (다른 계정이 승인했거나 이름이 없으면 이희재 이름을 쓰지 않는다)
+  const approver = project.approval?.reviewer.trim() ?? '';
+  const byResearcher = approver === BRAND.researcher;
   // 서버 길이를 받기 전에는 글자 수로 어림한다 (계산 방식은 미리보기·완성 영상과 같다)
   const seconds = videoSeconds(saved?.version === latest.version ? saved.timings : buildTimeline(latest.script, latest.script.scenes.map(() => null)));
 
@@ -149,7 +156,14 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
           {issues && <span className="muted num">오류 {errors}건 · 전체 {issues.length}건</span>}
         </div>
         {issues === null && !checkFailed && <div className="loading">검사하는 중…</div>}
-        {checkFailed && <div className="issue error">원본 대조 검사를 하지 못했어요. 화면을 새로 고쳐 다시 검사해 주세요. 검사가 끝나야 승인할 수 있어요.</div>}
+        {checkFailed && (
+          <div className="issue error stack" style={{ gap: 8 }}>
+            원본 대조 검사를 하지 못했어요. 인터넷 연결을 확인하고 다시 검사해 주세요. 검사가 끝나야 승인할 수 있어요.
+            <div>
+              <button className="btn small" onClick={() => setCheckTry((n) => n + 1)}>다시 검사하기</button>
+            </div>
+          </div>
+        )}
         {issues?.length === 0 && <div className="issue ok">원본과 다른 분량이나 주의할 표현을 찾지 못했어요. 그래도 직접 한 번 더 보세요.</div>}
         {issues?.map((i, idx) => (
           <div key={idx} className={`issue ${i.level}`}>
@@ -162,7 +176,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
         <h2>연구자 검수</h2>
         {approved ? (
           <div className="row" style={{ gap: 16 }}>
-            <span className="stamp fresh" role="img" aria-label={`${byResearcher ? BRAND.researcher : approver} 승인`}>
+            <span className="stamp fresh" role="img" aria-label={approver ? `${approver} 승인` : '승인 완료'}>
               <span aria-hidden="true">
                 {byResearcher ? (
                   <>

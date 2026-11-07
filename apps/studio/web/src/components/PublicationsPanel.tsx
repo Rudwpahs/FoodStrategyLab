@@ -98,7 +98,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>게시 이력과 성과</h2>
-        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 같은 연출을 3편 이상 모으면 [영상 고르기]의 후보 카드에 지난 성과가 보여요. 조회수는 참고만 해요.</div>
+        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 적은 숫자는 [영상 고르기]의 후보 카드에 같은 연출의 지난 성과로 보이고, 같은 연출을 3편 이상 모으면 방향이 보여요. 조회수는 참고만 해요.</div>
         {project.publications.length === 0 && <div className="muted">아직 기록이 없어요.</div>}
         {project.publications.map((p) => (
           <PublicationRow key={p.id} pub={p} onSaved={reload} />

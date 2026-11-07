@@ -81,6 +81,8 @@ export const App: React.FC = () => {
   else page = <ProjectList />;
 
   const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : 'list';
+  // 콘텐츠 한 편을 연 동안 '콘텐츠'는 지금 화면(page)이 아니라 지금 있는 묶음(true)
+  const listCurrent = tab === 'list' ? (project ? 'true' : 'page') : undefined;
   const logout = async () => {
     await api.logout().catch(() => undefined);
     checkAuth();
@@ -94,7 +96,7 @@ export const App: React.FC = () => {
           <span>{BRAND.labName} 스튜디오</span>
         </a>
         <nav aria-label="주요 메뉴">
-          <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={tab === 'list' ? 'page' : undefined}>콘텐츠</a>
+          <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={listCurrent}>콘텐츠</a>
           <a href="#/new" className={tab === 'new' ? 'active' : ''} aria-current={tab === 'new' ? 'page' : undefined}>새로 만들기</a>
           <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>맛조수·목소리</a>
         </nav>
@@ -107,7 +109,7 @@ export const App: React.FC = () => {
       </header>
       <main>{page}</main>
       <nav className="tabbar" aria-label="주요 메뉴">
-        <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={tab === 'list' ? 'page' : undefined}>
+        <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={listCurrent}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
           콘텐츠
         </a>

@@ -543,7 +543,8 @@ public class MainActivity extends Activity {
      * 웹 화면이 실제로 열 수 있는 주소인지.
      * URLUtil.isValidUrl은 앞의 http(s)://만 보므로 '192.168.0.10:5178o'·'192.168.0.10 :5178' 같은 오타도 통과시키고,
      * 웹 화면은 그런 주소를 아무 알림 없이 열지 않는다 (그러면 '여는 중'이 끝나지 않는다).
-     * 숫자는 \d가 아니라 [0-9]로 본다: 휴대폰의 \d는 전각·아랍 숫자도 받아서 Integer.parseInt가 앱을 멈추게 할 수 있다.
+     * 숫자는 \d가 아니라 [0-9]로 본다: 휴대폰의 \d는 전각·아랍 숫자도 받지만, 웹 화면은 포트에 0~9만 받아서 그런 주소를 아무 알림 없이 열지 않는다.
+     * 또 두 글자(서로게이트 쌍)로 저장되는 숫자는 Integer.parseInt가 읽지 못하고 예외를 내서 앱이 멈춘다.
      */
     static boolean isLoadableUrl(String u) {
         if (u == null || !URLUtil.isNetworkUrl(u) || u.matches("(?s).*\\s.*")) return false;

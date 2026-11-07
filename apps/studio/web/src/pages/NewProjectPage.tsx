@@ -52,8 +52,15 @@ export const NewProjectPage: React.FC = () => {
   }, []);
 
   const max = ai?.maxFiles ?? 4;
-  const previews = files.map((f) => ({ f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }));
   const blocked = ai?.configured === false;
+
+  // 사진 미리보기 주소는 파일이 바뀔 때만 만들고, 다 쓰면 지운다 (화면을 다시 그릴 때마다 만들면 메모리가 샌다)
+  const [previews, setPreviews] = useState<{ f: File; url: string | null }[]>([]);
+  useEffect(() => {
+    const made = files.map((f) => ({ f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }));
+    setPreviews(made);
+    return () => made.forEach((p) => p.url && URL.revokeObjectURL(p.url));
+  }, [files]);
 
   // 레시피 읽기가 꺼져 있으면 '직접 입력하기'를 펼쳐 둔다
   useEffect(() => {
@@ -61,23 +68,27 @@ export const NewProjectPage: React.FC = () => {
   }, [blocked]);
 
   /** 고르거나 끌어 놓은 파일을 더한다. 아이폰 사진(HEIC)은 바로 JPG로 바꾼다 (미리보기·Claude가 읽을 수 있게) */
+  // 알림은 한 번에 하나만 보이므로, 문제가 여러 개면 모아서 한 번에 알린다
   const addFiles = async (all: File[]) => {
+    const problems: string[] = [];
     const bad = all.filter((f) => !readable(f));
-    if (bad.length) notify(`${bad.map((f) => f.name).join(', ')}은(는) 올릴 수 없는 형식이에요. 사진·PDF·텍스트 파일만 올려 주세요.`, true);
+    if (bad.length) problems.push(`${bad.map((f) => f.name).join(', ')}은(는) 올릴 수 없는 형식이에요. 사진·PDF·텍스트 파일만 올려 주세요.`);
     const picked = all.filter(readable);
-    if (!picked.length) return;
-    setConverting(true);
-    const ok: File[] = [];
-    for (const f of picked) {
-      try {
-        ok.push(await heicToJpeg(f));
-      } catch (err) {
-        notify((err as Error).message, true);
+    if (picked.length) {
+      setConverting(true);
+      const ok: File[] = [];
+      for (const f of picked) {
+        try {
+          ok.push(await heicToJpeg(f));
+        } catch (err) {
+          problems.push((err as Error).message);
+        }
       }
+      setConverting(false);
+      if (filesRef.current.length + ok.length > max) problems.push(`한 번에 ${max}개까지 올릴 수 있어요. 앞의 ${max}개만 남겼어요.`);
+      setFiles((cur) => [...cur, ...ok].slice(0, max));
     }
-    setConverting(false);
-    if (filesRef.current.length + ok.length > max) notify(`한 번에 ${max}개까지 올릴 수 있어요. 앞의 ${max}개만 남겼어요.`, true);
-    setFiles((cur) => [...cur, ...ok].slice(0, max));
+    if (problems.length) notify(problems.join(' '), true);
   };
 
   return (
@@ -143,12 +154,12 @@ export const NewProjectPage: React.FC = () => {
         <div role="status" className={converting ? 'muted small' : 'sr-only'}>
           {converting ? '아이폰 사진(HEIC)을 JPG로 바꾸는 중…' : ''}
         </div>
-        {files.length > 0 && (
+        {previews.length > 0 && (
           <div className="source-thumbs" style={{ paddingTop: 6 }}>
             {previews.map(({ f, url }, i) => (
               <div key={i} className="thumb">
                 {url ? <img src={url} alt={f.name} /> : <span className="file-chip">{f.name}</span>}
-                <button type="button" className="x" aria-label={`${f.name} 빼기`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>
+                <button type="button" className="x" aria-label={`${f.name} 빼기`} onClick={() => setFiles((cur) => cur.filter((x) => x !== f))}>
                   ✕
                 </button>
               </div>

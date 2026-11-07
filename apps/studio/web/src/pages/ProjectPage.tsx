@@ -75,9 +75,9 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
   // 끝난 단계까지 표시: 입력(0) → 후보(1) → 영상·블로그(2) → 승인(3) → 게시(4)
   const doneUntil = project.status === 'draft' ? 0 : project.status === 'review' ? (hasLatestRender(project) ? 2 : 1) : 3;
   const approved = project.status === 'approved' || project.status === 'rendered';
-  // 도장에는 실제로 승인한 사람만 쓴다 (다른 계정이 승인했으면 이희재 이름을 쓰지 않는다)
-  const approver = project.approval?.reviewer ?? '';
-  const byResearcher = !approver || approver.includes(BRAND.researcher);
+  // 도장에는 실제로 승인한 사람만 쓴다 (다른 계정이 승인했거나 이름이 없으면 이희재 이름을 쓰지 않는다)
+  const approver = project.approval?.reviewer.trim() ?? '';
+  const byResearcher = approver === BRAND.researcher;
 
   return (
     <div>
@@ -92,7 +92,7 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
           </div>
         </div>
         {approved ? (
-          <span className="stamp" role="img" aria-label={`${byResearcher ? BRAND.researcher : approver} 승인`}>
+          <span className="stamp" role="img" aria-label={approver ? `${approver} 승인` : '승인 완료'}>
             <span aria-hidden="true">
               {byResearcher ? (
                 <>
@@ -121,17 +121,17 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
       </div>
 
       <nav className="steps" aria-label="만드는 단계">
-        {STEPS.map((s, i) => (
-          <button
-            key={s.key}
-            className={`${current === s.key ? 'active' : ''} ${i <= doneUntil && current !== s.key ? 'done' : ''}`}
-            aria-current={current === s.key ? 'step' : undefined}
-            onClick={() => go(s.key)}
-          >
-            <span className="num" aria-hidden>{i <= doneUntil && current !== s.key ? '✓' : i + 1}</span>
-            <span className="label">{s.label}</span>
-          </button>
-        ))}
+        {STEPS.map((s, i) => {
+          const done = i <= doneUntil && current !== s.key;
+          return (
+            <button key={s.key} className={`${current === s.key ? 'active' : ''} ${done ? 'done' : ''}`} aria-current={current === s.key ? 'step' : undefined} onClick={() => go(s.key)}>
+              <span className="num" aria-hidden>{done ? '✓' : i + 1}</span>
+              <span className="label">{s.label}</span>
+              {/* ✓는 화면 읽기에서 빠지므로 끝난 단계라고 따로 읽어 준다 */}
+              {done && <span className="sr-only"> (완료)</span>}
+            </button>
+          );
+        })}
       </nav>
 
       {current === 'input' && (
@@ -154,7 +154,12 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
       {current === 'publish' && <PublishStep {...props} />}
 
       <details className="card" style={{ marginTop: 24 }}>
-        <summary>작업 내역 <span className="muted small">{project.events.length}건</span></summary>
+        <summary>
+          작업 내역{' '}
+          <span className="muted small">
+            {project.eventCount}건{project.eventCount > project.events.length && ` · 최근 ${project.events.length}건만 보여요`}
+          </span>
+        </summary>
         <div className="log">
           {project.events.map((e, i) => (
             <div key={i} className={e.type === 'error' ? 'err' : undefined}>
