@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
-import { changeTempo } from '@mat-lab/video/audio';
+import { changeTempo, readFreshCache, removeAudioWithCache, writeCache } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
 import { VOICE_TEMPOS, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
 import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
@@ -185,8 +185,12 @@ export function postSlow(target: string, body: string, headers: Record<string, s
  * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다. 결과는 음성 파일 옆에 저장한다.
  */
 export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
-  const cache = `${file}.words.json`;
-  if (fs.existsSync(cache)) return (JSON.parse(fs.readFileSync(cache, 'utf8')) as [number, number][] | null) ?? undefined;
+  // 파일 크기·수정 시각이 같을 때만 저장해 둔 결과를 쓴다 (다시 만든 음성에 옛 시간이 붙지 않게)
+  const cache = `${file}.words2.json`;
+  if (fs.existsSync(cache)) {
+    const c = readFreshCache<[number, number][] | null>(cache, file);
+    if (c !== undefined) return c ?? undefined;
+  }
   if ((await ttsProvider().catch(() => 'none')) !== 'voicestudio') return undefined;
   const { apiKey } = ttsSettings().voicestudio;
   const url = await voicestudioUrl();
@@ -209,7 +213,7 @@ export async function measuredWords(file: string, line: string): Promise<[number
     // 연결 문제(시간 초과 등)는 기억하지 않는다: 다음에 다시 시도한다
     return undefined;
   }
-  fs.writeFileSync(cache, JSON.stringify(words));
+  writeCache(cache, file, words);
   return words ?? undefined;
 }
 
@@ -232,6 +236,8 @@ export async function synthesize(text: string, audioDir: string, override: Voice
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
   if (!fs.existsSync(file)) {
+    // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
+    removeAudioWithCache(file);
     const tmp = `${file}.tmp`;
     if (provider === 'voicestudio') {
       await voicestudioSpeech(text, tmp, voice);

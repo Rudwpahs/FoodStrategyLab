@@ -3,7 +3,7 @@ import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { cachedSpeechBounds, extractFrame, normalizeLoudness, toJpeg } from '@mat-lab/video/audio';
+import { cachedSpeechBounds, extractFrame, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
 import { recipeCardPages } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
@@ -60,7 +60,7 @@ export async function generateVoice(script: Script, shouldStop: () => boolean = 
     // 빈 음성(소리 없음)은 지우고 알린다: 영상에서 대사가 통째로 빠지는 것을 막는다
     const bounds = await cachedSpeechBounds(a.file).catch(() => null);
     if (bounds?.silent) {
-      fs.rmSync(a.file, { force: true });
+      removeAudioWithCache(a.file);
       throw new Error(`"${scene.line.slice(0, 20)}…" 대사의 음성이 비어 있습니다. 음성 생성을 다시 눌러 주세요.`);
     }
   }
@@ -106,7 +106,7 @@ export function startCandidateVoices(projectId: number, scripts: Script[], keepA
           const a = await synthesize(line, AUDIO_DIR);
           const bounds = await cachedSpeechBounds(a.file).catch(() => null);
           if (bounds?.silent) {
-            fs.rmSync(a.file, { force: true });
+            removeAudioWithCache(a.file);
             throw new Error(`"${line.slice(0, 20)}…" 대사의 음성이 비어 있어요. 다시 시도해 주세요.`);
           }
           await measuredWords(a.file, line).catch(() => undefined);

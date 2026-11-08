@@ -39,12 +39,43 @@ export async function decodePcm(file: string): Promise<Int16Array> {
 export { speechBounds, type SpeechBounds } from './speech.ts';
 import { speechBounds, type SpeechBounds } from './speech.ts';
 
-/** 결과를 음성 파일 옆에 저장해 두고 다시 쓴다 */
+/** 음성 파일의 크기·수정 시각 (옆에 저장한 분석 결과가 이 파일 것인지 확인용) */
+export function fileStamp(file: string): string {
+  const st = fs.statSync(file);
+  return `${st.size}:${Math.round(st.mtimeMs)}`;
+}
+
+/** 옆에 저장한 분석 결과가 지금 파일 것일 때만 돌려준다 */
+export function readFreshCache<T>(cacheFile: string, file: string): T | undefined {
+  if (!fs.existsSync(cacheFile)) return undefined;
+  try {
+    const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8')) as { stamp?: string; value?: T };
+    return c && c.stamp === fileStamp(file) ? c.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeCache<T>(cacheFile: string, file: string, value: T) {
+  fs.writeFileSync(cacheFile, JSON.stringify({ stamp: fileStamp(file), value }));
+}
+
+/** 음성 파일과 옆에 저장한 분석 결과를 함께 지운다 (다시 만든 파일에 옛 길이가 붙지 않게) */
+export function removeAudioWithCache(file: string) {
+  for (const f of [file, `${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`]) fs.rmSync(f, { force: true });
+}
+
+/**
+ * 결과를 음성 파일 옆에 저장해 두고 다시 쓴다.
+ * 파일 크기·수정 시각을 같이 적어 두고, 다르면 다시 잰다
+ * (예전에는 빈 음성을 지우고 다시 만들어도 빈 음성의 짧은 길이가 남아, 영상에서 대사 끝이 잘렸다).
+ */
 export async function cachedSpeechBounds(file: string): Promise<SpeechBounds> {
-  const meta = `${file}.bounds2.json`;
-  if (fs.existsSync(meta)) return JSON.parse(fs.readFileSync(meta, 'utf8')) as SpeechBounds;
+  const meta = `${file}.bounds3.json`;
+  const cached = readFreshCache<SpeechBounds>(meta, file);
+  if (cached && !cached.silent) return cached;
   const bounds = speechBounds(await decodePcm(file));
-  fs.writeFileSync(meta, JSON.stringify(bounds));
+  writeCache(meta, file, bounds);
   return bounds;
 }
 
