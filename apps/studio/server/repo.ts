@@ -1,6 +1,7 @@
 import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import type { CheckedSuggestion } from './recipeReader.ts';
 import {
+  CATEGORIES,
   checkScript,
   ChecklistSchema,
   RecipeInputSchema,
@@ -122,6 +123,9 @@ export interface RecipeSource {
   problems: string[];
   /** AI가 낸 주제·원리 후보 (근거 확인 결과 포함). 첫 번째가 레시피에 들어간 것 */
   suggestions: CheckedSuggestion[];
+  /** 영상 주제를 고른 기록 (사진에서 읽은 레시피는 주제를 고르기 전에 후보 영상을 만들지 않는다) */
+  topicChosenBy?: string;
+  topicChosenAt?: string;
   /** 연구자가 AI 제안 칸을 확인한 기록 (확인 전에는 승인할 수 없다) */
   aiConfirmedBy?: string;
   aiConfirmedAt?: string;
@@ -263,8 +267,38 @@ export class Repo {
       aiFields: src.aiFields ?? [],
       problems: src.problems ?? [],
       suggestions: src.suggestions ?? [],
+      ...(src.topicChosenAt ? { topicChosenBy: src.topicChosenBy ?? '', topicChosenAt: src.topicChosenAt } : {}),
       ...(src.aiConfirmedAt ? { aiConfirmedBy: src.aiConfirmedBy ?? '', aiConfirmedAt: src.aiConfirmedAt } : {}),
     };
+  }
+
+  /** 사진에서 읽은 레시피인데 아직 영상 주제를 고르지 않았는지 (이미 대본이 있으면 고른 것으로 본다) */
+  needsTopic(id: number): boolean {
+    const src = this.getSource(id);
+    return Boolean(src?.suggestions.length && !src.topicChosenAt && this.versionState(id).latestScriptVersion === null);
+  }
+
+  /**
+   * 영상 주제를 고른다: AI 후보 중 하나, 또는 직접 쓴 주제·원리.
+   * 직접 쓴 칸은 더 이상 'AI 제안'이 아니므로 확인 대상에서 뺀다. 재료·분량·순서는 건드리지 않는다.
+   */
+  chooseTopic(id: number, input: { topic: string; principle: string; category?: string }, by: string): RecipeSource {
+    const topic = input.topic.trim();
+    const principle = input.principle.trim();
+    if (topic.length < 4) throw new HttpError(400, '주제를 한 문장으로 적어 주세요.');
+    if (principle.length < 5) throw new HttpError(400, '핵심 원리를 한 문장으로 적어 주세요.');
+    const recipe = this.getRecipe(id);
+    const category = (CATEGORIES as readonly string[]).includes(String(input.category)) ? (input.category as RecipeInput['category']) : recipe.category;
+    this.updateRecipe(id, { ...recipe, topic, principle, category });
+    const row = this.db.prepare('SELECT source_json FROM projects WHERE id = ?').get(id) as Row;
+    const src = JSON.parse(String(row.source_json || '{}')) as Record<string, unknown> & { aiFields?: string[]; suggestions?: { topic: string; principle: string }[] };
+    const fromAi = (src.suggestions ?? []).find((s) => s.topic === topic && s.principle === principle);
+    if (!fromAi) src.aiFields = (src.aiFields ?? []).filter((f) => f !== 'topic' && f !== 'principle' && f !== 'category');
+    src.topicChosenBy = by;
+    src.topicChosenAt = now();
+    this.db.prepare('UPDATE projects SET source_json = ? WHERE id = ?').run(JSON.stringify(src), id);
+    this.logEvent(id, 'recipe', `영상 주제 선택 (${by}): ${topic}${fromAi ? ' — AI 후보' : ' — 직접 씀'}`);
+    return this.getSource(id)!;
   }
 
   /** AI가 제안한 칸(주제·핵심 원리·흔한 실수)을 연구자가 확인했다고 기록한다 */

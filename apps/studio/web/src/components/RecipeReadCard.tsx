@@ -14,7 +14,7 @@ const FIELD_LABELS: Record<string, string> = {
  * 사진·파일에서 읽은 레시피. 재료·분량·순서는 적힌 그대로 옮긴 것이고,
  * 자료에 없던 칸(주제·원리·흔한 실수)은 AI 제안이라 연구자가 확인해야 한다.
  */
-export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => void; onConfirmed: () => Promise<void> | void; open?: boolean }> = ({ project, onEdit, onConfirmed, open }) => {
+export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => void; onConfirmed: () => Promise<void> | void; open?: boolean; hideSuggestions?: boolean }> = ({ project, onEdit, onConfirmed, open, hideSuggestions }) => {
   const { run } = useApp();
   const src = project.source;
   if (!src) return null;
@@ -71,7 +71,7 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
             <span className="badge review">AI 제안 · 확인 필요</span> <b>{FIELD_LABELS[f] ?? f}</b>: {value(f)}
           </div>
         ))}
-        {src.suggestions.length > 0 && (
+        {src.suggestions.length > 0 && !hideSuggestions && (
           <div className="stack" style={{ gap: 6 }}>
             <div className="small">
               <b>AI가 낸 주제 후보</b> <span className="muted">— 레시피의 어느 부분에서 나왔는지 함께 보여 드려요</span>

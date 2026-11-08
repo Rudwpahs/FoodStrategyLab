@@ -110,12 +110,12 @@ export const NewProjectPage: React.FC = () => {
           onClick={async () => {
             setReading(true);
             const uploads = await Promise.all(files.map(toUpload));
-            const r = await run(() => api.createFromFiles(uploads, memo), '레시피를 읽었어요. 후보 영상을 만들어요');
+            const r = await run(() => api.createFromFiles(uploads, memo), '레시피를 읽었어요. 영상 주제를 골라 주세요');
             setReading(false);
             if (r) navigate(`/p/${r.id}/script`);
           }}
         >
-          {reading ? '레시피 읽는 중… (10~40초)' : '② 후보 영상 5개 만들기 →'}
+          {reading ? '레시피 읽는 중… (10~40초)' : '② 레시피 읽기 → 주제 고르기'}
         </button>
         <div className="muted small">재료·분량·순서는 적힌 그대로 옮기고, 자료에 없는 주제·원리는 "AI 제안"으로 표시해요. 꼭 확인해 주세요.</div>
       </div>

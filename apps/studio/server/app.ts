@@ -797,7 +797,20 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
       .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
 
+  // 사진에서 읽은 레시피는 영상 주제를 먼저 고른다 (AI가 고른 주제로 바로 후보 영상을 만들지 않는다)
+  api.put('/projects/:id/topic', (req, res) => {
+    const pid = id(req);
+    const by = (res.locals.user as { displayName?: string } | undefined)?.displayName || '연구자';
+    const body = req.body ?? {};
+    repo.chooseTopic(pid, { topic: String(body.topic ?? ''), principle: String(body.principle ?? ''), category: body.category }, by);
+    res.json(repo.getProject(pid));
+  });
+  const requireTopic = (pid: number) => {
+    if (repo.needsTopic(pid)) throw new HttpError(409, '영상 주제를 먼저 골라 주세요.');
+  };
+
   api.get('/projects/:id/candidates', async (req, res) => {
+    requireTopic(id(req));
     const pid = id(req);
     const exclude = String(req.query.exclude ?? '').split(',').filter(Boolean);
     const count = Math.min(5, Math.max(1, Number(req.query.count) || 3));
@@ -815,6 +828,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   /** 후보들의 대사에 목소리 넣기 (미리보기용, 영상은 만들지 않음) */
   api.post('/projects/:id/candidates/voice', (req, res) => {
     const pid = id(req);
+    requireTopic(pid);
     const recipe = repo.getRecipe(pid);
     const keys: string[] = Array.isArray(req.body?.keys) ? req.body.keys.map(String).slice(0, 5) : [];
     const scripts = keys.flatMap((k) => {
@@ -837,6 +851,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   /** 이 후보로 만들기: 대본을 고르고 바로 영상(검수용) 만들기를 시작한다 */
   api.post('/projects/:id/candidates/make', (req, res) => {
     const pid = id(req);
+    requireTopic(pid);
     const { style, hookType } = req.body ?? {};
     if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
     let built;
@@ -855,6 +870,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
 
   api.post('/projects/:id/candidates/select', (req, res) => {
     const pid = id(req);
+    requireTopic(pid);
     const { style, hookType } = req.body ?? {};
     if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
     let built;

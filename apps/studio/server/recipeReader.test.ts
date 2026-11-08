@@ -200,6 +200,33 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     close = () => server.close();
   });
   afterAll(() => close());
+  const chooseFirstTopic = async (pid: number) => {
+    const s = repo.getSource(pid)!.suggestions[0]!;
+    const r = await fetch(`${base}/api/projects/${pid}/topic`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: s.topic, principle: s.principle, category: s.category }) });
+    expect(r.status).toBe(200);
+  };
+
+  it('주제 고르기: AI 후보를 고르면 AI 제안으로 남고, 직접 쓰면 확인 대상에서 빠진다. 재료·순서는 그대로', async () => {
+    const make = async () => (await (await fetch(`${base}/api/projects/from-files`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: [{ name: 'a.png', type: 'image/png', data: png }] }) })).json()) as { id: number };
+    const a = await make();
+    expect(repo.needsTopic(a.id)).toBe(true);
+    const second = repo.getSource(a.id)!.suggestions[1]!;
+    await fetch(`${base}/api/projects/${a.id}/topic`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: second.topic, principle: second.principle, category: second.category }) });
+    expect(repo.needsTopic(a.id)).toBe(false);
+    expect(repo.getRecipe(a.id)).toMatchObject({ topic: second.topic, principle: second.principle, ingredients: repo.getRecipe(a.id).ingredients });
+    expect(repo.getSource(a.id)!.aiFields).toContain('topic');
+    expect(repo.getSource(a.id)!.topicChosenAt).toBeTruthy();
+
+    const b = await make();
+    const own = await fetch(`${base}/api/projects/${b.id}/topic`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: '김치전 반죽은 언제 섞을까?', principle: '반죽은 부치기 직전에 섞어야 바삭하다.' }) });
+    expect(own.status).toBe(200);
+    expect(repo.getSource(b.id)!.aiFields).not.toContain('topic');
+    expect(repo.getSource(b.id)!.aiFields).not.toContain('principle');
+    expect(repo.getRecipe(b.id).steps).toEqual(kimchijeon.steps.map((s) => s.text));
+    const bad = await fetch(`${base}/api/projects/${b.id}/topic`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: '', principle: '' }) });
+    expect(bad.status).toBe(400);
+    for (const id of [a.id, b.id]) fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
+  });
 
   it('큰 사진(2MB 넘게)도 받아서 콘텐츠를 만들고 원본 파일을 보관한다', async () => {
     const big = Buffer.alloc(3 * 1024 * 1024, 1).toString('base64');
@@ -226,6 +253,9 @@ describe('사진으로 새 콘텐츠 (API)', () => {
       body: JSON.stringify({ files: [{ name: 'a.png', type: 'image/png', data: png }] }),
     });
     const { id } = (await res.json()) as { id: number };
+    // 주제를 고르기 전에는 후보 영상을 만들지 않는다
+    expect((await fetch(`${base}/api/projects/${id}/candidates?count=5`)).status).toBe(409);
+    await chooseFirstTopic(id);
     const list = (await (await fetch(`${base}/api/projects/${id}/candidates?count=5`)).json()) as { candidates: { key: string; style: string; hookType: string; timings: unknown[] | null }[] };
     expect(list.candidates).toHaveLength(5);
     for (const c of list.candidates) expect(Array.isArray(c.timings)).toBe(true);
@@ -242,6 +272,7 @@ describe('사진으로 새 콘텐츠 (API)', () => {
   it('사진에서 읽은 콘텐츠는 AI 제안 내용을 확인하기 전에는 승인할 수 없다', async () => {
     const res = await fetch(`${base}/api/projects/from-files`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: [{ name: 'a.png', type: 'image/png', data: png }] }) });
     const { id } = (await res.json()) as { id: number };
+    await chooseFirstTopic(id);
     const list = (await (await fetch(`${base}/api/projects/${id}/candidates?count=5`)).json()) as { candidates: { style: string; hookType: string }[] };
     await fetch(`${base}/api/projects/${id}/candidates/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ style: list.candidates[0]!.style, hookType: list.candidates[0]!.hookType }) });
     const checklist = { ingredients: true, safety: true, noFakeClaims: true, expression: true };

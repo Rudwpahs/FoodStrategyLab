@@ -4,6 +4,7 @@ import { HookPicker } from '../components/HookPicker.tsx';
 import { CandidatePicker } from '../components/CandidatePicker.tsx';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
 import { HumanizePanel } from '../components/HumanizePanel.tsx';
+import { TopicPicker, needsTopic } from '../components/TopicPicker.tsx';
 import { api, copyText } from '../api.ts';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
@@ -51,14 +52,18 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
 
   return (
     <div className="stack">
-      {project.source && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} />}
-      <CandidatePicker
-        project={project}
-        onMade={(p) => {
-          setProject(p);
-          go('video');
-        }}
-      />
+      {/* 주제를 아직 안 골랐으면 주제 고르기를 맨 위에 (읽은 레시피는 그 아래에서 확인) */}
+      {needsTopic(project) && <TopicPicker project={project} onChosen={setProject} />}
+      {project.source && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} hideSuggestions={needsTopic(project)} />}
+      {!needsTopic(project) && (
+        <CandidatePicker
+          project={project}
+          onMade={(p) => {
+            setProject(p);
+            go('video');
+          }}
+        />
+      )}
       <details className="card">
         <summary style={{ cursor: 'pointer', fontWeight: 700 }}>대본 직접 고치기 · 다른 방법 (선택)</summary>
         <div className="stack" style={{ marginTop: 12 }}>
