@@ -29,7 +29,8 @@ describe('블로그 원고', () => {
 
 describe('SNS 문구', () => {
   it("승인된 콘텐츠에만 '검토한'을 쓰고 AI 고지를 넣는다", () => {
-    expect(buildSocialCopy(recipe, true, ['a']).instagram).toContain('검토한');
+    expect(buildSocialCopy(recipe, true, ['a'], '이희재').instagram).toContain('검토한');
+    expect(buildSocialCopy(recipe, true, ['a'], '가족').youtubeDescription).not.toContain('이희재가 검토');
     const draft = buildSocialCopy(recipe, false, ['a']);
     expect(draft.instagram).not.toContain('검토한');
     expect(draft.instagram).toContain('AI');

@@ -1,4 +1,4 @@
-import { BRAND, CATEGORY_LABELS, formatIngredient, type RecipeInput } from '@mat-lab/recipe-core';
+import { BRAND, CATEGORY_LABELS, formatIngredient, reviewerCredit, subjectParticle, type RecipeInput } from '@mat-lab/recipe-core';
 
 export interface ReviewInfo {
   reviewer: string;
@@ -37,7 +37,7 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
   const title = `${recipe.topic} | ${BRAND.researcherTitle} ${BRAND.researcher}의 ${dish} 노하우`;
   const tags = uniqueTags(['이희재의맛연구소', '요리팁', dish, CATEGORY_LABELS[recipe.category], '맛조수', '요리과학']);
   const reviewLine = review
-    ? `이 글의 조리 정보는 ${BRAND.researcherTitle} ${review.reviewer}가 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
+    ? `이 글의 조리 정보는 ${reviewerCredit(review.reviewer) || '검수자'}${subjectParticle(reviewerCredit(review.reviewer) || '검수자')} 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
     : '⚠️ 검수 전 초안입니다. 게시하지 마세요.';
 
   const md: string[] = [];

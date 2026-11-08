@@ -35,6 +35,9 @@ describe('서명 카드 문구', () => {
     expect(signatureNote(false, '이희재')).toBe('검수 전 초안');
     expect(signatureNote(true, '이희재')).toContain('이희재 연구자가 검토');
     expect(signatureNote(true, '가족 대리 입력')).toBe('조리 정보 검토: 가족 대리 입력');
+    // 이름에 '이희재'가 들어 있기만 한 다른 계정, 이름이 없는 승인은 이희재 검토가 아니다
+    expect(signatureNote(true, '이희재 딸')).toBe('조리 정보 검토: 이희재 딸');
+    expect(signatureNote(true, '')).toBe('조리 정보 검토 완료');
     // 승인 전 검수용 제작: 상태 문구 없음 (승인 뒤에도 거짓이 되지 않게)
     expect(signatureNote(false, undefined, true)).toBe('');
   });

@@ -1,4 +1,4 @@
-import { BRAND } from './brand.ts';
+import { BRAND, reviewedKnowledge } from './brand.ts';
 import { causeEffect, findSensory } from './korean.ts';
 import { splitSentences } from './format.ts';
 import { suggestHooks, type HookCandidate, type HookType, type RecentFormat } from './hooks.ts';
@@ -185,7 +185,7 @@ export function scriptForCandidate(recipe: RecipeInput, style: StyleId, hookType
 }
 
 /** 인스타그램 설명: 후보 첫 대사로 시작 (매체에 맞는 표현). '검토한'은 승인 후에만. */
-export function instagramCaption(recipe: RecipeInput, script: Script, reviewed: boolean, tags: string[]): string {
+export function instagramCaption(recipe: RecipeInput, script: Script, reviewed: boolean, tags: string[], reviewer?: string): string {
   const hookLine = script.scenes.find((s) => s.hook)?.line ?? recipe.topic;
   const tip = recipe.tips[0];
   const lines = [
@@ -195,7 +195,7 @@ export function instagramCaption(recipe: RecipeInput, script: Script, reviewed: 
     '전체 재료와 순서는 블로그에 정리했어요. 나중에 만들 때 꺼내 보게 저장해 두세요.',
     '',
     reviewed
-      ? `${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 요리 지식을 캐릭터 애니메이션으로 풀었습니다.`
+      ? `${reviewedKnowledge(reviewer)} 캐릭터 애니메이션으로 풀었습니다.`
       : `${BRAND.researcherTitle} ${BRAND.researcher}의 요리 지식을 캐릭터 애니메이션으로 풀었습니다. (검수 전 초안)`,
     '🤖 맛조수는 AI 캐릭터이고, 음성은 AI 합성입니다. 조리 지식은 이희재 연구자의 자료입니다.',
     '',

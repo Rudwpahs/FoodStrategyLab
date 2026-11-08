@@ -7,6 +7,7 @@ import { BrandBadge, LabBackground, LogoMark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
 import { KitchenCover } from './KitchenVideo.tsx';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
+import { reviewBadge } from '../brandText.ts';
 
 ensureFonts();
 
@@ -100,13 +101,15 @@ function highlightQuestion(title: string) {
 export interface RecipeCardProps {
   recipe: RecipeInput;
   reviewed: boolean;
+  /** 승인한 사람 (이희재 본인일 때만 이희재 이름으로 표시) */
+  reviewer?: string;
   /** 승인 전 검수용: 상태 문구 없이 출처만 */
   cleanDraft?: boolean;
   [key: string]: unknown;
 }
 
 /** 블로그·저장용 레시피 카드 (1080×1350). 원본 데이터만 사용한다. */
-export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, reviewed, cleanDraft }) => {
+export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, reviewed, reviewer, cleanDraft }) => {
   const steps = recipe.steps;
   const many = recipe.ingredients.length > 10;
   const ingSize = recipe.ingredients.length > 16 ? 22 : many ? 25 : 36;
@@ -149,7 +152,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, reviewed, cleanD
         </div>
       )}
       <div style={{ marginTop: 18, fontSize: 24, fontWeight: 600, opacity: 0.7 }}>
-        {reviewed ? `${BRAND.researcherTitle} ${BRAND.researcher} 검토 완료 · ` : cleanDraft ? '' : '검수 전 초안 · '}출처: {recipe.source}
+        {reviewed ? `${reviewBadge(reviewer)} · ` : cleanDraft ? '' : '검수 전 초안 · '}출처: {recipe.source}
       </div>
     </AbsoluteFill>
   );

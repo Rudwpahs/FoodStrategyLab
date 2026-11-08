@@ -17,7 +17,7 @@ export const ShortVideo: React.FC<VideoProps> = (props) =>
   props.recipe && props.look !== '2d' ? <KitchenVideo {...props} recipe={props.recipe} /> : <CardVideo {...props} />;
 
 /** 2D 카드형: 장면 데이터를 받아 캐릭터·카드·자막·음성을 조립한다. */
-export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed, cleanDraft }) => {
+export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft }) => {
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF4E2' }}>
@@ -27,7 +27,7 @@ export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed, cle
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            <SceneLayer scene={scene} timing={timing} topic={script.title} reviewed={reviewed} />
+            <SceneLayer scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} />
             <SpeechAudio timing={timing} />
           </Sequence>
         );
@@ -38,7 +38,7 @@ export const CardVideo: React.FC<VideoProps> = ({ script, timings, reviewed, cle
   );
 };
 
-const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean }> = ({ scene, timing, topic, reviewed }) => {
+const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string }> = ({ scene, timing, topic, reviewed, reviewer }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const talking = frame < timing.speechFrames;
@@ -49,7 +49,7 @@ const SceneLayer: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; r
   const size = hasBigCard ? 400 : 540;
   return (
     <AbsoluteFill>
-      <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} />
+      <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
       <div
         style={{
           position: 'absolute',

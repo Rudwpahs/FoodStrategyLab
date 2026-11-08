@@ -500,8 +500,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     // style이 없으면 기존 자동 원고(A), 있으면 연구자 답변을 반영한 원고(B)
     const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
     const post = expert ?? buildBlogPost({ recipe: project.recipe, review });
-    const social = buildSocialCopy(project.recipe, Boolean(review), post.tags);
-    if (project.latest?.script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(project.recipe, project.latest.script, Boolean(review), post.tags);
+    const social = buildSocialCopy(project.recipe, Boolean(review), post.tags, review?.reviewer);
+    if (project.latest?.script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(project.recipe, project.latest.script, Boolean(review), post.tags, review?.reviewer);
     const consistency = project.latest
       ? checkConsistency({ recipe: project.recipe, script: project.latest.script, blogMarkdown: post.markdown, social: social.instagram, reviewed: Boolean(review), notes })
       : [];

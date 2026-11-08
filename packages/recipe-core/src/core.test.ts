@@ -129,8 +129,13 @@ describe('검수·승인 흐름', () => {
   });
 
   it("'검토한' 표현은 승인된 콘텐츠에만 쓴다", () => {
-    expect(brandDescription(true)).toContain('검토한');
+    expect(brandDescription(true, '이희재')).toContain('조리기능장 이희재가 검토한');
     expect(brandDescription(false)).not.toContain('검토한');
+    // 다른 계정이 승인하면 이희재가 검토했다고 쓰지 않고, 승인한 사람 이름을 쓴다 (받침에 맞는 조사)
+    expect(brandDescription(true, '이희재 딸')).not.toContain('이희재가 검토');
+    expect(brandDescription(true, '이희재 딸')).toContain('이희재 딸이 검토해');
+    expect(brandDescription(true, '김하나')).toContain('김하나가 검토해');
+    expect(brandDescription(true, '')).not.toMatch(/이희재가 검토|검토한/);
   });
 });
 

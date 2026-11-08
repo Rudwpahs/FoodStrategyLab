@@ -272,7 +272,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const cover = { title: recipe.topic, emotion: 'joy' as const, recipe, photoColor: photo?.color || undefined };
     await renderer.renderStillImage('Cover', cover, path.join(outDir, 'cover.png'));
     await renderer.renderStillImage('SquareThumb', cover, path.join(outDir, 'thumbnail.png'));
-    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
+    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), reviewer: approval?.reviewer, cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
 
     if (photo) fs.copyFileSync(path.join(DATA_DIR, photo.file), path.join(outDir, `photo${path.extname(photo.file)}`));
     // 게시 묶음(ZIP)은 승인 후 내려받을 때 만든다 (그때의 승인·블로그 선택을 반영)
@@ -336,9 +336,9 @@ export function publishTexts(
   const post = extra.blogStyle
     ? buildExpertBlog({ recipe, style: extra.blogStyle, notes: extra.notes ?? { answers: {} }, review, images })
     : buildBlogPost({ recipe, review, images });
-  const social = buildSocialCopy(recipe, true, post.tags);
+  const social = buildSocialCopy(recipe, true, post.tags, review.reviewer);
   // 연출 엔진 대본이면 인스타그램 설명은 첫 대사로 시작한다 (매체에 맞는 표현)
-  if (script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(recipe, script, true, post.tags);
+  if (script.scenes.some((s) => s.hook)) social.instagram = instagramCaption(recipe, script, true, post.tags, review.reviewer);
   return { post, social };
 }
 

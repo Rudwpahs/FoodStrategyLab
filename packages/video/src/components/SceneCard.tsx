@@ -3,6 +3,7 @@ import { interpolate, spring } from 'remotion';
 import { BRAND, type Scene } from '@mat-lab/recipe-core';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 import { LogoMark } from './Stage.tsx';
+import { reviewBadge } from '../brandText.ts';
 
 interface CardProps {
   scene: Scene;
@@ -10,6 +11,8 @@ interface CardProps {
   frame: number;
   fps: number;
   reviewed: boolean;
+  /** 승인한 사람 (이희재 본인일 때만 이희재 이름으로 표시) */
+  reviewer?: string;
 }
 
 /**
@@ -61,7 +64,7 @@ const Label: React.FC<{ children: React.ReactNode; color?: string; textColor?: s
   </div>
 );
 
-export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, reviewed }) => {
+export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, reviewed, reviewer }) => {
   const enter = spring({ frame, fps, config: { damping: 14, stiffness: 140 } });
   const style: React.CSSProperties = {
     ...cardBase,
@@ -197,7 +200,7 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
           <div style={{ fontSize: 40, fontWeight: 600, marginTop: 14, opacity: 0.95 }}>{BRAND.slogan}</div>
           {reviewed && (
             <div style={{ marginTop: 30, fontSize: 36, fontWeight: 700, background: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '14px 20px' }}>
-              {BRAND.researcherTitle} {BRAND.researcher} 검토 완료
+              {reviewBadge(reviewer)}
             </div>
           )}
         </div>

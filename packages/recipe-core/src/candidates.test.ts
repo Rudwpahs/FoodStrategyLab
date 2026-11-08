@@ -87,7 +87,8 @@ describe('콘텐츠 후보 3가지', () => {
     const draft = instagramCaption(pilot, c.script, false, ['호두정과']);
     expect(draft.split('\n')[0]).toBe(c.firstLine);
     expect(draft).not.toContain('검토한');
-    expect(instagramCaption(pilot, c.script, true, [])).toContain('검토한');
+    expect(instagramCaption(pilot, c.script, true, [], '이희재')).toContain('이희재가 검토한');
+    expect(instagramCaption(pilot, c.script, true, [], '가족')).not.toContain('이희재가 검토');
   });
 });
 

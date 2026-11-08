@@ -63,7 +63,7 @@ export const CharacterPage: React.FC = () => {
           <div className="line"><b>오프닝</b><div>"{BRAND.openingLine}"</div></div>
           <div className="line"><b>중간</b><div>"{BRAND.notePhrase}에 따르면…"</div></div>
           <div className="line"><b>엔딩</b><div>"{BRAND.tipPhrase}"</div></div>
-          <div className="line"><b>설명</b><div>{brandDescription(true)}</div></div>
+          <div className="line"><b>설명</b><div>{brandDescription(true, BRAND.researcher)}</div></div>
           <div className="muted small">'검토한' 표현은 실제 승인이 끝난 콘텐츠에만 자동으로 들어가요.</div>
         </section>
         <section className="card stack" aria-label="고정 규격">
