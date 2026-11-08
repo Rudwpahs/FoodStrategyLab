@@ -19,6 +19,9 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
   const [principle, setPrinciple] = useState(first?.principle ?? project.recipe.principle);
   const [category, setCategory] = useState<Category>(first?.category ?? project.recipe.category);
   const [busy, setBusy] = useState(false);
+  const [more, setMore] = useState(false);
+  // 다른 주제를 받을 때 원하는 방향 (예: "실수 위주로", "전통 이야기로")
+  const [direction, setDirection] = useState('');
 
   const choose = (i: number | 'own') => {
     setPick(i);
@@ -43,7 +46,8 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
           <div className="row" style={{ gap: 8 }}>
             <input type="radio" name="topic" checked={pick === i} onChange={() => choose(i)} />
             <b>{s.topic}</b>
-            {i === 0 && <span className="badge">AI 추천</span>}
+            {s.angle && <span className="badge">{s.angle}</span>}
+            {i === 0 && <span className="badge approved">AI 추천</span>}
           </div>
           <div>{s.principle}</div>
           <div className="muted">
@@ -53,6 +57,31 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
           {(s.styleNotes ?? []).length > 0 && <div className="muted">문체(AI 티): {s.styleNotes.join(' / ')}</div>}
         </label>
       ))}
+      <div className="row small" style={{ gap: 8 }}>
+        <input type="text" value={direction} onChange={(e) => setDirection(e.target.value)} placeholder="원하는 느낌 (선택) 예: 실수 위주로, 더 짧고 세게" style={{ flex: 1, minWidth: 180 }} />
+        <button
+          className="btn small"
+          disabled={more}
+          onClick={async () => {
+            setMore(true);
+            const p = await run(() => api.moreTopics(project.id, direction), '새 주제 후보를 받았어요 (맨 위)');
+            setMore(false);
+            if (p) {
+              onChosen(p);
+              const s = p.source?.suggestions[0];
+              if (s) {
+                setPick(0);
+                setTopic(s.topic);
+                setPrinciple(s.principle);
+                setCategory(s.category);
+              }
+            }
+          }}
+        >
+          {more ? '주제 만드는 중… (10~30초)' : '다른 주제 더 보기'}
+        </button>
+      </div>
+      <div className="muted small" style={{ marginTop: -6 }}>마음에 드는 주제가 없으면 눌러 보세요. Claude가 레시피에서 다른 꼴의 주제 5개를 더 찾아요 (1회 약 $0.03).</div>
       <label className={`suggestion small${pick === 'own' ? ' current' : ''}`} style={{ cursor: 'pointer' }}>
         <div className="row" style={{ gap: 8 }}>
           <input type="radio" name="topic" checked={pick === 'own'} onChange={() => choose('own')} />

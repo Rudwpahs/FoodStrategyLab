@@ -274,7 +274,7 @@ export class Repo {
     const row = this.db.prepare('SELECT source_json FROM projects WHERE id = ?').get(id) as Row | undefined;
     if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
     const src = JSON.parse(String(row.source_json || '{}')) as Partial<RecipeSource>;
-    if (!src.files?.length && !src.aiFields?.length) return null;
+    if (!src.files?.length && !src.aiFields?.length && !src.suggestions?.length) return null;
     return {
       files: (src.files ?? []).map((f) => ({ ...f, url: `/media/${f.file}` })),
       aiFields: src.aiFields ?? [],
@@ -283,6 +283,20 @@ export class Repo {
       ...(src.topicChosenAt ? { topicChosenBy: src.topicChosenBy ?? '', topicChosenAt: src.topicChosenAt } : {}),
       ...(src.aiConfirmedAt ? { aiConfirmedBy: src.aiConfirmedBy ?? '', aiConfirmedAt: src.aiConfirmedAt } : {}),
     };
+  }
+
+  /** AI 주제 후보를 더한다 (새 후보가 앞으로, 최대 20개) */
+  addSuggestions(id: number, list: CheckedSuggestion[], note: string): RecipeSource {
+    const row = this.db.prepare('SELECT source_json FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    const src = JSON.parse(String(row.source_json || '{}')) as Record<string, unknown> & { suggestions?: CheckedSuggestion[] };
+    src.suggestions = [...list, ...(src.suggestions ?? [])].slice(0, 20);
+    src.files ??= [];
+    src.aiFields ??= [];
+    src.problems ??= [];
+    this.db.prepare('UPDATE projects SET source_json = ? WHERE id = ?').run(JSON.stringify(src), id);
+    this.logEvent(id, 'recipe', note);
+    return this.getSource(id)!;
   }
 
   /** 사진에서 읽은 레시피인데 아직 영상 주제를 고르지 않았는지 (이미 대본이 있으면 고른 것으로 본다) */

@@ -6,7 +6,7 @@ import { checkScript, contentCandidates } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { openDb } from './db.ts';
-import { ExtractedRecipeSchema, RecipeReader, costUsd, groundSuggestions, monthSpentUsd, monthlyBudgetUsd, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn } from './recipeReader.ts';
+import { ExtractedRecipeSchema, RecipeReader, TOPIC_GUIDE, blandTopicNotes, costUsd, groundSuggestions, monthSpentUsd, monthlyBudgetUsd, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn, type TopicsFn } from './recipeReader.ts';
 import { Repo } from './repo.ts';
 
 /** 손글씨 김치전 레시피를 읽었다고 치는 결과 */
@@ -30,9 +30,9 @@ const kimchijeon: ExtractedRecipe = {
   otherNotes: '',
   problems: [],
   suggestions: [
-    { topic: '김치전은 왜 금방 눅눅해질까?', principle: '반죽을 찬물로 하면 글루텐이 덜 생겨서 바삭해진다.', category: 'fix', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } },
-    { topic: '김치전은 왜 얇게 부칠까?', principle: '얇게 부치면 수분이 빨리 날아가 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
-    { topic: '김치전 팬은 왜 달궈 둘까?', principle: '달군 팬에 올리면 겉이 바로 굳어 기름을 덜 먹는다.', category: 'science', evidence: { where: 'step', number: 3, quote: '달군 팬에' } },
+    { angle: 'one-thing', topic: '김치전은 왜 금방 눅눅해질까?', principle: '반죽을 찬물로 하면 글루텐이 덜 생겨서 바삭해진다.', category: 'fix', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } },
+    { angle: 'one-thing', topic: '김치전은 왜 얇게 부칠까?', principle: '얇게 부치면 수분이 빨리 날아가 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
+    { angle: 'one-thing', topic: '김치전 팬은 왜 달궈 둘까?', principle: '달군 팬에 올리면 겉이 바로 굳어 기름을 덜 먹는다.', category: 'science', evidence: { where: 'step', number: 3, quote: '달군 팬에' } },
   ],
   commonMistake: '반죽을 미지근한 물로 하면 눅눅해진다.',
 };
@@ -115,11 +115,11 @@ describe('AI 제안 근거 확인', () => {
     const x: ExtractedRecipe = {
       ...kimchijeon,
       suggestions: [
-        { topic: '김치전, 180도에서 부쳐야 할까?', principle: '180도 기름에 부치면 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
-        { topic: '김치는 왜 몸에 좋을까?', principle: '김치를 먹으면 면역이 좋아진다.', category: 'science', evidence: { where: 'step', number: 1, quote: '잘게 썬다' } },
-        { topic: '김치전은 왜 짤까?', principle: '두부를 넣으면 짠맛이 줄어든다.', category: 'fix', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } },
-        { topic: '없는 순서', principle: '다섯째 단계에서 불을 줄이면 타지 않는다.', category: 'fix', evidence: { where: 'step', number: 5, quote: '불을 줄인다' } },
-        { topic: '김치전 반죽은 왜 찬물일까?', principle: '찬물로 반죽하면 글루텐이 덜 생겨 바삭해진다.', category: 'science', evidence: { where: 'tip', number: 1, quote: '반죽은 찬물로  해야 바삭하다!' } },
+        { angle: 'one-thing', topic: '김치전, 180도에서 부쳐야 할까?', principle: '180도 기름에 부치면 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
+        { angle: 'one-thing', topic: '김치는 왜 몸에 좋을까?', principle: '김치를 먹으면 면역이 좋아진다.', category: 'science', evidence: { where: 'step', number: 1, quote: '잘게 썬다' } },
+        { angle: 'one-thing', topic: '김치전은 왜 짤까?', principle: '두부를 넣으면 짠맛이 줄어든다.', category: 'fix', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } },
+        { angle: 'one-thing', topic: '없는 순서', principle: '다섯째 단계에서 불을 줄이면 타지 않는다.', category: 'fix', evidence: { where: 'step', number: 5, quote: '불을 줄인다' } },
+        { angle: 'one-thing', topic: '김치전 반죽은 왜 찬물일까?', principle: '찬물로 반죽하면 글루텐이 덜 생겨 바삭해진다.', category: 'science', evidence: { where: 'tip', number: 1, quote: '반죽은 찬물로  해야 바삭하다!' } },
       ],
     };
     const out = groundSuggestions(x);
@@ -133,7 +133,7 @@ describe('AI 제안 근거 확인', () => {
   });
 
   it('근거가 확인된 제안이 하나도 없으면 레시피에는 넣되 꼭 고치라고 알린다', () => {
-    const x: ExtractedRecipe = { ...kimchijeon, suggestions: [{ topic: '김치전은 왜 짤까?', principle: '두부를 넣으면 짠맛이 줄어든다.', category: 'fix', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } }] };
+    const x: ExtractedRecipe = { ...kimchijeon, suggestions: [{ angle: 'one-thing', topic: '김치전은 왜 짤까?', principle: '두부를 넣으면 짠맛이 줄어든다.', category: 'fix', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } }] };
     const r = toRecipe(x);
     expect(r.recipe.topic).toBe('김치전은 왜 짤까?');
     expect(r.problems.join('\n')).toContain('꼭 고쳐 주세요');
@@ -143,7 +143,7 @@ describe('AI 제안 근거 확인', () => {
   });
 
   it('메모를 근거로 들 수 있고, 메모의 숫자는 레시피에 있는 숫자로 본다', () => {
-    const x: ExtractedRecipe = { ...kimchijeon, suggestions: [{ topic: '김치전은 몇 분 부칠까?', principle: '한 면을 2분 부치면 겉이 굳는다.', category: 'science', evidence: { where: 'memo', number: 0, quote: '한 면 2분' } }] };
+    const x: ExtractedRecipe = { ...kimchijeon, suggestions: [{ angle: 'one-thing', topic: '김치전은 몇 분 부칠까?', principle: '한 면을 2분 부치면 겉이 굳는다.', category: 'science', evidence: { where: 'memo', number: 0, quote: '한 면 2분' } }] };
     expect(groundSuggestions(x, '한 면 2분씩 부침')[0]!.grounded).toBe(true);
     expect(groundSuggestions(x, '')[0]!.grounded).toBe(false);
   });
@@ -171,6 +171,54 @@ describe('AI 제안 근거 확인', () => {
   });
 });
 
+/** 가짜 Claude 주제 기획: 좋은 주제 2개 + 이미 나온 주제 1개 + 근거 없는 주제 1개 + 뻔한 주제 1개 */
+const topicCalls: { system: string; user: string }[] = [];
+const fakeTopics: TopicsFn = async (req) => {
+  topicCalls.push(req);
+  return {
+    parsed: {
+      suggestions: [
+        { angle: 'mistake', topic: '김치전 반죽, 미리 섞으면 바로 눅눅해요', principle: '찬물로 반죽하면 글루텐이 덜 생겨 바삭해진다.', category: 'fix', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } },
+        { angle: 'expert', topic: '조리기능장이 김치전을 얇게 펴는 이유', principle: '얇게 부치면 수분이 빨리 날아가 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
+        { angle: 'one-thing', topic: '김치전은 왜 금방 눅눅해질까?', principle: '찬물로 반죽하면 바삭하다.', category: 'fix', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } },
+        { angle: 'compare', topic: '김치전 180도 vs 160도', principle: '180도 기름에 부치면 바삭하다.', category: 'compare', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } },
+        { angle: 'result', topic: '바삭한 김치전 황금레시피의 비결', principle: '팬을 달구면 겉이 바로 굳는다.', category: 'science', evidence: { where: 'step', number: 3, quote: '달군 팬에' } },
+      ],
+    },
+    inputTokens: 800,
+    outputTokens: 900,
+    stopReason: 'end_turn',
+  };
+};
+
+describe('주제 꼴·뻔한 주제 거르기', () => {
+  it('레시피 읽기 지시문에 주제 쓰는 법(꼴 6가지)이 들어가고, 예시가 "왜 ~할까?"만 반복하지 않는다', async () => {
+    const calls: { system: string }[] = [];
+    await new RecipeReader(openDb(':memory:'), fakeParse(kimchijeon, calls)).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }]);
+    expect(calls[0]!.system).toContain(TOPIC_GUIDE);
+    expect(calls[0]!.system).toContain('angle one-thing');
+    expect(calls[0]!.system).not.toContain('왜 꼭 찬물이어야 할까');
+  });
+
+  it('비결·꿀팁 같은 뻔한 말, 너무 긴 주제, "왜 ~할까?" 반복을 알리고 뒤로 보낸다', () => {
+    expect(blandTopicNotes('바삭한 김치전 황금레시피의 비결')).toEqual([expect.stringContaining('비결')]);
+    expect(blandTopicNotes('조리기능장이 청국장을 맨 마지막에 넣는 이유를 알려 드릴게요 꼭 보세요')).toEqual([expect.stringContaining('길어서')]);
+    expect(blandTopicNotes('청국장, 처음부터 넣으면 향 다 날아가요')).toEqual([]);
+    const x: ExtractedRecipe = {
+      ...kimchijeon,
+      suggestions: [
+        { angle: 'one-thing', topic: '김치전은 왜 금방 눅눅해질까?', principle: '찬물로 반죽하면 바삭해진다.', category: 'fix', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } },
+        { angle: 'one-thing', topic: '김치전은 왜 얇게 부칠까?', principle: '얇게 부치면 바삭해진다.', category: 'science', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
+        { angle: 'mistake', topic: '김치전 두껍게 부치면 속까지 눅눅해요', principle: '얇게 부치면 수분이 빨리 날아간다.', category: 'fix', evidence: { where: 'step', number: 3, quote: '얇게 부친다' } },
+      ],
+    };
+    const out = groundSuggestions(x);
+    expect(out.map((s) => s.topic)).toEqual(['김치전은 왜 금방 눅눅해질까?', '김치전 두껍게 부치면 속까지 눅눅해요', '김치전은 왜 얇게 부칠까?']);
+    expect(out[2]!.styleNotes.join()).toContain('왜 ~할까?');
+    expect(out[1]!.angle).toBe('실수 경고');
+  });
+});
+
 describe('AI 제안 원리 길이', () => {
   it('영상에서 읽는 원리는 한 문장으로: 길면 첫 문장만', () => {
     expect(shortPrinciple('반죽을 찬물로 하면 바삭해진다.')).toBe('반죽을 찬물로 하면 바삭해진다.');
@@ -192,7 +240,7 @@ describe('사진으로 새 콘텐츠 (API)', () => {
         starts.push(pid);
         return 1;
       },
-      recipeReader: new RecipeReader(repo.db, fakeParse(kimchijeon)),
+      recipeReader: new RecipeReader(repo.db, fakeParse(kimchijeon), fakeTopics),
     });
     const server = app.listen(0);
     await new Promise((r) => server.once('listening', r));
@@ -226,6 +274,27 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     const bad = await fetch(`${base}/api/projects/${b.id}/topic`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: '', principle: '' }) });
     expect(bad.status).toBe(400);
     for (const id of [a.id, b.id]) fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
+  });
+
+  it('다른 주제 더 보기: 이미 나온 주제는 빼고, 근거 없는 것은 뒤로, 새 후보를 맨 위에 더한다 (사진은 다시 보내지 않음)', async () => {
+    const made = (await (await fetch(`${base}/api/projects/from-files`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: [{ name: 'a.png', type: 'image/png', data: png }] }) })).json()) as { id: number };
+    const before = repo.getSource(made.id)!.suggestions.length;
+    const res = await fetch(`${base}/api/projects/${made.id}/topics/more`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ direction: '실수 위주로' }) });
+    expect(res.status).toBe(200);
+    const sent = topicCalls.at(-1)!;
+    expect(sent.system).toContain(TOPIC_GUIDE);
+    expect(sent.user).toContain('<이미_나온_주제>');
+    expect(sent.user).toContain('김치전은 왜 금방 눅눅해질까?');
+    expect(sent.user).toContain('<연구자_요청>\n실수 위주로');
+    expect(sent.user).toContain('3. 달군 팬에 기름을 넉넉히 두르고 얇게 부친다.');
+    const after = repo.getSource(made.id)!.suggestions;
+    // 이미 나온 "김치전은 왜 금방 눅눅해질까?"는 다시 넣지 않는다 → 새로 4개
+    expect(after.length).toBe(before + 4);
+    expect(after.slice(0, 4).map((s) => s.topic)).toEqual(['김치전 반죽, 미리 섞으면 바로 눅눅해요', '조리기능장이 김치전을 얇게 펴는 이유', '바삭한 김치전 황금레시피의 비결', '김치전 180도 vs 160도']);
+    expect(after[3]!.grounded).toBe(false);
+    expect(after[2]!.styleNotes.join()).toContain('뻔한 말');
+    expect(repo.needsTopic(made.id)).toBe(true);
+    fs.rmSync(`${DATA_DIR}/sources/${made.id}`, { recursive: true, force: true });
   });
 
   it('큰 사진(2MB 넘게)도 받아서 콘텐츠를 만들고 원본 파일을 보관한다', async () => {

@@ -816,6 +816,16 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     repo.chooseTopic(pid, { topic: String(body.topic ?? ''), principle: String(body.principle ?? ''), category: body.category }, by);
     res.json(repo.getProject(pid));
   });
+  // 다른 주제 더 보기: 이미 읽은 레시피로 주제 후보만 새로 받는다 (Claude, 월 한도 공유)
+  api.post('/projects/:id/topics/more', async (req, res) => {
+    const pid = id(req);
+    const recipe = repo.getRecipe(pid);
+    const existing = (repo.getSource(pid)?.suggestions ?? []).map((s) => s.topic);
+    const { suggestions, costUsd } = await reader.moreTopics(recipe, { exclude: [...existing, recipe.topic], direction: String(req.body?.direction ?? '') });
+    if (!suggestions.length) throw new HttpError(502, '새 주제를 받지 못했어요. 다시 눌러 주세요.');
+    repo.addSuggestions(pid, suggestions, `AI 주제 후보 ${suggestions.length}개 더 받음 (약 ${costUsd.toFixed(3)}달러)`);
+    res.json(repo.getProject(pid));
+  });
   const requireTopic = (pid: number) => {
     if (repo.needsTopic(pid)) throw new HttpError(409, '영상 주제를 먼저 골라 주세요.');
   };

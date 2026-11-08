@@ -144,6 +144,7 @@ export const api = {
   makeCandidate: (id: number, style: StyleId, hookType: HookType) =>
     request<{ project: ProjectDetail; renderId: number; notes: string[] }>('POST', `/projects/${id}/candidates/make`, { style, hookType }),
   aiInfo: () => request<AiInfo>('GET', '/ai'),
+  moreTopics: (id: number, direction: string) => request<ProjectDetail>('POST', `/projects/${id}/topics/more`, { direction }),
   chooseTopic: (id: number, body: { topic: string; principle: string; category?: string }) => request<ProjectDetail>('PUT', `/projects/${id}/topic`, body),
   confirmAi: (id: number) => request<unknown>('POST', `/projects/${id}/source/confirm`, {}),
   createFromFiles: (files: UploadFile[], memo: string) => request<{ id: number; aiFields: string[]; problems: string[] }>('POST', '/projects/from-files', { files, memo }),
