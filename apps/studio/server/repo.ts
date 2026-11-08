@@ -1,5 +1,6 @@
 import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import type { CheckedSuggestion } from './recipeReader.ts';
+import type { QaReport } from '@mat-lab/video/qa';
 import {
   CATEGORIES,
   checkScript,
@@ -54,6 +55,8 @@ export interface RenderRow {
   error: string;
   createdAt: string;
   finishedAt: string | null;
+  /** 자동 품질 검사 결과 (예전 영상은 없음) */
+  qa: QaReport | null;
 }
 
 export interface ProjectSummary {
@@ -161,7 +164,17 @@ function toRender(r: Row): RenderRow {
     error: String(r.error),
     createdAt: String(r.created_at),
     finishedAt: (r.finished_at as string | null) ?? null,
+    qa: parseQa(r.qa_json),
   };
+}
+
+function parseQa(v: unknown): QaReport | null {
+  if (!v) return null;
+  try {
+    return JSON.parse(String(v)) as QaReport;
+  } catch {
+    return null;
+  }
 }
 
 function toReview(r: Row): Review {
@@ -487,6 +500,10 @@ export class Repo {
     this.db
       .prepare('UPDATE renders SET status = ?, stage = ?, progress = ?, output_dir = ?, error = ?, finished_at = ? WHERE id = ?')
       .run(next.status, next.stage, next.progress, next.outputDir, next.error, patch.finished ? now() : cur.finishedAt, renderId);
+  }
+
+  setRenderQa(renderId: number, qa: QaReport) {
+    this.db.prepare('UPDATE renders SET qa_json = ? WHERE id = ?').run(JSON.stringify(qa), renderId);
   }
 
   getRender(renderId: number): RenderRow {

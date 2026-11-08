@@ -8,7 +8,8 @@
     "./render": "./src/render.ts",
     "./timeline": "./src/timeline.ts",
     "./audio": "./src/audio.ts",
-    "./cards": "./src/cardPages.ts"
+    "./cards": "./src/cardPages.ts",
+    "./qa": "./src/qa.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

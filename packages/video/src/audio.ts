@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { RenderInternals } from '@remotion/renderer';
 
 /**
@@ -38,6 +39,7 @@ export async function decodePcm(file: string): Promise<Int16Array> {
 
 export { speechBounds, type SpeechBounds } from './speech.ts';
 import { speechBounds, type SpeechBounds } from './speech.ts';
+import { QA_STEP, rmsDb } from './qa.ts';
 
 /** 음성 파일의 크기·수정 시각 (옆에 저장한 분석 결과가 이 파일 것인지 확인용) */
 export function fileStamp(file: string): string {
@@ -62,7 +64,7 @@ export function writeCache<T>(cacheFile: string, file: string, value: T) {
 
 /** 음성 파일과 옆에 저장한 분석 결과를 함께 지운다 (다시 만든 파일에 옛 길이가 붙지 않게) */
 export function removeAudioWithCache(file: string) {
-  for (const f of [file, `${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`]) fs.rmSync(f, { force: true });
+  for (const f of [file, `${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
 }
 
 /**
@@ -82,6 +84,75 @@ export async function cachedSpeechBounds(file: string): Promise<SpeechBounds> {
 /** 최종 영상 음량을 -14 LUFS로 맞춘다 (화면은 다시 인코딩하지 않음) */
 export async function normalizeLoudness(input: string, output: string): Promise<void> {
   await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
+}
+
+/** 영상·음성의 소리 크기(dB)를 0.05초 간격으로 (자동 품질 검사용) */
+export async function audioDb(file: string): Promise<number[]> {
+  return rmsDb(await decodePcm(file), RATE, QA_STEP);
+}
+
+/** 화면 평균 밝기(0~255)를 일정 간격으로 (검은 화면 검사용). 아주 작게 줄여서 빠르게 본다 */
+export async function frameBrightness(video: string, step = 0.5): Promise<number[]> {
+  const w = 16;
+  const h = 28;
+  // Remotion에 든 ffmpeg에는 rawvideo·bmp 출력이 없어서, 흑백 PNG를 이어 받아 직접 푼다
+  const buf = await ff(['-hide_banner', '-i', path.resolve(video), '-an', '-vf', `scale=${w}:${h},format=gray`, '-r', String(1 / step), '-c:v', 'png', '-f', 'image2pipe', '-']);
+  return splitPngs(buf).map((png) => {
+    const px = decodeGrayPng(png);
+    return px.length ? px.reduce((a, b) => a + b, 0) / px.length : 0;
+  });
+}
+
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** 이어 붙은 PNG들을 하나씩 나눈다 */
+export function splitPngs(buf: Buffer): Buffer[] {
+  const out: Buffer[] = [];
+  let i = buf.indexOf(PNG_SIG);
+  while (i !== -1) {
+    const next = buf.indexOf(PNG_SIG, i + 8);
+    out.push(buf.subarray(i, next === -1 ? buf.length : next));
+    i = next;
+  }
+  return out;
+}
+
+/** 8비트 흑백 PNG(비월 없음)를 화소 배열로 푼다 */
+export function decodeGrayPng(png: Buffer): Uint8Array {
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  const idat: Buffer[] = [];
+  while (pos + 8 <= png.length) {
+    const len = png.readUInt32BE(pos);
+    const type = png.toString('latin1', pos + 4, pos + 8);
+    const data = png.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[9] !== 0 || data[12] !== 0) return new Uint8Array();
+    } else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    pos += 12 + len;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (width + 1)]!;
+    for (let x = 0; x < width; x++) {
+      const v = raw[y * (width + 1) + 1 + x]!;
+      const a = x > 0 ? out[y * width + x - 1]! : 0;
+      const b = y > 0 ? out[(y - 1) * width + x]! : 0;
+      const c = x > 0 && y > 0 ? out[(y - 1) * width + x - 1]! : 0;
+      const p = a + b - c;
+      const pa = Math.abs(p - a);
+      const pb = Math.abs(p - b);
+      const pc = Math.abs(p - c);
+      const paeth = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      out[y * width + x] = (v + (f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : f === 4 ? paeth : 0)) & 0xff;
+    }
+  }
+  return out;
 }
 
 /** PNG → JPEG (인스타그램 표지·이미지는 JPEG만 받는다) */

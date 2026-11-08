@@ -3,6 +3,7 @@ import { BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/r
 import { api } from '../api.ts';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
 import { HumanizePanel } from '../components/HumanizePanel.tsx';
+import { QaPanel } from '../components/QaPanel.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
@@ -45,8 +46,11 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   const aiPending = Boolean(project.source?.aiFields.length && !project.source.aiConfirmedAt);
 
   const submit = async (decision: 'approved' | 'changes_requested') => {
+    // 영상 자동 검사에서 오류가 나온 영상은 한 번 더 확인하고 승인한다
+    const qaErrors = render?.qa?.issues.filter((i) => i.level === 'error') ?? [];
+    if (decision === 'approved' && qaErrors.length && !confirm(`영상 자동 검사에서 문제 ${qaErrors.length}건이 나왔어요.\n\n${qaErrors.map((e) => `· ${e.message}`).join('\n')}\n\n직접 보고 들어서 괜찮다면 승인할까요? (영상을 다시 만드는 편을 권해요)`)) return;
     const p = await run(
-      () => api.review(project.id, { version: latest.version, reviewer, checklist, decision, note }),
+      () => api.review(project.id, { version: latest.version, reviewer, checklist, decision, note, acceptQa: qaErrors.length > 0 }),
       decision === 'approved' ? '승인했습니다. 이제 내보내고 게시할 수 있습니다' : '수정 요청을 기록했습니다',
     );
     if (p) {
@@ -60,6 +64,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
     <div className="stack">
       <div className="card stack">
         <h2 style={{ margin: 0 }}>결과물 보기</h2>
+        <QaPanel render={render} onRemake={() => go('video')} />
         <div className="row" style={{ alignItems: 'flex-start' }}>
           {render ? (
             <video src={`/media/renders/${render.id}/video.mp4`} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />

@@ -180,22 +180,24 @@ export function postSlow(target: string, body: string, headers: Record<string, s
   });
 }
 
+/** 음성 받아쓰기 결과 (VoiceStudio의 Whisper 계열) */
+export interface Transcript {
+  text: string;
+  words: { start: number; end: number }[];
+}
+
 /**
- * 실제 음성의 어절별 시간 (VoiceStudio 받아쓰기, Whisper 계열).
- * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다. 결과는 음성 파일 옆에 저장한다.
+ * 음성 파일을 받아쓴다. 결과는 파일 크기·수정 시각과 함께 옆에 저장한다.
+ * 받아쓰기를 쓸 수 없으면(목소리 엔진이 VoiceStudio가 아님, 연결 실패) undefined.
  */
-export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
-  // 파일 크기·수정 시각이 같을 때만 저장해 둔 결과를 쓴다 (다시 만든 음성에 옛 시간이 붙지 않게)
-  const cache = `${file}.words2.json`;
-  if (fs.existsSync(cache)) {
-    const c = readFreshCache<[number, number][] | null>(cache, file);
-    if (c !== undefined) return c ?? undefined;
-  }
+export async function transcribeAudio(file: string): Promise<Transcript | undefined> {
+  const cache = `${file}.asr.json`;
+  const cached = readFreshCache<Transcript>(cache, file);
+  if (cached) return cached;
   if ((await ttsProvider().catch(() => 'none')) !== 'voicestudio') return undefined;
   const { apiKey } = ttsSettings().voicestudio;
   const url = await voicestudioUrl();
   if (!url) return undefined;
-  let words: [number, number][] | null = null;
   try {
     const form = new FormData();
     form.append('file', new Blob([fs.readFileSync(file)], { type: 'audio/mpeg' }), path.basename(file));
@@ -204,17 +206,26 @@ export async function measuredWords(file: string, line: string): Promise<[number
     form.append('response_format', 'verbose_json');
     form.append('timestamp_granularities[]', 'word');
     const res = await slowFetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} }, Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000);
-    if (res.ok) {
-      const data = (await res.json()) as { words?: { start: number; end: number }[] };
-      const expected = line.trim().split(/\s+/).filter(Boolean).length;
-      if (data.words && data.words.length === expected) words = data.words.map((w) => [w.start, w.end]);
-    }
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { text?: string; words?: { start: number; end: number }[] };
+    const t: Transcript = { text: String(data.text ?? ''), words: (data.words ?? []).map((w) => ({ start: Number(w.start), end: Number(w.end) })) };
+    writeCache(cache, file, t);
+    return t;
   } catch {
     // 연결 문제(시간 초과 등)는 기억하지 않는다: 다음에 다시 시도한다
     return undefined;
   }
-  writeCache(cache, file, words);
-  return words ?? undefined;
+}
+
+/**
+ * 실제 음성의 어절별 시간 (받아쓰기 결과에서).
+ * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다.
+ */
+export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
+  const t = await transcribeAudio(file);
+  if (!t) return undefined;
+  const expected = line.trim().split(/\s+/).filter(Boolean).length;
+  return t.words.length === expected ? t.words.map((w) => [w.start, w.end]) : undefined;
 }
 
 /**

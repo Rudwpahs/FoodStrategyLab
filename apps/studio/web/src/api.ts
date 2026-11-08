@@ -161,7 +161,7 @@ export const api = {
   saveScript: (id: number, script: Script, note: string) => request<ProjectDetail>('PUT', `/projects/${id}/script`, { script, note }),
   restore: (id: number, version: number) => request<ProjectDetail>('POST', `/projects/${id}/versions/${version}/restore`),
   check: (id: number) => request<{ version: number; issues: Issue[]; estimatedSeconds: number }>('GET', `/projects/${id}/check`),
-  review: (id: number, body: { version: number; reviewer: string; checklist: Record<string, boolean>; decision: string; note: string }) =>
+  review: (id: number, body: { version: number; reviewer: string; checklist: Record<string, boolean>; decision: string; note: string; acceptQa?: boolean }) =>
     request<ProjectDetail>('POST', `/projects/${id}/reviews`, body),
   voice: (id: number) => request<{ provider: string; generated: number }>('POST', `/projects/${id}/voice`),
   preview: (id: number) => request<{ version: number; voiced: boolean; props: VideoProps }>('GET', `/projects/${id}/preview`),

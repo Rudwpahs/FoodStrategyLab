@@ -477,6 +477,17 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const body = req.body ?? {};
     // 로그인한 경우 검수자는 로그인한 사람 (다른 사람 이름으로 승인하지 못하게)
     const reviewer = res.locals.user ? String(res.locals.user.displayName) : String(body.reviewer ?? '');
+    // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
+    if (String(body.decision) === 'approved') {
+      const render = repo
+        .getProject(pid)
+        .renders.filter((r) => r.status === 'done' && r.scriptVersion === Number(body.version))
+        .sort((a, b) => b.id - a.id)[0];
+      const errs = render?.qa?.issues.filter((i) => i.level === 'error') ?? [];
+      if (errs.length && body.acceptQa !== true) {
+        throw new HttpError(409, `영상 자동 검사에서 고쳐야 할 문제가 ${errs.length}건 있어요: ${errs[0]!.message} 영상을 다시 만들거나, 직접 보고 괜찮다면 확인 후 승인할 수 있어요.`);
+      }
+    }
     repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: body.note });
     res.json(repo.getProject(pid));
   });

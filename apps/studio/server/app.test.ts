@@ -118,6 +118,21 @@ describe('스튜디오 API 흐름', () => {
     expect(updated.body.recipe.tips).toEqual(['새 팁']);
   });
 
+  it('영상 자동 검사에서 대사 잘림 같은 오류가 나오면, 확인 없이 승인하지 않는다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[2] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const rid = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    testRepo.setRenderQa(rid, { issues: [{ level: 'error', code: 'cut', scene: 2, sceneId: 's2', at: 8.15, message: '장면 2 대사 끝이 잘렸어요.' }], checked: ['대사 끝 잘림'], fixed: [] });
+    const blocked = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toContain('대사 끝이 잘렸어요');
+    expect((await call('GET', `/renders/${rid}`)).body.qa.issues[0].code).toBe('cut');
+    // 수정 요청은 막지 않는다
+    expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'changes_requested', note: '잘림' })).status).toBe(200);
+    // 직접 보고 확인했다면 승인할 수 있다
+    expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved', acceptQa: true })).status).toBe(200);
+  });
+
   it('AI 붙여넣기 오류는 400으로 알려준다', async () => {
     const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[0] })).body.id;
     const res = await call('POST', `/projects/${pid}/script/ai`, { text: '죄송해요, 못 만들었어요' });

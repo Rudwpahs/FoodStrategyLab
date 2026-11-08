@@ -144,6 +144,9 @@ export function openDb(file: string): Db {
   // 레시피를 사진·파일에서 읽었을 때: 원본 파일 목록, AI가 제안한 칸, 읽기 어려웠던 부분
   if (!cols.has('source_json')) db.exec("ALTER TABLE projects ADD COLUMN source_json TEXT NOT NULL DEFAULT '{}'");
   // 블로그 원고 윤문(im-not-ai): 원문 문단 → 다듬은 문단. 원문이 바뀌면 자연히 적용되지 않는다
+  // 완성 영상 자동 품질 검사 결과 (대사 잘림·무음·검은 화면·받아쓰기 대조)
+  const renderCols = new Set((db.prepare('PRAGMA table_info(renders)').all() as { name: string }[]).map((c) => c.name));
+  if (!renderCols.has('qa_json')) db.exec("ALTER TABLE renders ADD COLUMN qa_json TEXT NOT NULL DEFAULT ''");
   if (!cols.has('polish_json')) db.exec("ALTER TABLE projects ADD COLUMN polish_json TEXT NOT NULL DEFAULT '{}'");
   return db;
 }

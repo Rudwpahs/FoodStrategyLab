@@ -3,12 +3,13 @@ import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { cachedSpeechBounds, extractFrame, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { QA_STEP, auditAudio, auditFrames, lineMatch, type QaIssue, type QaReport } from '@mat-lab/video/qa';
 import { recipeCardPages } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
 import { HttpError, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
-import { cachedAudio, measuredWords, synthesize, ttsProvider, voiceIdentity } from './tts.ts';
+import { cachedAudio, measuredWords, synthesize, transcribeAudio, ttsProvider, voiceIdentity } from './tts.ts';
 
 export const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 export const RENDER_DIR = path.join(DATA_DIR, 'renders');
@@ -19,7 +20,7 @@ const audioUrl = (file: string, origin = '') => renderUrl(origin, `/media/audio/
 const renderUrl = (origin: string, url: string) => (origin ? withRenderToken(`${origin}${url}`) : url);
 
 /** 캐시된 음성이 있으면 그 길이로, 없으면 추정 길이로 미리보기 타임라인을 만든다. */
-export async function previewTimeline(script: Script, origin = ''): Promise<{ timings: SceneTiming[]; voiced: boolean }> {
+export async function previewTimeline(script: Script, origin = '', opts: { fullLength?: Set<string> } = {}): Promise<{ timings: SceneTiming[]; voiced: boolean }> {
   const provider = await ttsProvider().catch(() => 'none' as const);
   const identity = await voiceIdentity(provider).catch(() => null);
   const audio = script.scenes.map((s) => cachedAudio(s.line, AUDIO_DIR, identity));
@@ -36,7 +37,9 @@ export async function previewTimeline(script: Script, origin = ''): Promise<{ ti
     const bounds = await cachedSpeechBounds(a.file).catch(() => ({ start: 0, end: a.seconds, silent: false }));
     const words = await measuredWords(a.file, script.scenes[i]!.line).catch(() => undefined);
     extras.push({ trimStart: bounds.start, words });
-    seconds.push(Math.max(0.3, bounds.end - bounds.start));
+    // 자동 검사에서 끝이 잘렸던 장면은 말소리 측정 대신 음성 파일 끝까지 쓴다
+    const full = opts.fullLength?.has(script.scenes[i]!.id) ? a.seconds - bounds.start + 0.1 : 0;
+    seconds.push(Math.max(0.3, bounds.end - bounds.start, full));
   }
   const timings = buildTimeline(
     script,
@@ -225,7 +228,11 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
 
     set('음성 생성', 0.02);
     await generateVoice(script, () => job.canceled);
-    const { timings } = await previewTimeline(script, origin);
+    // 받아쓰기로 대사와 음성을 맞춰 본다: 중간에 끊겨 만들어진 음성은 한 번 다시 만든다
+    set('음성 확인', 0.05);
+    const qa: QaReport = { issues: [], checked: [], fixed: [] };
+    await checkVoiceLines(script, qa, () => job.canceled);
+    let { timings } = await previewTimeline(script, origin);
     const photo = repo.getPhoto(projectId);
     const props: VideoProps = {
       script,
@@ -244,25 +251,46 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const renderer = await loadRenderer();
     await renderer.getServeUrl();
 
-    set('영상 렌더링', 0.12);
-    const raw = path.join(outDir, 'video-raw.mp4');
-    const { cancelSignal, cancel } = renderer.makeCancelSignal();
-    job.cancelRemotion = cancel;
-    await renderer.renderVideo({
-      inputProps: props,
-      outputLocation: raw,
-      cancelSignal,
-      onProgress: (p) => {
-        if (!job.canceled) repo.updateRender(renderId, { status: 'running', stage: '영상 렌더링', progress: 0.12 + p * 0.7, outputDir: outDir });
-      },
-    });
-    job.cancelRemotion = undefined;
-    // 숏폼 기준 음량(-14 LUFS)으로 맞춘다
-    set('음량 맞추기', 0.83);
-    await normalizeLoudness(raw, path.join(outDir, 'video.mp4')).then(
-      () => fs.rmSync(raw),
-      () => fs.renameSync(raw, path.join(outDir, 'video.mp4')),
-    );
+    const renderOnce = async (stage: string) => {
+      set(stage, 0.12);
+      const raw = path.join(outDir, 'video-raw.mp4');
+      const { cancelSignal, cancel } = renderer.makeCancelSignal();
+      job.cancelRemotion = cancel;
+      await renderer.renderVideo({
+        inputProps: { ...props, timings },
+        outputLocation: raw,
+        cancelSignal,
+        onProgress: (p) => {
+          if (!job.canceled) repo.updateRender(renderId, { status: 'running', stage, progress: 0.12 + p * 0.68, outputDir: outDir });
+        },
+      });
+      job.cancelRemotion = undefined;
+      // 숏폼 기준 음량(-14 LUFS)으로 맞춘다
+      set('음량 맞추기', 0.8);
+      await normalizeLoudness(raw, path.join(outDir, 'video.mp4')).then(
+        () => fs.rmSync(raw),
+        () => fs.renameSync(raw, path.join(outDir, 'video.mp4')),
+      );
+    };
+    await renderOnce('영상 렌더링');
+
+    // 완성 영상 자동 품질 검사: 대사가 잘린 장면이 있으면 그 장면을 음성 끝까지 늘려 한 번 다시 만든다
+    set('자동 품질 검사', 0.82);
+    let audit = await auditVideo(path.join(outDir, 'video.mp4'), timings, script);
+    const cut = new Set(audit.filter((i) => i.code === 'cut' && i.sceneId).map((i) => i.sceneId!));
+    if (cut.size) {
+      ({ timings } = await previewTimeline(script, origin, { fullLength: cut }));
+      await renderOnce('대사 잘림 고쳐서 다시 만드는 중');
+      set('자동 품질 검사', 0.83);
+      const before = audit.filter((i) => i.code === 'cut');
+      audit = await auditVideo(path.join(outDir, 'video.mp4'), timings, script);
+      const still = new Set(audit.filter((i) => i.code === 'cut').map((i) => i.sceneId));
+      for (const b of before) if (!still.has(b.sceneId)) qa.fixed.push(`장면 ${b.scene} 대사 끝이 잘려서, 음성 끝까지 늘려 다시 만들었어요.`);
+    }
+    qa.issues.push(...audit);
+    qa.checked.push('대사 끝 잘림', '목소리 없는 장면', '긴 무음', '검은 화면');
+    repo.setRenderQa(renderId, qa);
+    fs.writeFileSync(path.join(outDir, 'qa.json'), JSON.stringify(qa, null, 2));
     set('자막 확인 프레임', 0.85);
     await captionCheckFrames(path.join(outDir, 'video.mp4'), script, timings, path.join(outDir, 'caption-check')).catch(() => undefined);
 
@@ -291,7 +319,8 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timings));
 
     repo.updateRender(renderId, { status: 'done', stage: '완료', progress: 1, finished: true });
-    repo.logEvent(projectId, 'render', `제작 완료 (작업 #${renderId})`);
+    const errs = qa.issues.filter((i) => i.level === 'error').length;
+    repo.logEvent(projectId, 'render', `제작 완료 (작업 #${renderId}) · 자동 검사 ${errs ? `문제 ${errs}건` : '통과'}${qa.fixed.length ? ` · 자동으로 고침 ${qa.fixed.length}건` : ''}`);
   } catch (e) {
     const message = (e as Error).message || String(e);
     if (job.canceled || e instanceof RenderCanceled) {
@@ -304,6 +333,58 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
   } finally {
     jobs.delete(renderId);
   }
+}
+
+/** 완성 영상의 소리·화면 검사 (실패해도 제작은 끝낸다) */
+export async function auditVideo(video: string, timings: SceneTiming[], script: Script): Promise<QaIssue[]> {
+  const issues: QaIssue[] = [];
+  try {
+    issues.push(...auditAudio({ db: await audioDb(video), step: QA_STEP, timings, script }));
+  } catch (e) {
+    console.warn('[자동 검사] 소리 검사 실패:', (e as Error).message);
+  }
+  try {
+    issues.push(...auditFrames(await frameBrightness(video, 0.5), 0.5));
+  } catch (e) {
+    console.warn('[자동 검사] 화면 검사 실패:', (e as Error).message);
+  }
+  return issues;
+}
+
+/**
+ * 장면별 음성을 받아써서 대사와 맞춰 본다 (받아쓰기를 쓸 수 있을 때만).
+ * - 뒷부분이 없거나(중간에 끊겨 만들어짐) 대사와 많이 다르면 그 음성을 지우고 한 번 다시 만든다
+ * - 그래도 다르면 문제로 남긴다. 받아쓰기도 틀릴 수 있어 '다르게 들림'은 경고로 둔다
+ */
+export async function checkVoiceLines(script: Script, qa: QaReport, shouldStop: () => boolean = () => false) {
+  const provider = await ttsProvider().catch(() => 'none' as const);
+  const identity = await voiceIdentity(provider).catch(() => null);
+  let checked = 0;
+  for (const [i, scene] of script.scenes.entries()) {
+    if (shouldStop()) throw new RenderCanceled();
+    const a = cachedAudio(scene.line, AUDIO_DIR, identity);
+    if (!a) continue;
+    const heard = await transcribeAudio(a.file).catch(() => undefined);
+    if (!heard) continue;
+    checked++;
+    let m = lineMatch(scene.line, heard.text);
+    let text = heard.text;
+    if (m.truncated || m.ratio < 0.6) {
+      removeAudioWithCache(a.file);
+      const again = await synthesize(scene.line, AUDIO_DIR);
+      const heard2 = await transcribeAudio(again.file).catch(() => undefined);
+      if (heard2) {
+        const m2 = lineMatch(scene.line, heard2.text);
+        if (!m2.truncated && m2.ratio >= 0.6) qa.fixed.push(`장면 ${i + 1} 음성이 ${m.truncated ? '중간에 끊겨' : '대사와 다르게'} 만들어져서 다시 만들었어요.`);
+        m = m2;
+        text = heard2.text;
+      }
+    }
+    if (m.truncated) qa.issues.push({ level: 'error', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사 중간에서 끊겨요 (들린 말: "${text.trim().slice(0, 40)}").` });
+    else if (m.ratio < 0.6) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사와 많이 다르게 들려요 (들린 말: "${text.trim().slice(0, 40)}").` });
+    else if (m.missing.length && m.ratio < 0.92) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });
+  }
+  if (checked) qa.checked.push(`받아쓰기로 대사 대조 (${checked}개 장면)`);
 }
 
 /** 자막마다 한 장씩 프레임을 뽑아 둔다: 자막이 얼굴을 가리거나 잘리지 않았는지 확인용 */

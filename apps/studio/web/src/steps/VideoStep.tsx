@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
+import { QaPanel } from '../components/QaPanel.tsx';
 import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
 import { BlogChoice } from '../components/BlogChoice.tsx';
@@ -188,6 +189,13 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
               <img src={`${render.baseUrl}/thumbnail.png`} alt="썸네일" style={{ width: 200, borderRadius: 10 }} />
               <img src={`${render.baseUrl}/recipe-card.png`} alt="레시피 카드" style={{ width: 200, borderRadius: 10 }} />
             </div>
+            <QaPanel
+              render={render}
+              onRemake={async () => {
+                const r = await run(() => api.startRender(project.id), '영상을 다시 만들기 시작했어요');
+                if (r) reload();
+              }}
+            />
             {render.captionChecks.length > 0 && (
               <div className="stack">
                 <div className="small"><b>자막 확인</b> <span className="muted">자막마다 한 장씩: 얼굴을 가리거나 잘린 자막이 없는지 보세요.</span></div>
