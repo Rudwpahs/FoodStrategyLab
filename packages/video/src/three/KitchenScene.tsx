@@ -31,7 +31,8 @@ export interface StageState {
 export const MOODS: Record<Mood, { bg: string; sky: string; ground: string; hemi: number; key: string; keyI: number; rim: string; rimI: number; fire: number }> = {
   morning: { bg: '#F4E2C6', sky: '#FFF4E4', ground: '#A9703F', hemi: 0.8, key: '#FFF0D6', keyI: 2.3, rim: '#8EC2FF', rimI: 1.6, fire: 0 },
   curious: { bg: '#D9D3C7', sky: '#E6F0F0', ground: '#6E5A48', hemi: 0.5, key: '#FFF2E2', keyI: 1.8, rim: '#2FD8C8', rimI: 3.4, fire: 0 },
-  gloom: { bg: '#8E8AA0', sky: '#9FB0DA', ground: '#3E3240', hemi: 0.32, key: '#9DB2EA', keyI: 1.0, rim: '#FF3D55', rimI: 4.0, fire: 0 },
+  // 실패 장면: 살짝 어둡고 차분하게만 (예전 값은 빨강·파랑이 너무 세서 음식이 회색으로 보이고 렌더 오류처럼 보였다)
+  gloom: { bg: '#B4ADA6', sky: '#DCE1EA', ground: '#5A4A40', hemi: 0.62, key: '#E2E6EE', keyI: 1.7, rim: '#A9B4CC', rimI: 1.3, fire: 0 },
   fire: { bg: '#E6D0B2', sky: '#FFF0DC', ground: '#8E5A34', hemi: 0.55, key: '#FFE5C2', keyI: 1.8, rim: '#FF7A2E', rimI: 2.6, fire: 1 },
   fresh: { bg: '#F2E9DB', sky: '#FFFFFF', ground: '#9C7A55', hemi: 0.85, key: '#FFFFFF', keyI: 2.3, rim: '#86E3BC', rimI: 1.7, fire: 0 },
   golden: { bg: '#F0D3A8', sky: '#FFE9C4', ground: '#9A6234', hemi: 0.7, key: '#FFD08A', keyI: 2.5, rim: '#FFA53A', rimI: 2.4, fire: 0 },

@@ -187,7 +187,8 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
     case 'problem': {
       if (!recipe.commonMistake) notes.push('흔한 실수가 입력되지 않아, 실수 대신 원리 중심으로 구성했어요. 연구자에게 실제로 자주 보는 실수를 물어 입력하면 더 좋아요.');
       body.push(brand());
-      body.push(explain(0, '원인은요,')!);
+      // 원리 문장이 원인 설명일 수도, 바른 방법일 수도 있어서 "원인은요"로 단정하지 않는다 (실패 장면 뒤에 해결법 문장이 오면 앞뒤가 안 맞았다)
+      body.push(explain(0)!);
       body.push(ingredients()!, steps((n, r) => `바른 순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
       body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.signOff}`));
       break;

@@ -112,6 +112,14 @@ describe('연출 엔진 대본이 자연스럽게 들린다', () => {
     expect(skit).toContain('대체 왜 이렇게 된 거죠');
   });
 
+  it('문제 해결형: 실패 장면 뒤에 "원인은요"라고 단정하지 않는다 (원리가 해결법 문장일 수 있다)', () => {
+    const fix = { ...cheonggukjang, commonMistake: '청국장을 처음부터 오래 볶으면 향이 날아간다.' };
+    const { script } = buildStyledScript(fix, { style: 'problem', hookType: 'problem-solve' });
+    const explain = script.scenes.find((s) => s.type === 'explain')!;
+    expect(explain.line.startsWith(BRAND.noteLead)).toBe(true);
+    expect(script.scenes.map((s) => s.line).join(' ')).not.toContain('원인은요');
+  });
+
   it('주제를 훅에서 이미 말했으면 다음 장면에서 다시 읽지 않는다', () => {
     const spinach = SAMPLE_RECIPES.find((r) => r.dishName === '시금치나물')!;
     const { script } = buildStyledScript(spinach, { style: 'experiment', hookType: 'question' });
