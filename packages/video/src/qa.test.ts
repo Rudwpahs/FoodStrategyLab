@@ -44,6 +44,24 @@ describe('완성 영상 자동 품질 검사', () => {
     expect(cut[0]!.message).toContain('나중에 넣을까?');
   });
 
+  it('효과음이 뚝 끝나는 것(말소리 구간 밖)이나 목소리 없는 영상은 잘림·무음으로 보지 않는다 (실제 시험 렌더에서 나온 오탐)', () => {
+    // 장면 2 말소리는 3~7.5초. 10초쯤 효과음이 뚝 끝남
+    const db = track([
+      [0, 2.4, -18],
+      [2.4, 2.6, -50],
+      [3.1, 7.3, -20],
+      [7.3, 7.6, -50],
+      [8.1, 9.6, -19],
+      [9.6, 9.8, -48],
+      [9.9, 10.2, -15],
+    ]);
+    expect(abruptCuts(db).map((t) => t.toFixed(2))).toEqual(['10.20']);
+    expect(auditAudio({ db, timings, script }).filter((i) => i.code === 'cut')).toEqual([]);
+    const noVoice = timings.map(({ audioUrl: _drop, ...t }) => t);
+    const issues = auditAudio({ db: track([[6.4, 6.5, -15]], 12), timings: noVoice, script });
+    expect(issues).toEqual([]);
+  });
+
   it('목소리가 들리지 않는 장면을 잡는다', () => {
     const db = track([
       [0, 2.4, -18],

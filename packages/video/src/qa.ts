@@ -90,8 +90,20 @@ export function auditAudio(input: { db: number[]; step?: number; timings: SceneT
   const label = (i: number) => `장면 ${i + 1}`;
   const line = (i: number) => script.scenes[i]?.line ?? '';
 
+  // 장면이 대사보다 먼저 끝나면 '말소리 구간의 끝'에서 소리가 뚝 끊긴다. 그 근처(끝 0.6초 전 ~ 0.3초 뒤)만 본다:
+  // 효과음이 뚝 끝나는 것이나 음성 속 쉼은 대사 잘림이 아니다 (대사 중간이 빠진 음성은 받아쓰기 대조가 잡는다)
+  const speechWindow = (t: SceneTiming): [number, number] => {
+    const end = (t.from + t.speechFrames) / fps;
+    return [Math.max(t.from / fps, end - 0.6), end + 0.3];
+  };
+  const voiced = timings.filter((t) => t.audioUrl);
   for (const at of abruptCuts(db, step)) {
-    const i = sceneIndexAt(at, timings, fps);
+    const t = voiced.find((v) => {
+      const [a, b] = speechWindow(v);
+      return at >= a && at <= b;
+    });
+    if (!t) continue;
+    const i = timings.indexOf(t);
     issues.push({ level: 'error', code: 'cut', scene: i + 1, sceneId: timings[i]?.sceneId, at, message: `${label(i)} 대사 끝이 잘렸어요 (${at.toFixed(1)}초, "${line(i).slice(-14)}" 부분).` });
   }
 
@@ -103,7 +115,8 @@ export function auditAudio(input: { db: number[]; step?: number; timings: SceneT
     if (loudest < -45) issues.push({ level: 'error', code: 'silent', scene: i + 1, sceneId: t.sceneId, at: t.from / fps, message: `${label(i)} 목소리가 들리지 않아요 ("${line(i).slice(0, 14)}…").` });
   });
 
-  // 끝의 서명 장면 뒤 여유(약 2초)는 무음이어도 괜찮다
+  // 목소리가 없는 영상(음성 엔진 없음)은 무음 검사를 하지 않는다. 끝의 서명 장면 뒤 여유(약 2초)는 무음이어도 괜찮다
+  if (!voiced.length) return issues;
   const total = db.length * step;
   for (const [s, e] of quietRuns(db, step)) {
     if (e >= total - 0.1 && s >= total - 2.6) continue;
