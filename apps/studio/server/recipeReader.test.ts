@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import fs from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -6,7 +7,8 @@ import { checkScript, contentCandidates } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { openDb } from './db.ts';
-import { ExtractedRecipeSchema, RecipeReader, TOPIC_GUIDE, blandTopicNotes, costUsd, groundSuggestions, monthSpentUsd, monthlyBudgetUsd, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn, type TopicsFn } from './recipeReader.ts';
+import { costUsd, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
+import { ExtractedRecipeSchema, RecipeReader, TOPIC_GUIDE, blandTopicNotes, groundSuggestions, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn, type TopicsFn } from './recipeReader.ts';
 import { Repo } from './repo.ts';
 
 /** 손글씨 김치전 레시피를 읽었다고 치는 결과 */
@@ -191,6 +193,30 @@ const fakeTopics: TopicsFn = async (req) => {
   };
 };
 
+describe('다른 주제 더 보기 (가짜 Claude)', () => {
+  it('AI가 지어낸 흔한 실수는 근거로 치지 않는다 (자료·연구자가 쓴 글만 근거)', async () => {
+    const calls: { user: string }[] = [];
+    const topics: TopicsFn = async (req) => {
+      calls.push(req);
+      return {
+        parsed: { suggestions: [{ angle: 'mistake', topic: '김치전, 미지근한 물이면 눅눅해요', principle: '미지근한 물로 반죽하면 눅눅해진다.', category: 'fix', evidence: { where: 'mistake', number: 0, quote: '미지근한 물로 하면 눅눅해진다' } }] },
+        inputTokens: 10,
+        outputTokens: 10,
+        stopReason: 'end_turn',
+      };
+    };
+    const reader = new RecipeReader(openDb(':memory:'), fakeParse(kimchijeon), topics);
+    const { recipe, aiFields } = await reader.read([{ name: 'a.jpg', type: 'image/jpeg', data: png }]);
+    expect(aiFields).toContain('commonMistake');
+    const ai = await reader.moreTopics(recipe, { exclude: [], aiMistake: true });
+    expect(ai.suggestions[0]!.grounded).toBe(false);
+    expect(calls.at(-1)!.user).not.toContain(recipe.commonMistake);
+    // 자료에 적혀 있던(또는 연구자가 쓴) 실수라면 근거가 된다
+    const own = await reader.moreTopics(recipe, { exclude: [] });
+    expect(own.suggestions[0]!.grounded).toBe(true);
+  });
+});
+
 describe('주제 꼴·뻔한 주제 거르기', () => {
   it('레시피 읽기 지시문에 주제 쓰는 법(꼴 6가지)이 들어가고, 예시가 "왜 ~할까?"만 반복하지 않는다', async () => {
     const calls: { system: string }[] = [];
@@ -287,6 +313,8 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     expect(sent.user).toContain('김치전은 왜 금방 눅눅해질까?');
     expect(sent.user).toContain('<연구자_요청>\n실수 위주로');
     expect(sent.user).toContain('3. 달군 팬에 기름을 넉넉히 두르고 얇게 부친다.');
+    // AI가 지어 넣은 흔한 실수는 주제 근거로 보내지 않는다
+    expect(sent.user).not.toContain('흔한 실수');
     const after = repo.getSource(made.id)!.suggestions;
     // 이미 나온 "김치전은 왜 금방 눅눅해질까?"는 다시 넣지 않는다 → 새로 4개
     expect(after.length).toBe(before + 4);
@@ -353,6 +381,27 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     expect(confirmed.status).toBe(200);
     expect(repo.getSource(id)?.aiConfirmedBy).toBe('이희재');
     expect((await approve()).status).toBe(200);
+    fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
+  });
+
+  it('올린 원본 자료는 HTML·SVG로 열리지 않는다 (글은 일반 텍스트로만)', async () => {
+    const html = Buffer.from('<script>fetch("/api/projects")</script> 김치 200g').toString('base64');
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>').toString('base64');
+    const res = await fetch(`${base}/api/projects/from-files`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ files: [{ name: 'recipe.txt', type: 'text/html', data: html }, { name: 'a.svg', type: 'text/svg+xml', data: svg }] }),
+    });
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: number };
+    for (const f of repo.getSource(id)!.files) {
+      expect(f.file).toMatch(/\.txt$/);
+      const served = await fetch(`${base}${f.url}`);
+      expect(served.status).toBe(200);
+      expect(served.headers.get('content-type')).toMatch(/^text\/plain/);
+      expect(served.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(served.headers.get('content-security-policy')).toContain('sandbox');
+    }
     fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
   });
 

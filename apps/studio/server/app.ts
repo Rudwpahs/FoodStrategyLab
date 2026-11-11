@@ -10,12 +10,13 @@ import { DATA_DIR } from './config.ts';
 import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
 import { toJpeg } from '@mat-lab/video/audio';
 import type { IgCheck } from '@mat-lab/recipe-core';
-import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startCandidateVoices, startRender } from './pipeline.ts';
+import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, removeProject, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
-import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, monthlyBudgetUsd, type UploadFile } from './recipeReader.ts';
+import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
+import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
-import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
-import { HttpError, type Publication, type Repo } from './repo.ts';
+import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
+import { HttpError, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -27,7 +28,7 @@ interface VoiceSamplesJob {
   tempo: number;
   items: Record<string, VoiceSampleResult | null>;
 }
-import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
+import { engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 
 const id = (req: Request) => {
   const n = Number(req.params.id);
@@ -103,8 +104,15 @@ function carouselFiles(dir: string): string[] {
 }
 
 /** 올리기 전 점검 중 영상·표지에 관한 것 (설명 글 점검은 화면에서 instagramCaptionChecks로 바로 한다) */
-function reelChecks(render: { outputDir: string }): IgCheck[] {
-  const out: IgCheck[] = [{ level: 'ok', text: '이희재 연구자가 승인한 최신 대본의 영상이에요' }];
+function reelChecks(render: { outputDir: string }, approval: Review, researcherApproved: boolean): IgCheck[] {
+  // approvedRender를 거친 뒤에만 부른다: 승인된 최신 대본의 영상인 것은 확인됐다. 연구자 계정의 승인인지는 따로 본다
+  const out: IgCheck[] = [
+    researcherApproved
+      ? { level: 'ok', text: `연구자 계정(${approval.reviewer})이 승인한 최신 대본의 영상이에요` }
+      : { level: 'warn', text: `승인한 최신 대본의 영상이에요 (승인: ${approval.reviewer}). 연구자 계정이 정해지지 않아 연구자 본인의 승인인지는 확인하지 못했어요.` },
+  ];
+  const hasVideo = fs.existsSync(path.join(render.outputDir, 'video.mp4'));
+  if (!hasVideo) out.push({ level: 'error', text: '영상 파일이 없어요. 영상을 다시 만들어 주세요.' });
   try {
     const timings = JSON.parse(fs.readFileSync(path.join(render.outputDir, 'timeline.json'), 'utf8')) as SceneTiming[];
     const secs = timings.reduce((m, t) => Math.max(m, t.from + t.durationInFrames), 0) / FPS;
@@ -114,9 +122,23 @@ function reelChecks(render: { outputDir: string }): IgCheck[] {
   }
   const hasCover = fs.existsSync(path.join(render.outputDir, 'cover.png')) || fs.existsSync(path.join(render.outputDir, 'cover.jpg'));
   out.push(hasCover ? { level: 'ok', text: '표지 이미지를 함께 보내요 (프로필 3:4 안쪽에 제목)' } : { level: 'warn', text: '표지 이미지가 없어요. 인스타그램이 영상 첫 장면을 표지로 써요.' });
-  out.push({ level: 'ok', text: '1080×1920 · H.264 · 소리 48kHz (인스타그램 권장 규격)' });
+  // 파일을 직접 분석하지는 않는다: 스튜디오 렌더 설정(세로 1080×1920 화면, H.264)으로 만든 파일이 있을 때만 적는다
+  if (hasVideo) out.push({ level: 'ok', text: '1080×1920 · H.264 (스튜디오 렌더 설정으로 만든 영상)' });
   return out;
 }
+
+/** /media로 보낼 수 있는 폴더와 파일 종류 (렌더 폴더의 zip·md·txt·json 등은 빠짐) */
+const MEDIA_TYPES = new Map<string, RegExp>([
+  ['audio', /\.(mp3|wav)$/i],
+  ['photos', /\.(jpe?g|png|webp)$/i],
+  ['clips', /\.(mp4|webm|jpe?g|png|webp)$/i],
+  ['renders', /\.(mp4|jpe?g|png|webp)$/i],
+  ['sources', /\.(jpe?g|png|webp|gif|pdf|txt)$/i],
+]);
+
+/** 올린 원본 자료의 확장자: 사진·PDF는 그 형식으로, 나머지(글)는 모두 txt (HTML·SVG처럼 실행되는 형식으로 저장하지 않는다) */
+const SOURCE_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'application/pdf': 'pdf' };
+const sourceExt = (type: string) => (Object.hasOwn(SOURCE_EXT, type.toLowerCase()) ? SOURCE_EXT[type.toLowerCase()]! : 'txt');
 
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
@@ -143,10 +165,21 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const ig = deps.instagram ?? new Instagram(repo.db);
   const reader = deps.recipeReader ?? new RecipeReader(repo.db);
   const humanizer = deps.humanizer ?? new Humanizer(repo.db);
+  /** 블로그·SNS 문구에 넣을 승인 정보 (승인 전이면 null) */
+  const reviewOf = (project: ProjectDetail) => (project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null);
+  /** 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영 */
+  const recentFormats = (pid: number) =>
+    repo
+      .listProjects()
+      .filter((p) => p.id !== pid)
+      .slice(0, 5)
+      .map((p) => repo.latestScript(p.id)?.script)
+      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
+      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
   /** 윤문하기 전 원래 블로그 원고 (style이 없으면 기본 자동 원고) */
   const rawBlog = (pid: number, styleParam: unknown) => {
     const project = repo.getProject(pid);
-    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const review = reviewOf(project);
     const style = (BLOG_STYLES as readonly string[]).includes(String(styleParam)) ? (String(styleParam) as BlogStyle) : null;
     const notes = repo.getExpertNotes(pid);
     const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
@@ -199,9 +232,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json({ mode, allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
   });
   app.post('/api/auth/setup', (req, res) => {
-    const { code, username, displayName, password } = req.body ?? {};
+    const { code, username, displayName, password, researcher } = req.body ?? {};
     const { token, user } = auth.setupFirstUser(
-      { code: String(code ?? ''), username: String(username ?? ''), displayName: String(displayName ?? ''), password: String(password ?? '') },
+      { code: String(code ?? ''), username: String(username ?? ''), displayName: String(displayName ?? ''), password: String(password ?? ''), researcher: researcher === true },
       clientIp(req),
     );
     res.setHeader('Set-Cookie', sessionCookie(req, token));
@@ -209,9 +242,28 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   // 그 밖의 모든 API·미디어는 로그인 확인
   app.use(['/api', '/media'], authGuard(auth));
-  // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
-  app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
-  app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
+  // 정해 둔 미디어 폴더의 정해 둔 파일 종류만 보낸다 (DB·설정 파일 등은 보내지 않음). 확인은 디코딩한 주소로 한다
+  app.use('/media', (req, res, next) => {
+    let file: string;
+    try {
+      file = decodeURIComponent(req.path);
+    } catch {
+      return next(new HttpError(400, '잘못된 주소예요.'));
+    }
+    const [, dir = '', ...rest] = file.split('/');
+    const allowed = MEDIA_TYPES.get(dir);
+    if (!allowed || !rest.length || rest.some((p) => !p || p.startsWith('.'))) return next(new HttpError(404, '없는 파일이에요.'));
+    // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
+    if (!allowed.test(file)) return next(dir === 'renders' ? new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.') : new HttpError(404, '없는 파일이에요.'));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // 올린 원본 자료는 문서로 열려도 스크립트가 돌지 않게 한다
+    if (dir === 'sources') {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      if (/\.pdf$/i.test(file)) res.setHeader('Content-Disposition', 'attachment');
+    }
+    next();
+  });
+  for (const dir of MEDIA_TYPES.keys()) app.use(`/media/${dir}`, express.static(path.join(DATA_DIR, dir), { fallthrough: false, dotfiles: 'deny' }));
 
   // 목소리 후보 들어 보기 작업 (한 번에 하나)
   let samplesJob: VoiceSamplesJob | null = null;
@@ -296,32 +348,13 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   api.get('/voice/samples', (_req, res) => res.json(samplesJob));
 
+  /** 목소리 이름으로 고르기: 저장소에 기준 녹음이 있는 목록의 목소리만 (원칙 5) */
   api.put('/voice', (req, res) => {
-    const voice = String(req.body?.voice ?? '').trim();
-    if (!voice) throw new HttpError(400, '목소리를 고르세요.');
-    writeVoiceSettings({ voicestudioVoice: voice });
+    const preset = presetByVoiceName(String(req.body?.voice ?? '').trim());
+    if (!preset) throw new HttpError(400, '고를 수 있는 목소리 목록에 없는 목소리예요.');
+    writeVoiceSettings({ voicestudioVoice: preset.voiceName });
     resetTtsDetection();
     res.json({ selected: voicestudioVoice() });
-  });
-
-  /** 맛조수 목소리를 VoiceStudio에 자동으로 만든다 (이미 있으면 그대로 쓴다) */
-  api.post('/voice/design', async (req, res) => {
-    const vs = await findVoiceStudio();
-    if (vs.state !== 'ok') throw new HttpError(409, vs.state === 'starting' ? 'VoiceStudio가 아직 준비 중입니다. 잠시 뒤 다시 눌러 주세요.' : 'VoiceStudio 앱이 꺼져 있습니다. 앱을 켜 주세요.');
-    const name = String(req.body?.name ?? '맛조수').trim() || '맛조수';
-    const existing = (await listProfiles(vs.url)).find((p) => p.name === name);
-    const profile = existing ?? (await createDesignedVoice(vs.url, name));
-    writeVoiceSettings({ voicestudioVoice: profile.name });
-    resetTtsDetection();
-    res.json({ profile, created: !existing });
-  });
-
-  /** 지금 목소리로 짧은 문장을 만들어 들어본다 */
-  api.post('/voice/sample', async (req, res) => {
-    const text = String(req.body?.text ?? '이희재의 맛 연구소에서 오늘도 실험!').slice(0, 200);
-    if ((await ttsProvider().catch(() => 'none')) === 'none') throw new HttpError(409, '사용할 수 있는 음성 도구가 없습니다.');
-    const a = await synthesize(text, AUDIO_DIR);
-    res.json({ url: `/media/audio/${path.basename(a.file)}`, seconds: a.seconds });
   });
 
   api.get('/projects', (_req, res) => res.json(repo.listProjects()));
@@ -350,8 +383,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const dir = path.join(DATA_DIR, 'sources', String(pid));
     fs.mkdirSync(dir, { recursive: true });
     const saved = files.map((f, i) => {
-      const ext = (f.type.split('/')[1] ?? 'bin').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin';
-      const rel = `sources/${pid}/${i + 1}.${ext}`;
+      const rel = `sources/${pid}/${i + 1}.${sourceExt(f.type)}`;
       fs.writeFileSync(path.join(DATA_DIR, rel), Buffer.from(f.data, 'base64'));
       return { name: f.name, type: f.type, file: rel };
     });
@@ -369,7 +401,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/projects/:id', (req, res) => res.json(repo.getProject(id(req))));
 
   api.delete('/projects/:id', (req, res) => {
-    repo.deleteProject(id(req));
+    removeProject(repo, id(req));
     res.status(204).end();
   });
 
@@ -388,14 +420,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/projects/:id/hooks', (req, res) => {
     const pid = id(req);
     const style = isStyleId(req.query.style) ? req.query.style : undefined;
-    // 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영
-    const recent = repo
-      .listProjects()
-      .filter((p) => p.id !== pid)
-      .slice(0, 5)
-      .map((p) => repo.latestScript(p.id)?.script)
-      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
-      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
+    const recent = recentFormats(pid);
     res.json({
       styles: STYLE_INFO,
       hookInfo: HOOK_INFO,
@@ -477,8 +502,16 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const body = req.body ?? {};
     // 로그인한 경우 검수자는 로그인한 사람 (다른 사람 이름으로 승인하지 못하게)
     const reviewer = res.locals.user ? String(res.locals.user.displayName) : String(body.reviewer ?? '');
-    // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
+    const notes = [String(body.note ?? '').trim()];
+    let warning: string | undefined;
     if (String(body.decision) === 'approved') {
+      // 연구자 계정이 정해져 있으면 연구자 계정만 승인한다. 아직 없으면 예전처럼 받되 화면에 알린다
+      if (auth.researcherCount() > 0) {
+        if ((res.locals.user as User | undefined)?.role !== 'researcher') throw new HttpError(403, '승인은 연구자 계정만 할 수 있어요. 연구자 계정으로 로그인해 주세요.');
+      } else {
+        warning = '연구자 계정이 아직 정해지지 않아 누구나 승인할 수 있어요. 연구자 계정을 정해 주세요 (npm run user:add -- 아이디 --researcher).';
+      }
+      // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
       const render = repo
         .getProject(pid)
         .renders.filter((r) => r.status === 'done' && r.scriptVersion === Number(body.version))
@@ -487,9 +520,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       if (errs.length && body.acceptQa !== true) {
         throw new HttpError(409, `영상 자동 검사에서 고쳐야 할 문제가 ${errs.length}건 있어요: ${errs[0]!.message} 영상을 다시 만들거나, 직접 보고 괜찮다면 확인 후 승인할 수 있어요.`);
       }
+      // 검사 오류를 직접 보고 넘긴 승인은 검수 기록·작업 기록에 남긴다
+      if (errs.length) notes.push(`자동 검사 오류 ${errs.length}건을 직접 확인하고 승인 (${errs.map((e) => e.message).join(' / ').slice(0, 300)})`);
     }
-    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: body.note });
-    res.json(repo.getProject(pid));
+    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: notes.filter(Boolean).join(' — ') });
+    res.json({ ...repo.getProject(pid), ...(warning ? { warning } : {}) });
   });
 
   api.post('/projects/:id/voice', async (req, res) => {
@@ -722,8 +757,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json(job);
   });
   api.get('/renders/:id/instagram', (req, res) => {
-    const { render } = approvedRender(repo, id(req));
-    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render), cards: carouselFiles(render.outputDir).length });
+    const { render, approval } = approvedRender(repo, id(req));
+    const researcherApproved = auth.researcherCount() > 0 && auth.isResearcherName(approval.reviewer);
+    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render, approval, researcherApproved), cards: carouselFiles(render.outputDir).length });
   });
   /**
    * 실제 게시. 연구자가 승인한 최신 대본의 영상만, 화면에서 '올리기'를 다시 확인했을 때만.
@@ -798,16 +834,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.download(file, `matlab-${r.projectId}-v${r.scriptVersion}.zip`);
   });
 
-  // ── 콘텐츠 후보 3가지 ──
-  const recentFormats = (pid: number) =>
-    repo
-      .listProjects()
-      .filter((p) => p.id !== pid)
-      .slice(0, 5)
-      .map((p) => repo.latestScript(p.id)?.script)
-      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
-      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
-
+  // ── 콘텐츠 후보 ──
   // 사진에서 읽은 레시피는 영상 주제를 먼저 고른다 (AI가 고른 주제로 바로 후보 영상을 만들지 않는다)
   api.put('/projects/:id/topic', (req, res) => {
     const pid = id(req);
@@ -820,8 +847,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/projects/:id/topics/more', async (req, res) => {
     const pid = id(req);
     const recipe = repo.getRecipe(pid);
-    const existing = (repo.getSource(pid)?.suggestions ?? []).map((s) => s.topic);
-    const { suggestions, costUsd } = await reader.moreTopics(recipe, { exclude: [...existing, recipe.topic], direction: String(req.body?.direction ?? '') });
+    const source = repo.getSource(pid);
+    const existing = (source?.suggestions ?? []).map((s) => s.topic);
+    // AI가 지어 넣은 흔한 실수는 근거로 치지 않는다 (자료·연구자가 쓴 글만)
+    const aiMistake = Boolean(source?.aiFields.includes('commonMistake'));
+    const { suggestions, costUsd } = await reader.moreTopics(recipe, { exclude: [...existing, recipe.topic], direction: String(req.body?.direction ?? ''), aiMistake });
     if (!suggestions.length) throw new HttpError(502, '새 주제를 받지 못했어요. 다시 눌러 주세요.');
     repo.addSuggestions(pid, suggestions, `AI 주제 후보 ${suggestions.length}개 더 받음 (약 ${costUsd.toFixed(3)}달러)`);
     res.json(repo.getProject(pid));
@@ -889,27 +919,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.status(202).json({ project: repo.getProject(pid), renderId, notes: [...built.notes, ...detached] });
   });
 
-  api.post('/projects/:id/candidates/select', (req, res) => {
-    const pid = id(req);
-    requireTopic(pid);
-    const { style, hookType } = req.body ?? {};
-    if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
-    let built;
-    try {
-      built = scriptForCandidate(repo.getRecipe(pid), style, hookType);
-    } catch (e) {
-      throw new HttpError(400, (e as Error).message);
-    }
-    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, built.script);
-    repo.addScriptVersion(pid, built.script, 'template', `후보 선택: ${built.title} (${STYLE_INFO[style].label} · ${HOOK_INFO[hookType].label})`);
-    res.json({ project: repo.getProject(pid), notes: [...built.notes, ...detached] });
-  });
-
   // ── 블로그 문체 후보 2개 비교·선택 ──
   api.get('/projects/:id/blog/compare', (req, res) => {
     const pid = id(req);
     const project = repo.getProject(pid);
-    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const review = reviewOf(project);
     const notes = repo.getExpertNotes(pid);
     const dish = project.recipe.dishName || project.recipe.topic;
     const options = blogStylePair(project.recipe).map((style) => {
@@ -984,8 +998,6 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json(repo.setPublicationMetrics(id(req), metrics));
   });
 
-  api.get('/insights', (_req, res) => res.json(formatInsights(repo.allPublications())));
-
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));
 
@@ -995,10 +1007,12 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       const first = err.issues[0];
       return res.status(400).json({ error: `${first?.path.join('.') || '입력'}: ${first?.message ?? '형식 오류'}` });
     }
-    const status = (err as { status?: number }).status;
-    if (status && status < 500) return res.status(status).json({ error: (err as Error).message });
-    console.error(err);
-    res.status(500).json({ error: (err as Error).message ?? '서버 오류' });
+    const e = err as Error & { status?: number; code?: unknown };
+    const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
+    if (status >= 500) console.error(err);
+    // 파일 경로·SQL 같은 시스템 오류 내용(code가 있는 오류)은 화면에 보내지 않고 로그에만 남긴다
+    const system = typeof e.code === 'string';
+    res.status(status).json({ error: system ? (status === 404 ? '없는 파일이에요.' : '서버 오류가 났어요. 잠시 뒤 다시 시도해 주세요.') : e.message || '서버 오류' });
   });
   return app;
 }

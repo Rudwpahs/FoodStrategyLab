@@ -15,7 +15,7 @@ export type VoiceStudioStatus = { state: 'ok' | 'starting'; url: string; version
 const CANDIDATE_PORTS = Array.from({ length: 17 }, (_, i) => 3900 + i * 1000);
 
 function headers(): Record<string, string> {
-  const key = process.env.OMNIVOICE_API_KEY;
+  const key = process.env.VOICESTUDIO_API_KEY;
   return key ? { authorization: `Bearer ${key}` } : {};
 }
 
@@ -122,6 +122,13 @@ export async function listProfiles(url: string): Promise<VoiceProfile[]> {
 export const COMMERCIAL_ENGINES = ['voxcpm2', 'moss-tts-nano', 'confucius4-tts', 'gpt-sovits'] as const;
 export const NONCOMMERCIAL_ENGINES = ['omnivoice', 'omnivoice-gguf', 'omnivoice-subprocess', 'pockettts'];
 
+/** 상업 이용 가능한 엔진(COMMERCIAL_ENGINES)만 받는다. 비상업·확인 안 된 엔진이면 오류 (원칙 5) */
+export function assertCommercialEngine(id: string): string {
+  if ((COMMERCIAL_ENGINES as readonly string[]).includes(id)) return id;
+  const why = NONCOMMERCIAL_ENGINES.includes(id) ? '비상업 라이선스' : '상업 이용을 확인하지 않은';
+  throw new Error(`음성 엔진 "${id}"은(는) ${why} 엔진이라 쓸 수 없어요. 상업적으로 쓸 수 있는 엔진(${COMMERCIAL_ENGINES.join(', ')})만 씁니다.`);
+}
+
 export interface EngineInfo {
   active: string;
   /** 스튜디오가 쓸 엔진 (상업 이용 가능, 설치됨). 없으면 null */
@@ -135,8 +142,9 @@ export async function engineInfo(url: string): Promise<EngineInfo> {
   if (!res.ok) throw new Error(`VoiceStudio 엔진 목록을 불러오지 못했습니다 (${res.status})`);
   const d = (await res.json()) as { active: string; backends: { id: string; available: boolean }[] };
   const available = d.backends.filter((b) => b.available).map((b) => b.id);
+  // VOICESTUDIO_MODEL로 엔진을 정해도 상업 이용 가능한 엔진만 받는다 ('tts-1' = 자동으로 고름)
   const forced = process.env.VOICESTUDIO_MODEL;
-  const chosen = forced && forced !== 'tts-1' ? forced : (COMMERCIAL_ENGINES.find((e) => available.includes(e)) ?? null);
+  const chosen = forced && forced !== 'tts-1' ? assertCommercialEngine(forced) : (COMMERCIAL_ENGINES.find((e) => available.includes(e)) ?? null);
   return { active: d.active, chosen, available };
 }
 

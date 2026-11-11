@@ -12,7 +12,12 @@ export interface User {
   id: number;
   username: string;
   displayName: string;
+  /** researcher = 연구자 계정. 연구자 계정이 하나라도 있으면 승인은 연구자 계정만 할 수 있다 */
+  role: Role;
 }
+
+export type Role = 'member' | 'researcher';
+const toRole = (v: unknown): Role => (v === 'researcher' ? 'researcher' : 'member');
 
 const COOKIE = 'matlab_session';
 const SESSION_DAYS = 30;
@@ -109,15 +114,30 @@ export class Auth {
     return Number((this.db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n);
   }
 
-  addUser(username: string, displayName: string, password: string): User {
+  addUser(username: string, displayName: string, password: string, role: Role = 'member'): User {
     const name = username.trim();
     if (!/^[\w.-]{3,32}$/.test(name)) throw new Error('아이디는 영문·숫자 3~32자로 정해 주세요.');
     if (password.length < 10) throw new Error('비밀번호는 10자 이상으로 정해 주세요.');
     this.db
-      .prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)')
-      .run(name, displayName.trim() || name, hashPassword(password), new Date().toISOString());
+      .prepare('INSERT INTO users (username, display_name, password_hash, created_at, role) VALUES (?, ?, ?, ?, ?)')
+      .run(name, displayName.trim() || name, hashPassword(password), new Date().toISOString(), role);
     const u = this.findUser(name)!;
-    return { id: u.id, username: u.username, displayName: u.displayName };
+    return { id: u.id, username: u.username, displayName: u.displayName, role: u.role };
+  }
+
+  /** 계정 역할 바꾸기 (npm run user:add -- 아이디 --researcher) */
+  setRole(username: string, role: Role) {
+    const r = this.db.prepare('UPDATE users SET role = ? WHERE username = ?').run(role, username);
+    if (!r.changes) throw new Error('없는 아이디입니다.');
+  }
+
+  researcherCount(): number {
+    return Number((this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'researcher'").get() as { n: number }).n);
+  }
+
+  /** 이 이름(표시 이름)이 연구자 계정의 이름인지 (검수 기록의 승인자가 연구자였는지 확인할 때) */
+  isResearcherName(displayName: string): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM users WHERE role = 'researcher' AND display_name = ?").get(displayName));
   }
 
   /** 비밀번호를 바꾸면 그 계정의 모든 로그인(세션)을 끊는다 */
@@ -129,8 +149,8 @@ export class Auth {
   }
 
   private findUser(username: string): (User & { hash: string }) | null {
-    const r = this.db.prepare('SELECT id, username, display_name, password_hash FROM users WHERE username = ?').get(username) as Record<string, unknown> | undefined;
-    return r ? { id: Number(r.id), username: String(r.username), displayName: String(r.display_name), hash: String(r.password_hash) } : null;
+    const r = this.db.prepare('SELECT id, username, display_name, password_hash, role FROM users WHERE username = ?').get(username) as Record<string, unknown> | undefined;
+    return r ? { id: Number(r.id), username: String(r.username), displayName: String(r.display_name), role: toRole(r.role), hash: String(r.password_hash) } : null;
   }
 
   private checkLocked(ip: string) {
@@ -162,14 +182,14 @@ export class Auth {
       throw new HttpError(401, '아이디 또는 비밀번호가 맞지 않아요.');
     }
     this.fails.delete(ip);
-    return { token: this.newSession(u.id), user: { id: u.id, username: u.username, displayName: u.displayName } };
+    return { token: this.newSession(u.id), user: { id: u.id, username: u.username, displayName: u.displayName, role: u.role } };
   }
 
   /**
    * 첫 계정 만들기 (계정이 하나도 없고 설정 코드가 있을 때만).
    * 설정 코드는 서버 관리자가 정한 값이며, 틀리면 로그인 실패처럼 횟수를 센다.
    */
-  setupFirstUser(input: { code: string; username: string; displayName: string; password: string }, ip: string): { token: string; user: User } {
+  setupFirstUser(input: { code: string; username: string; displayName: string; password: string; researcher?: boolean }, ip: string): { token: string; user: User } {
     const expected = setupCode();
     if (!expected) throw new HttpError(404, '이 서버에서는 화면에서 계정을 만들 수 없어요.');
     if (this.userCount() > 0) throw new HttpError(409, '이미 계정이 있어요. 로그인해 주세요.');
@@ -184,7 +204,7 @@ export class Auth {
     }
     let user: User;
     try {
-      user = this.addUser(input.username, input.displayName, input.password);
+      user = this.addUser(input.username, input.displayName, input.password, input.researcher ? 'researcher' : 'member');
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
@@ -204,10 +224,10 @@ export class Auth {
   sessionUser(token: string | undefined): User | null {
     if (!token) return null;
     const r = this.db
-      .prepare('SELECT u.id, u.username, u.display_name, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
+      .prepare('SELECT u.id, u.username, u.display_name, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
       .get(sha256(token)) as Record<string, unknown> | undefined;
     if (!r || Date.parse(String(r.expires_at)) < Date.now()) return null;
-    return { id: Number(r.id), username: String(r.username), displayName: String(r.display_name) };
+    return { id: Number(r.id), username: String(r.username), displayName: String(r.display_name), role: toRole(r.role) };
   }
 
   logout(token: string | undefined) {
@@ -227,10 +247,32 @@ export function readCookie(req: Request, name = COOKIE): string | undefined {
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const PROXY_HEADERS = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded', 'x-forwarded-host'];
 
-/** 이 PC에서 직접 연 요청인지 (터널·프록시를 거친 요청은 아님) */
-export function isDirectLocal(req: Request): boolean {
-  return LOOPBACK.has(req.socket.remoteAddress ?? '') && !PROXY_HEADERS.some((h) => req.headers[h]);
+/**
+ * 주소창의 이름(Host)이 이 PC(localhost·127.0.0.1·::1) 또는 정해 둔 공개 주소인지.
+ * 악성 웹페이지가 자기 도메인을 127.0.0.1로 바꿔 부르는 경우(DNS 리바인딩)를 막는다.
+ */
+function localHostName(req: Request): boolean {
+  const host = req.headers.host ?? '';
+  try {
+    if (['localhost', '127.0.0.1', '[::1]'].includes(new URL(`http://${host}`).hostname)) return true;
+    return Boolean(process.env.PUBLIC_URL) && new URL(process.env.PUBLIC_URL!).host === host;
+  } catch {
+    return false;
+  }
 }
+
+/** 이 PC에서 직접 연 요청인지 (터널·프록시를 거친 요청, 다른 이름으로 들어온 요청은 아님) */
+export function isDirectLocal(req: Request): boolean {
+  return LOOPBACK.has(req.socket.remoteAddress ?? '') && !PROXY_HEADERS.some((h) => req.headers[h]) && localHostName(req);
+}
+
+const foreignOrigin = (req: Request, origin: string) => {
+  try {
+    return !ownHosts(req).has(new URL(origin).host);
+  } catch {
+    return true;
+  }
+};
 
 const isHttps = (req: Request) => req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.COOKIE_SECURE === '1';
 
@@ -243,7 +285,9 @@ export function authGuard(auth: Auth) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const origin = req.headers.origin;
-      if (origin && origin !== 'null' && !ownHosts(req).has(new URL(origin).host)) {
+      // Origin 'null'(샌드박스 iframe·data: 페이지)은 어느 사이트인지 알 수 없다: 계정 없는 모드에서는 막는다
+      // (계정이 있으면 SameSite 로그인 쿠키가 붙지 않아 어차피 막힌다)
+      if (origin === 'null' ? auth.userCount() === 0 : origin && foreignOrigin(req, origin)) {
         return next(new HttpError(403, '다른 사이트에서 보낸 요청은 받지 않아요.'));
       }
     }

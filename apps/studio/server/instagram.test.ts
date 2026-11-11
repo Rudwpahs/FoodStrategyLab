@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -262,6 +263,18 @@ describe('인스타그램 릴스 게시 (가짜 Meta 서버)', () => {
     const checks = pre.json.checks as { level: string; text: string }[];
     expect(checks.map((c) => c.text).join('\n')).toContain('영상 길이 30초');
     expect(checks.some((c) => c.text.includes('표지 이미지를 함께'))).toBe(true);
+    // 연구자 계정이 정해지지 않았으면, 연구자 본인의 승인이라고 확인됐다고 하지 않는다
+    const approvalLine = checks.find((c) => c.text.includes('승인'))!;
+    expect(approvalLine.level).toBe('warn');
+    expect(approvalLine.text).toContain('연구자 계정');
+    expect(approvalLine.text).not.toMatch(/^이희재 연구자가 승인/);
+    // 규격 줄은 실제로 있는 영상 파일 + 렌더 설정 기준이라고 밝힌다 (파일이 없으면 오류)
+    expect(checks.find((c) => c.text.includes('1080×1920'))!.text).toContain('렌더 설정');
+    fs.renameSync(path.join(dir, 'video.mp4'), path.join(dir, 'video.bak'));
+    const missing = (await call('GET', `/renders/${renderId}/instagram`)).json.checks as { level: string; text: string }[];
+    expect(missing.some((c) => c.level === 'error' && c.text.includes('영상 파일'))).toBe(true);
+    expect(missing.some((c) => c.text.includes('1080×1920'))).toBe(false);
+    fs.renameSync(path.join(dir, 'video.bak'), path.join(dir, 'video.mp4'));
     const started = await call('POST', `/renders/${renderId}/instagram`, { confirm: true, caption: String(pre.json.caption), confirmDuplicate: true });
     const done = await waitJob(String(started.json.id));
     expect(done.status).toBe('published');

@@ -1,6 +1,5 @@
-import path from 'node:path';
 import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
-import { DATA_DIR, DB_FILE } from './config.ts';
+import { DB_FILE } from './config.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
 

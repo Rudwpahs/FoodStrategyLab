@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -5,7 +6,11 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cachedAudio, measuredWords, resetTtsDetection, synthesize, ttsProvider, voiceIdentity, voicestudioVoice } from './tts.ts';
-import { createDesignedVoice, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
+import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
+import { voicePresets } from './voicePresets.ts';
+
+/** 저장소 기준 녹음으로 고정한 기본 목소리 (맛조수) */
+const preset = voicePresets()[0]!;
 
 // 가짜 VoiceStudio: MPEG2 Layer III 24kHz 48kbps 프레임 50개 = 1.2초
 const frame = Buffer.alloc(144);
@@ -13,6 +18,8 @@ frame.set([0xff, 0xf3, 0x64, 0xc4]);
 const mp3 = Buffer.concat(Array.from({ length: 50 }, () => frame));
 
 const requests: Record<string, unknown>[] = [];
+/** 가짜 VoiceStudio가 받은 모든 요청 (메서드 + 주소) */
+const hits: string[] = [];
 let busyTimes = 0;
 let notAvailableTimes = 0;
 const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: 'default', kind: 'design' }];
@@ -24,6 +31,7 @@ const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.url}`);
     const json = (code: number, body: unknown) => {
       res.statusCode = code;
       res.setHeader('content-type', 'application/json');
@@ -42,7 +50,7 @@ beforeAll(async () => {
       req.on('data', (d) => (body += d));
       req.on('end', () => {
         designBody = body;
-        const p = { id: profiles.length + 1, name: '맛조수', kind: 'design' };
+        const p = { id: profiles.length + 1, name: /name="name"\r\n\r\n([^\r]*)/.exec(body)?.[1] ?? '?', kind: 'design' };
         profiles.push(p);
         json(200, p);
       });
@@ -83,7 +91,6 @@ beforeAll(async () => {
   server.listen(0);
   await new Promise((r) => server.once('listening', r));
   process.env.VOICESTUDIO_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  writeVoiceSettings({ voicestudioVoice: 'default' });
   process.env.TTS_PROVIDER = 'auto';
   resetTtsDetection();
 });
@@ -101,7 +108,26 @@ describe('VoiceStudio 음성', () => {
     const a = await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     expect(a.seconds).toBeCloseTo(1.2, 5);
     // 비상업 OmniVoice가 활성이어도 상업 이용 가능한 VoxCPM2로 요청한다
-    expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: 'default', language: 'ko', response_format: 'mp3', input: '이희재의 맛 연구소에서 오늘도 실험!' });
+    expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: preset.voiceName, language: 'ko', response_format: 'mp3', input: '이희재의 맛 연구소에서 오늘도 실험!' });
+  });
+
+  it('비상업 엔진(OmniVoice 등)이나 목록에 없는 엔진은 VOICESTUDIO_MODEL로 지정해도 쓰지 않는다', async () => {
+    const vs = await findVoiceStudio();
+    if (vs.state !== 'ok') throw new Error('fake VoiceStudio offline');
+    const before = requests.length;
+    try {
+      for (const model of ['omnivoice', 'some-new-engine']) {
+        process.env.VOICESTUDIO_MODEL = model;
+        await expect(engineInfo(vs.url)).rejects.toThrow(/상업/);
+        await expect(synthesize(`엔진 지정 시험 ${model}`, audioDir)).rejects.toThrow(/상업/);
+      }
+      expect(requests.length).toBe(before);
+      // 상업 이용 가능한 엔진은 지정할 수 있다
+      process.env.VOICESTUDIO_MODEL = 'voxcpm2';
+      expect((await engineInfo(vs.url)).chosen).toBe('voxcpm2');
+    } finally {
+      delete process.env.VOICESTUDIO_MODEL;
+    }
   });
 
   it('받아쓰기로 어절별 실제 시간을 잰다 (어절 수가 맞을 때만)', async () => {
@@ -124,19 +150,22 @@ describe('VoiceStudio 음성', () => {
     expect(designBody).toContain('clone');
     expect(designBody).toContain('matjosu-reference.wav');
     expect((await listProfiles(vs.url)).map((p) => p.name)).toContain('맛조수');
+  });
+
+  it('기준 녹음이 없는 목소리는 설정에 적혀 있어도 쓰지 않고 기본 목소리로 만든다', async () => {
     writeVoiceSettings({ voicestudioVoice: '맛조수' });
-    expect(voicestudioVoice()).toBe('맛조수');
+    expect(voicestudioVoice()).toBe(preset.voiceName);
     await synthesize('맛조수 목소리 시험', audioDir);
-    expect(requests.at(-1)).toMatchObject({ voice: '맛조수', input: '맛조수 목소리 시험' });
+    expect(requests.at(-1)).toMatchObject({ voice: preset.voiceName, input: '맛조수 목소리 시험' });
   });
 
   it('같은 이름으로 목소리를 다시 만들면 예전 음성을 다시 쓰지 않는다', async () => {
-    writeVoiceSettings({ voicestudioVoice: '맛조수' });
     await synthesize('다시 만든 목소리 시험', audioDir);
     const before = requests.length;
     // 같은 이름, 새 프로필 (VoiceStudio에서 지우고 다시 만든 경우)
-    const i = profiles.findIndex((p) => p.name === '맛조수');
-    profiles.splice(i, 1, { id: 99, name: '맛조수', kind: 'clone' });
+    const i = profiles.findIndex((p) => p.name === preset.voiceName);
+    expect(i).toBeGreaterThanOrEqual(0);
+    profiles.splice(i, 1, { id: 99, name: preset.voiceName, kind: 'clone' });
     await synthesize('다시 만든 목소리 시험', audioDir);
     expect(requests.length).toBe(before + 1);
   });
@@ -181,6 +210,25 @@ describe('VoiceStudio 음성', () => {
     notAvailableTimes = 0;
   });
 
+  it('한 문장을 만들 때 VoiceStudio 상태·엔진·목소리 목록을 한 번씩만 묻는다', async () => {
+    await ttsProvider();
+    hits.length = 0;
+    await synthesize('요청 수를 세는 새 문장', audioDir);
+    const count = (prefix: string) => hits.filter((h) => h.startsWith(prefix)).length;
+    expect(count('GET /health')).toBeLessThanOrEqual(1);
+    expect(count('GET /engines/tts')).toBe(1);
+    expect(count('GET /profiles')).toBeLessThanOrEqual(1);
+    expect(count('POST /v1/audio/speech')).toBe(1);
+  });
+
+  it('같은 문장을 동시에 만들면 한 번만 요청하고 둘 다 같은 파일을 받는다 (임시 파일이 겹치지 않게)', async () => {
+    const before = requests.length;
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => synthesize('동시에 만드는 같은 문장', audioDir)));
+    expect(requests.length).toBe(before + 1);
+    expect(new Set([a!.file, b!.file, c!.file]).size).toBe(1);
+    expect(fs.readdirSync(audioDir).filter((f) => f.includes('.tmp'))).toEqual([]);
+  });
+
   it('같은 문장은 캐시를 써서 다시 요청하지 않는다', async () => {
     await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     const before = requests.length;
@@ -201,8 +249,8 @@ describe('목소리 고르기 · 말 빠르기', () => {
   });
 
   it('목록에 있는 목소리가 VoiceStudio에 없으면 기준 녹음으로 먼저 만들고, 그 목소리로 요청한다', async () => {
-    const { voicePresets } = await import('./voicePresets.ts');
-    const p = voicePresets()[0]!;
+    // 기본 목소리는 앞의 시험에서 이미 만들어졌으므로 두 번째 목소리로 확인한다
+    const p = voicePresets()[1]!;
     designBody = '';
     await synthesize('목록 목소리 시험 문장', audioDir, { voice: p.voiceName });
     expect(designBody).toContain(p.voiceName);

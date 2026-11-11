@@ -3,7 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { CHANGE_RATE_WARN, findAiTells, humanizeSystem, humanizeUser, rewriteProblems, totalChangeRate, type GateOptions, type HumanizeItem, type HumanizeKind } from '@mat-lab/publishing';
 import type { Db } from './db.ts';
-import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './recipeReader.ts';
+import { DEFAULT_MODEL, aiConfigured, assertBudget, claudeError, priceOf, recordUsage } from './claudeUsage.ts';
 import { HttpError } from './repo.ts';
 
 /**
@@ -27,15 +27,9 @@ export interface RewriteUsage {
 }
 export type RewriteFn = (req: { model: string; system: string; user: string }) => Promise<{ parsed: Output | null; usage: RewriteUsage; stopReason: string | null }>;
 
-const PRICES: Record<string, [number, number]> = {
-  'claude-haiku-5-5': [0.1, 0.5],
-  'claude-sonnet-5-5': [2, 10],
-  'claude-opus-5-5': [4, 20],
-};
-
 /** 캐시 쓰기 1.25배, 캐시 읽기는 넉넉히 0.1배로 계산한다 (한도를 넘지 않게 높게 잡음) */
 export function rewriteCostUsd(model: string, u: RewriteUsage): number {
-  const [i, o] = PRICES[model] ?? [10, 50];
+  const [i, o] = priceOf(model);
   return (u.inputTokens * i + u.cacheWriteTokens * i * 1.25 + u.cacheReadTokens * i * 0.1 + u.outputTokens * o) / 1_000_000;
 }
 
@@ -112,24 +106,17 @@ export class Humanizer {
       return { kind, items: same, tellsBefore: 0, tellsAfter: 0, changeRate: 0, costUsd: 0, notes: '', skipped: '규칙 검사에서 AI 티가 보이지 않아요. 그래도 Claude로 다듬어 볼 수 있어요 (1회 약 $0.1).' };
     }
     if (this.call === claudeRewrite && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
-    const budget = monthlyBudgetUsd();
-    if (monthSpentUsd(this.db) >= budget) throw new HttpError(429, `이번 달 Claude 사용 한도($${budget})를 다 썼어요. 다음 달에 다시 쓸 수 있어요.`);
+    assertBudget(this.db);
 
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     let out;
     try {
       out = await this.call({ model, system: humanizeSystem(kind), user: humanizeUser(kind, list, tells) });
     } catch (e) {
-      if (e instanceof Anthropic.AuthenticationError) throw new HttpError(502, 'Claude API 열쇠가 맞지 않아요. 서버의 ANTHROPIC_API_KEY를 확인해 주세요.');
-      if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'Claude API가 잠시 바빠요. 1분 뒤 다시 시도해 주세요.');
-      if (e instanceof Anthropic.APIError) throw new HttpError(502, `Claude API 오류 (${e.status ?? '?'}). 잠시 뒤 다시 시도해 주세요.`);
-      throw e;
+      throw claudeError(e);
     }
     const cost = rewriteCostUsd(model, out.usage);
-    const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(new Date());
-    this.db
-      .prepare('INSERT INTO ai_usage (created_at, month, purpose, model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(new Date().toISOString(), month, `humanize-${kind}`, model, out.usage.inputTokens + out.usage.cacheWriteTokens + out.usage.cacheReadTokens, out.usage.outputTokens, cost);
+    recordUsage(this.db, `humanize-${kind}`, model, out.usage.inputTokens + out.usage.cacheWriteTokens + out.usage.cacheReadTokens, out.usage.outputTokens, cost);
     if (out.stopReason === 'refusal') throw new HttpError(422, '이 글은 다듬을 수 없다는 답을 받았어요.');
     if (!out.parsed) throw new HttpError(502, '다듬은 결과를 받지 못했어요. 다시 시도해 주세요.');
 

@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
@@ -118,6 +119,19 @@ describe('스튜디오 API 흐름', () => {
     expect(updated.body.recipe.tips).toEqual(['새 팁']);
   });
 
+  it('승인 전이라도 원본 레시피를 고치면 새 대본 버전이 되어, 옛 레시피로 만든 영상·카드는 내보낼 수 없다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[2] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const old = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    // 같은 내용으로 저장만 하면 새 버전을 만들지 않는다
+    expect((await call('PUT', `/projects/${pid}/recipe`, { recipe: SAMPLE_RECIPES[2] })).body.latest.version).toBe(1);
+    const recipe = { ...SAMPLE_RECIPES[2], tips: [...SAMPLE_RECIPES[2]!.tips, '새 팁'] };
+    const updated = await call('PUT', `/projects/${pid}/recipe`, { recipe });
+    expect(updated.body.latest.version).toBe(2);
+    expect((await call('POST', `/projects/${pid}/reviews`, { version: 2, reviewer: '이희재', checklist: allChecked, decision: 'approved' })).status).toBe(200);
+    expect((await call('GET', `/renders/${old}/download`)).status).toBe(409);
+  });
+
   it('영상 자동 검사에서 대사 잘림 같은 오류가 나오면, 확인 없이 승인하지 않는다', async () => {
     const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[2] })).body.id;
     await call('POST', `/projects/${pid}/script/template`);
@@ -130,7 +144,12 @@ describe('스튜디오 API 흐름', () => {
     // 수정 요청은 막지 않는다
     expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'changes_requested', note: '잘림' })).status).toBe(200);
     // 직접 보고 확인했다면 승인할 수 있다
-    expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved', acceptQa: true })).status).toBe(200);
+    const accepted = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved', acceptQa: true, note: '직접 봄' });
+    expect(accepted.status).toBe(200);
+    // 검사 오류를 확인하고 승인했다는 사실이 검수 기록과 작업 기록에 남는다
+    expect(accepted.body.approval.note).toContain('직접 봄');
+    expect(accepted.body.approval.note).toContain('자동 검사 오류 1건');
+    expect(accepted.body.events.some((e: { message: string }) => e.message.includes('자동 검사 오류 1건'))).toBe(true);
   });
 
   it('AI 붙여넣기 오류는 400으로 알려준다', async () => {
@@ -264,7 +283,7 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
 
     // 4. C(실험형) 선택 → 새 대본 버전
     const pick = c.body.candidates[2];
-    const sel = await call('POST', `/projects/${pid}/candidates/select`, { style: pick.style, hookType: pick.hookType });
+    const sel = await call('POST', `/projects/${pid}/candidates/make`, { style: pick.style, hookType: pick.hookType });
     expect(sel.body.project.latest.script.title).toBe(pick.title);
     expect(sel.body.project.latest.script.scenes[0].line).toBe(pick.firstLine);
     expect(sel.body.project.status).toBe('review');
@@ -312,7 +331,7 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     // 10. 성과 입력 → 연출·훅별 모음
     expect((await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 'abc' })).status).toBe(400);
     await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 35, avgWatchSeconds: 12.5, saves: 20, shares: 10 });
-    const ins = await call('GET', '/insights');
+    const ins = { body: (await call('GET', `/projects/${pid}/candidates`)).body.insights };
     const exp = ins.body.find((x: { kind: string; key: string }) => x.kind === 'style' && x.key === 'experiment');
     expect(exp.medianSavesSharesPerK).toBe(30);
     expect(exp.enough).toBe(false);
@@ -365,6 +384,19 @@ describe('완성 사진', () => {
     const removed = await call('DELETE', `/projects/${pid}/photo`);
     expect(removed.body.photo).toBe(null);
   });
+
+  it('콘텐츠를 지우면 올린 사진·영상 파일도 함께 지운다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[0] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5f1d2f40000000049454e44ae426082', 'hex');
+    const photo = (await (await fetch(`${base}/projects/${pid}/photo`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png })).json()).photo.file as string;
+    const rid = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    expect(fs.existsSync(path.join(DATA_DIR, photo))).toBe(true);
+    expect((await call('DELETE', `/projects/${pid}`)).status).toBe(204);
+    expect(fs.existsSync(path.join(DATA_DIR, photo))).toBe(false);
+    expect(fs.existsSync(path.join(DATA_DIR, 'renders', String(rid)))).toBe(false);
+    expect((await call('DELETE', `/projects/${pid}`)).status).toBe(404);
+  });
 });
 
 describe('장면별 AI 클립', () => {
@@ -379,6 +411,48 @@ describe('장면별 AI 클립', () => {
     expect((await fetch(`${base}/projects/${pid}/scenes/..%2Fx/media`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png })).status).toBe(400);
     const removed = await call('DELETE', `/projects/${pid}/scenes/s3/media`);
     expect(removed.body.sceneMedia).toEqual({});
+  });
+});
+
+describe('미디어 파일 보내기', () => {
+  const media = (p: string) => fetch(`${base.replace('/api', '')}/media/${p}`);
+
+  it('DB·설정 파일 같은 데이터 폴더의 다른 파일은 보내지 않는다', async () => {
+    fs.writeFileSync(path.join(DATA_DIR, 'studio.db'), 'SQLite format 3 secret');
+    fs.writeFileSync(path.join(DATA_DIR, 'settings.json'), '{}');
+    for (const p of ['studio.db', 'settings.json', 'studio%2edb', 'audio/..%2fstudio.db', 'renders/..%2fstudio.db']) {
+      const r = await media(p);
+      expect(r.status, p).not.toBe(200);
+      expect(await r.text(), p).not.toContain('SQLite');
+    }
+  });
+
+  it('렌더 폴더의 글·묶음 파일은 점을 인코딩해도 받을 수 없고, 영상·이미지는 받을 수 있다', async () => {
+    const dir = path.join(DATA_DIR, 'renders', '777');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'blog.md'), 'SECRET BLOG');
+    fs.writeFileSync(path.join(dir, 'package.zip'), 'SECRET ZIP');
+    fs.writeFileSync(path.join(dir, 'video.mp4'), 'mp4');
+    for (const p of ['blog.md', 'blog%2emd', 'blog%2Emd', 'package%2ezip', 'BLOG.MD']) {
+      const r = await media(`renders/777/${p}`);
+      expect(r.status, p).not.toBe(200);
+      expect(await r.text(), p).not.toContain('SECRET');
+    }
+    const ok = await media('renders/777/video.mp4');
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  it('없는 파일 오류에 서버 안의 경로를 드러내지 않는다', async () => {
+    const r = await media('audio/nope.mp3');
+    expect(r.status).toBe(404);
+    expect(await r.text()).not.toContain(DATA_DIR);
+  });
+});
+
+describe('테스트 격리', () => {
+  it('테스트 파일마다 따로 만든 데이터 폴더를 쓴다 (동시에 돌 때 settings.json 등이 겹치지 않게)', () => {
+    expect(path.basename(DATA_DIR)).toMatch(/^matlab-test-/);
   });
 });
 
@@ -406,5 +480,17 @@ describe('목소리 고르기', () => {
     expect(after.body.selectedPreset).toBe('matjosu');
     expect(after.body.tempo).toBe(1.1);
     await call('PUT', '/voice/tempo', { tempo: 1 });
+  });
+
+  it('목소리 이름으로 고를 때도 기준 녹음이 있는 목록의 목소리만 받는다 (원칙 5)', async () => {
+    const info = await call('GET', '/voice');
+    expect((await call('PUT', '/voice', { voice: 'VoiceStudio에서 만든 목소리' })).status).toBe(400);
+    const second = info.body.presets[1];
+    const ok = await call('PUT', '/voice', { voice: second.voiceName });
+    expect(ok.status).toBe(200);
+    expect(ok.body.selected).toBe(second.voiceName);
+    // 설명 문장으로 새 목소리를 만드는 기능은 없다 (기준 녹음이 아님)
+    expect((await call('POST', '/voice/design', { name: '새 목소리' })).status).toBe(404);
+    await call('PUT', '/voice/preset', { id: info.body.presets[0].id });
   });
 });
