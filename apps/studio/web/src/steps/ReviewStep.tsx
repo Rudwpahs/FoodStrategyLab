@@ -10,7 +10,7 @@ import type { StepProps } from '../pages/ProjectPage.tsx';
 const LEVEL_LABEL = { error: '오류', warning: '확인 필요', info: '참고' } as const;
 
 export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
-  const { run, user } = useApp();
+  const { run, user, notify, researcherSet, checkAuth } = useApp();
   const latest = project.latest;
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -62,6 +62,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
     if (p) {
       setProject(p);
       setNote('');
+      if (p.warning) notify(p.warning, true);
       if (decision === 'approved') go(hasRender ? 'publish' : 'video');
     }
   };
@@ -71,6 +72,22 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
       <div className="card stack">
         <h2 style={{ margin: 0 }}>결과물 보기</h2>
         <QaPanel render={render} onRemake={() => go('video')} />
+        {user && !researcherSet && (
+          <div className="issue warning">
+            연구자 계정이 아직 정해지지 않아 누구나 승인할 수 있어요. 이희재 연구자 본인 계정이면 아래를 눌러 정해 주세요. 정한 뒤에는 이 계정만 승인할 수 있어요 (한 번만 정할 수 있어요).
+            <div>
+              <button
+                className="btn small"
+                onClick={async () => {
+                  if (!confirm(`'${user.displayName}' 계정을 연구자 계정으로 정할까요? 정한 뒤에는 이 계정만 승인할 수 있어요.`)) return;
+                  if (await run(() => api.claimResearcher(), '연구자 계정으로 정했어요')) checkAuth();
+                }}
+              >
+                이 계정을 연구자 계정으로 정하기
+              </button>
+            </div>
+          </div>
+        )}
         <div className="row" style={{ alignItems: 'flex-start' }}>
           {render ? (
             <video src={renderFile(render.id, 'video.mp4')} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />

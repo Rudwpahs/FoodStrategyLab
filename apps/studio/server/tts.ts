@@ -274,7 +274,27 @@ export async function synthesize(text: string, audioDir: string, override: Voice
 /** 지금 만들고 있는 음성 파일 (같은 파일을 동시에 두 번 만들지 않게) */
 const making = new Map<string, Promise<void>>();
 
+/** 마지막으로 목소리를 만든 결과 (클라우드 GPU가 실제로 준비됐는지 화면에 보이려고) */
+export interface LastVoice {
+  ok: boolean;
+  at: string;
+  provider: TtsProvider;
+  error?: string;
+}
+let lastVoiceResult: LastVoice | null = null;
+export const lastVoice = (): LastVoice | null => lastVoiceResult;
+
 async function makeAudio(provider: TtsProvider, text: string, file: string, voice: string, tempo: number, target: VoiceStudioTarget | null) {
+  try {
+    await makeAudioFile(provider, text, file, voice, tempo, target);
+    lastVoiceResult = { ok: true, at: new Date().toISOString(), provider };
+  } catch (e) {
+    lastVoiceResult = { ok: false, at: new Date().toISOString(), provider, error: (e as Error).message.slice(0, 200) };
+    throw e;
+  }
+}
+
+async function makeAudioFile(provider: TtsProvider, text: string, file: string, voice: string, tempo: number, target: VoiceStudioTarget | null) {
   // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
   removeAudioWithCache(file);
   // 임시 파일 이름은 작업마다 다르게 (다른 작업의 임시 파일을 덮거나 지우지 않게)

@@ -60,6 +60,13 @@ export const VoicePanel: React.FC = () => {
         <div className="spacer" />
         <span className="muted small">지금: {info.describe}</span>
       </div>
+      {info.lastVoice && (
+        <div className={`issue ${info.lastVoice.ok ? 'info' : 'warning'} small`}>
+          {info.lastVoice.ok
+            ? `마지막 목소리 만들기 성공 (${new Date(info.lastVoice.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })})`
+            : `마지막 목소리 만들기 실패 (${new Date(info.lastVoice.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}): ${info.lastVoice.error ?? ''}`}
+        </div>
+      )}
 
       {vs.state === 'offline' && (
         <div className="issue info">

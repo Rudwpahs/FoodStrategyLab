@@ -19,7 +19,12 @@ import {
 import type { Db } from './db.ts';
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    /** 화면이 실패 종류를 구분할 때 (예: 'duplicate' = 확인하면 다시 할 수 있음) */
+    public code?: string,
+  ) {
     super(message);
   }
 }

@@ -287,6 +287,13 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     expect(sel.body.project.latest.script.title).toBe(pick.title);
     expect(sel.body.project.latest.script.scenes[0].line).toBe(pick.firstLine);
     expect(sel.body.project.status).toBe('review');
+    // 영상을 만드는 중에 다시 누르면 새 대본 버전 없이 멈춘다 (버전이 생기면 승인이 풀리므로)
+    const versionBefore = testRepo.versionState(pid).latestScriptVersion;
+    const running = testRepo.createRender(pid, versionBefore!);
+    const again = await call('POST', `/projects/${pid}/candidates/make`, { style: c.body.candidates[0].style, hookType: c.body.candidates[0].hookType });
+    expect(again.status).toBe(409);
+    expect(testRepo.versionState(pid).latestScriptVersion).toBe(versionBefore);
+    testRepo.updateRender(running, { status: 'canceled', stage: '취소', progress: 0, finished: true });
 
     // 5. 승인 전 검수용 영상
     const r = await call('POST', `/projects/${pid}/renders`);
@@ -316,7 +323,10 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     expect(pub.status).toBe(201);
     expect(pub.body.style).toBe('experiment');
     // 같은 콘텐츠 중복 게시 기록은 확인 필요
-    expect((await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://www.instagram.com/reel/def' })).status).toBe(409);
+    const dup = await call('POST', `/projects/${pid}/publications`, { platform: 'instagram', url: 'https://www.instagram.com/reel/def' });
+    expect(dup.status).toBe(409);
+    // 화면이 '그래도 기록할까요?'를 물을 수 있게 실패 종류를 알려 준다 (승인 안 됨 같은 다른 409와 구분)
+    expect(dup.body.code).toBe('duplicate');
     // 예약 기록
     expect((await call('POST', `/projects/${pid}/publications`, { platform: 'youtube', status: 'scheduled', scheduledAt: '2026-11-10T09:00:00+09:00' })).status).toBe(201);
 

@@ -139,6 +139,20 @@ describe('계정이 있을 때', () => {
     expect(r.warning).toContain('연구자 계정');
   });
 
+  it('연구자 계정이 없을 때만 화면에서 한 번 연구자 계정을 정할 수 있다 (정한 뒤에는 다른 계정이 가로챌 수 없음)', async () => {
+    const loginAs = async (username: string, password: string) =>
+      (await req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })).headers.get('set-cookie')!.split(';')[0]!;
+    const hee = await loginAs('heejae', 'correct horse battery');
+    const fam = await loginAs('family', 'another long password');
+    expect((await (await req('/api/auth/me', { cookie: hee })).json()).researcherSet).toBe(false);
+    const claimed = await req('/api/auth/claim-researcher', { method: 'POST', cookie: hee });
+    expect(claimed.status).toBe(200);
+    expect((await claimed.json()).user.role).toBe('researcher');
+    expect((await (await req('/api/auth/me', { cookie: hee })).json()).researcherSet).toBe(true);
+    expect((await req('/api/auth/claim-researcher', { method: 'POST', cookie: fam })).status).toBe(409);
+    expect((await (await req('/api/auth/me', { cookie: fam })).json()).user.role).toBe('member');
+  });
+
   it('연구자 계정이 정해지면 연구자 계정만 승인할 수 있다 (수정 요청은 누구나)', async () => {
     const loginAs = async (username: string, password: string) =>
       (await req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })).headers.get('set-cookie')!.split(';')[0]!;

@@ -148,6 +148,20 @@ export class Auth {
     this.db.prepare('DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE username = ?)').run(username);
   }
 
+  /** 계정 목록 (비밀번호 해시는 빼고) */
+  listUsers(): User[] {
+    return (this.db.prepare('SELECT id, username, display_name, role FROM users ORDER BY id').all() as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      username: String(r.username),
+      displayName: String(r.display_name),
+      role: toRole(r.role),
+    }));
+  }
+
+  hasUser(username: string): boolean {
+    return Boolean(this.findUser(username));
+  }
+
   private findUser(username: string): (User & { hash: string }) | null {
     const r = this.db.prepare('SELECT id, username, display_name, password_hash, role FROM users WHERE username = ?').get(username) as Record<string, unknown> | undefined;
     return r ? { id: Number(r.id), username: String(r.username), displayName: String(r.display_name), role: toRole(r.role), hash: String(r.password_hash) } : null;
@@ -193,15 +207,7 @@ export class Auth {
     const expected = setupCode();
     if (!expected) throw new HttpError(404, '이 서버에서는 화면에서 계정을 만들 수 없어요.');
     if (this.userCount() > 0) throw new HttpError(409, '이미 계정이 있어요. 로그인해 주세요.');
-    if (this.setupFailsTotal >= SETUP_MAX_FAILS_TOTAL) throw new HttpError(429, '설정 코드가 너무 많이 틀렸어요. 서버를 다시 배포한 뒤 시도해 주세요.');
-    this.checkLocked(ip);
-    const a = Buffer.from(sha256(input.code));
-    const b = Buffer.from(sha256(expected));
-    if (!crypto.timingSafeEqual(a, b)) {
-      this.countFail(ip);
-      this.setupFailsTotal++;
-      throw new HttpError(401, '설정 코드가 맞지 않아요.');
-    }
+    this.checkSetupCode(expected, input.code, ip);
     let user: User;
     try {
       user = this.addUser(input.username, input.displayName, input.password, input.researcher ? 'researcher' : 'member');
@@ -210,6 +216,53 @@ export class Auth {
     }
     this.fails.delete(ip);
     return { token: this.newSession(user.id), user };
+  }
+
+  /** 설정 코드 확인 (틀리면 로그인 실패처럼 IP별 횟수, 서버 전체 횟수도 센다) */
+  private checkSetupCode(expected: string, code: string, ip: string) {
+    if (this.setupFailsTotal >= SETUP_MAX_FAILS_TOTAL) throw new HttpError(429, '설정 코드가 너무 많이 틀렸어요. 서버를 다시 배포한 뒤 시도해 주세요.');
+    this.checkLocked(ip);
+    const a = Buffer.from(sha256(code));
+    const b = Buffer.from(sha256(expected));
+    if (!crypto.timingSafeEqual(a, b)) {
+      this.countFail(ip);
+      this.setupFailsTotal++;
+      throw new HttpError(401, '설정 코드가 맞지 않아요.');
+    }
+    this.fails.delete(ip);
+  }
+
+  /**
+   * 비밀번호를 잊었을 때: 설정 코드로 새 비밀번호를 정한다 (클라우드처럼 명령창이 없는 곳).
+   * 그 계정의 로그인은 모두 끊긴다.
+   */
+  resetPassword(input: { code: string; username: string; password: string }, ip: string) {
+    const expected = setupCode();
+    if (!expected) throw new HttpError(404, '이 서버에서는 화면에서 비밀번호를 바꿀 수 없어요. 서버를 관리하는 사람에게 부탁해 주세요.');
+    this.checkSetupCode(expected, input.code, ip);
+    if (!this.findUser(input.username.trim())) throw new HttpError(404, '없는 아이디예요.');
+    try {
+      this.setPassword(input.username.trim(), input.password);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+  }
+
+  /** 로그인한 사람이 자기 비밀번호를 바꾼다 (지금 비밀번호 확인, 다른 기기 로그인은 끊김) */
+  changePassword(user: User, current: string, next: string, ip: string): string {
+    this.checkLocked(ip);
+    const u = this.findUser(user.username);
+    if (!u || !verifyPassword(current, u.hash)) {
+      this.countFail(ip);
+      throw new HttpError(401, '지금 비밀번호가 맞지 않아요.');
+    }
+    try {
+      this.setPassword(u.username, next);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    // 지금 쓰는 기기는 계속 로그인된 채로 둔다
+    return this.newSession(u.id);
   }
 
   private newSession(userId: number): string {

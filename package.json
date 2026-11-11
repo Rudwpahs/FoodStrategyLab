@@ -15,7 +15,9 @@
     "seed": "npm run seed -w @mat-lab/studio",
     "render:samples": "npm run render:samples -w @mat-lab/studio",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tools/tsconfig.json --noEmit",
+    "e2e": "node apps/studio/e2e/user-flow.e2e.cjs",
+    "e2e:lab": "node apps/studio/e2e/content-lab.e2e.cjs",
     "check": "npm run typecheck && npm test",
     "user:add": "npm run user:add -w @mat-lab/studio --",
     "start": "npm run start -w @mat-lab/studio"

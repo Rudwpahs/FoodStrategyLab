@@ -17,7 +17,7 @@ import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
 import { HttpError, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
-import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
+import { describeVoice, lastVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
 /** 목소리 후보를 같은 문장으로 들어 보기 (목소리마다 결과 또는 이유) */
@@ -229,7 +229,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const local = auth.userCount() === 0;
     // 계정이 없을 때: 설정 코드가 있으면 화면에서 첫 계정 만들기, 없으면 이 PC 전용
     const mode = !local ? 'login' : setupCode() ? 'setup' : 'local';
-    res.json({ mode, allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
+    res.json({ mode, allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)), researcherSet: auth.researcherCount() > 0, canReset: !local && Boolean(setupCode()) });
   });
   app.post('/api/auth/setup', (req, res) => {
     const { code, username, displayName, password, researcher } = req.body ?? {};
@@ -239,6 +239,12 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     );
     res.setHeader('Set-Cookie', sessionCookie(req, token));
     res.json({ user });
+  });
+  // 비밀번호를 잊었을 때: 설정 코드로 새 비밀번호 (틀린 횟수 제한은 첫 계정 만들기와 같다)
+  app.post('/api/auth/reset', (req, res) => {
+    const { code, username, password } = req.body ?? {};
+    auth.resetPassword({ code: String(code ?? ''), username: String(username ?? ''), password: String(password ?? '') }, clientIp(req));
+    res.json({ ok: true });
   });
   // 그 밖의 모든 API·미디어는 로그인 확인
   app.use(['/api', '/media'], authGuard(auth));
@@ -269,6 +275,41 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   let samplesJob: VoiceSamplesJob | null = null;
   const api = express.Router();
 
+  // 연구자 계정이 아직 없을 때만: 로그인한 계정을 연구자 계정으로 정한다 (클라우드에서는 명령을 칠 수 없어서 화면에서 한 번 정한다).
+  // 한 번 정해지면 더는 바꿀 수 없다 (바꾸려면 서버에서 npm run user:add -- 아이디 --researcher)
+  // 계정 추가 (도와주는 사람용 일반 계정). 연구자 계정이 정해져 있으면 연구자만 추가할 수 있다
+  api.post('/auth/users', (req, res) => {
+    const me = res.locals.user as User | undefined;
+    if (!me) throw new HttpError(400, '로그인한 계정이 없어요.');
+    if (auth.researcherCount() > 0 && me.role !== 'researcher') throw new HttpError(403, '계정 추가는 연구자 계정만 할 수 있어요.');
+    const { username, displayName, password } = req.body ?? {};
+    if (auth.hasUser(String(username ?? '').trim())) throw new HttpError(409, '이미 있는 아이디예요.');
+    try {
+      const user = auth.addUser(String(username ?? ''), String(displayName ?? ''), String(password ?? ''));
+      res.status(201).json({ user });
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+  });
+  api.get('/auth/users', (_req, res) => {
+    res.json({ users: auth.listUsers() });
+  });
+  // 내 비밀번호 바꾸기
+  api.post('/auth/password', (req, res) => {
+    const me = res.locals.user as User | undefined;
+    if (!me) throw new HttpError(400, '로그인한 계정이 없어요.');
+    const token = auth.changePassword(me, String(req.body?.current ?? ''), String(req.body?.password ?? ''), clientIp(req));
+    res.setHeader('Set-Cookie', sessionCookie(req, token));
+    res.json({ ok: true });
+  });
+  api.post('/auth/claim-researcher', (_req, res) => {
+    const user = res.locals.user as User | undefined;
+    if (!user) throw new HttpError(400, '로그인한 계정이 없어요.');
+    if (auth.researcherCount() > 0) throw new HttpError(409, '연구자 계정이 이미 정해져 있어요.');
+    auth.setRole(user.username, 'researcher');
+    res.json({ user: { ...user, role: 'researcher' } });
+  });
+
   api.get('/meta', async (_req, res) => {
     const provider = await ttsProvider().catch(() => 'none' as const);
     res.json({ tts: { provider, voice: describeVoice(provider) }, samples: SAMPLE_RECIPES });
@@ -291,6 +332,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       tempos: VOICE_TEMPOS,
       provider,
       describe: describeVoice(provider),
+      lastVoice: lastVoice(),
     });
   });
 
@@ -509,7 +551,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       if (auth.researcherCount() > 0) {
         if ((res.locals.user as User | undefined)?.role !== 'researcher') throw new HttpError(403, '승인은 연구자 계정만 할 수 있어요. 연구자 계정으로 로그인해 주세요.');
       } else {
-        warning = '연구자 계정이 아직 정해지지 않아 누구나 승인할 수 있어요. 연구자 계정을 정해 주세요 (npm run user:add -- 아이디 --researcher).';
+        warning = '연구자 계정이 아직 정해지지 않아 누구나 승인할 수 있어요. 연구자 본인이 로그인해 검수 화면의 [이 계정을 연구자 계정으로 정하기]를 눌러 주세요.';
       }
       // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
       const render = repo
@@ -776,7 +818,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const imageFiles = carousel ? carouselFiles(render.outputDir) : undefined;
     if (carousel && (imageFiles?.length ?? 0) < 2) throw new HttpError(409, '레시피 카드 묶음이 없어요. 영상을 다시 만들면 함께 만들어져요.');
     const dup = repo.listPublications(pid).find((p) => p.platform === 'instagram' && p.status === 'published' && p.scriptVersion === render.scriptVersion && p.note.includes(CAROUSEL_NOTE) === carousel);
-    if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 ${carousel ? '레시피 카드로 ' : ''}올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`);
+    if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 ${carousel ? '레시피 카드로 ' : ''}올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`, 'duplicate');
     const caption = String(body.caption ?? '').trim();
     const bad = checkCaption(caption);
     if (bad) throw new HttpError(400, bad);
@@ -905,6 +947,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     requireTopic(pid);
     const { style, hookType } = req.body ?? {};
     if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
+    // 만들고 있는 영상이 있으면 새 대본 버전을 만들기 전에 멈춘다 (버전이 생기면 승인이 풀리므로)
+    const busy = repo.getProject(pid).renders.find((r) => r.status === 'queued' || r.status === 'running');
+    if (busy) throw new HttpError(409, `이미 만들고 있는 영상이 있어요 (작업 #${busy.id}). 끝나거나 취소한 뒤 다시 눌러 주세요.`);
     let built;
     try {
       built = scriptForCandidate(repo.getRecipe(pid), style, hookType);
@@ -968,7 +1013,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const scheduledAt = status === 'scheduled' ? String(body.scheduledAt ?? '') : '';
     if (status === 'scheduled' && Number.isNaN(Date.parse(scheduledAt))) throw new HttpError(400, '예약 시각을 입력해 주세요.');
     const dup = repo.listPublications(pid).find((p) => p.platform === platform && p.status === 'published' && p.scriptVersion === version);
-    if (dup && status === 'published' && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 ${platform}에 게시됐어요 (${dup.url}). 다시 기록하려면 확인이 필요해요.`);
+    if (dup && status === 'published' && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 ${platform}에 게시됐어요 (${dup.url}). 다시 기록하려면 확인이 필요해요.`, 'duplicate');
     const script = repo.getScript(pid, version).script;
     const pub = repo.addPublication(pid, {
       renderId: render?.id ?? null,
@@ -1002,7 +1047,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof HttpError) return res.status(err.status).json(err.code ? { error: err.message, code: err.code } : { error: err.message });
     if (err instanceof ZodError) {
       const first = err.issues[0];
       return res.status(400).json({ error: `${first?.path.join('.') || '입력'}: ${first?.message ?? '형식 오류'}` });

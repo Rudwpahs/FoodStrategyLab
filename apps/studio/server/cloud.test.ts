@@ -101,6 +101,36 @@ describe('클라우드: 화면에서 첫 계정 만들기', () => {
     expect(r.status).toBe(202);
     expect(starts.at(-1)).toBe(ENV.PUBLIC_URL);
   });
+
+  it('클라우드에서 계정 추가·비밀번호 바꾸기·잊은 비밀번호 재설정을 화면에서 할 수 있다', async () => {
+    const post = (p: string, body: unknown, cookie?: string) => req(p, { method: 'POST', cookie, headers: { origin: ENV.PUBLIC_URL }, body: JSON.stringify(body) });
+    const loginAs = async (username: string, password: string) => (await post('/api/auth/login', { username, password })).headers.get('set-cookie')?.split(';')[0];
+    const hee = (await loginAs('heejae', 'correct horse battery'))!;
+    expect((await (await req('/api/auth/me')).json()).canReset).toBe(true);
+    // 연구자가 도와주는 사람 계정을 만든다 (일반 계정)
+    expect((await post('/api/auth/users', { username: 'helper', displayName: '도우미', password: 'helper password 1' }, hee)).status).toBe(201);
+    expect((await post('/api/auth/users', { username: 'helper', displayName: '또', password: 'helper password 1' }, hee)).status).toBe(409);
+    const helper = (await loginAs('helper', 'helper password 1'))!;
+    const users = (await (await req('/api/auth/users', { cookie: hee })).json()).users;
+    expect(users.map((u: { username: string; role: string }) => `${u.username}:${u.role}`)).toEqual(['heejae:researcher', 'helper:member']);
+    expect(JSON.stringify(users)).not.toContain('hash');
+    // 연구자 계정이 있으면 일반 계정은 계정을 추가할 수 없다
+    expect((await post('/api/auth/users', { username: 'third', displayName: '셋', password: 'third password 1' }, helper)).status).toBe(403);
+    // 내 비밀번호 바꾸기: 지금 비밀번호가 맞아야 하고, 바꾼 뒤 옛 비밀번호로는 못 들어온다
+    expect((await post('/api/auth/password', { current: 'wrong password', password: 'new helper pass 2' }, helper)).status).toBe(401);
+    const changed = await post('/api/auth/password', { current: 'helper password 1', password: 'new helper pass 2' }, helper);
+    expect(changed.status).toBe(200);
+    const kept = changed.headers.get('set-cookie')!.split(';')[0]!;
+    expect((await req('/api/projects', { cookie: kept })).status).toBe(200);
+    expect((await req('/api/projects', { cookie: helper })).status).toBe(401);
+    expect(await loginAs('helper', 'helper password 1')).toBeUndefined();
+    // 잊은 비밀번호: 설정 코드가 맞아야 하고, 그 계정의 로그인은 모두 끊긴다
+    expect((await post('/api/auth/reset', { code: 'not-the-code', username: 'heejae', password: 'brand new password' })).status).toBe(401);
+    expect((await post('/api/auth/reset', { code: ENV.STUDIO_SETUP_CODE, username: 'nobody', password: 'brand new password' })).status).toBe(404);
+    expect((await post('/api/auth/reset', { code: ENV.STUDIO_SETUP_CODE, username: 'heejae', password: 'brand new password' })).status).toBe(200);
+    expect((await req('/api/projects', { cookie: hee })).status).toBe(401);
+    expect(await loginAs('heejae', 'brand new password')).toBeTruthy();
+  });
 });
 
 describe('클라우드: DB 복사본', () => {

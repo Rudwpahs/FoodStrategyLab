@@ -3,6 +3,7 @@ import { BRAND } from '@mat-lab/recipe-core';
 import { api, type AuthState, type Meta } from './api.ts';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { CharacterPage } from './pages/CharacterPage.tsx';
+import { AccountPage } from './pages/AccountPage.tsx';
 import { NewProjectPage } from './pages/NewProjectPage.tsx';
 import { ProjectList } from './pages/ProjectList.tsx';
 import { ProjectPage } from './pages/ProjectPage.tsx';
@@ -16,6 +17,10 @@ interface Ctx {
   meta: Meta | null;
   /** 로그인한 사람 (이 컴퓨터 전용 모드면 null) */
   user: AuthState['user'];
+  /** 연구자 계정이 정해졌는지 */
+  researcherSet: boolean;
+  /** 로그인 정보 다시 읽기 */
+  checkAuth: () => void;
 }
 const AppContext = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppContext);
@@ -102,10 +107,11 @@ export const App: React.FC = () => {
   if (project) page = <ProjectPage key={project[1]} id={Number(project[1])} />;
   else if (hash.startsWith('#/new')) page = <NewProjectPage />;
   else if (hash.startsWith('#/character')) page = <CharacterPage />;
+  else if (hash.startsWith('#/account')) page = <AccountPage />;
   else page = <ProjectList />;
 
   return (
-    <AppContext.Provider value={{ notify, run, meta, user: auth.user }}>
+    <AppContext.Provider value={{ notify, run, meta, user: auth.user, researcherSet: auth.researcherSet !== false, checkAuth }}>
       <header className="topbar">
         <a className="brand" href="#/">
           <LogoMark size={34} />
@@ -117,6 +123,11 @@ export const App: React.FC = () => {
           <a href="#/" className={!project && hash === '#/' ? 'active' : ''}>콘텐츠 목록</a>
           <a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}>새 콘텐츠</a>
           <a href="#/character" className={hash.startsWith('#/character') ? 'active' : ''}>캐릭터·목소리</a>
+          {auth.user && (
+            <a href="#/account" className={hash.startsWith('#/account') ? 'active' : ''}>
+              계정
+            </a>
+          )}
           {auth.user && (
             <button
               className="btn small ghost"

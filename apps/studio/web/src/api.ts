@@ -127,6 +127,8 @@ export interface VoiceInfo {
   tempos: { value: number; label: string }[];
   provider: 'voicestudio' | 'edge' | 'none';
   describe: string;
+  /** 서버가 켜진 뒤 마지막으로 목소리를 만든 결과 (없으면 아직 안 만듦) */
+  lastVoice: { ok: boolean; at: string; provider: string; error?: string } | null;
 }
 
 export interface InstagramStatus {
@@ -151,11 +153,21 @@ export interface AuthState {
   /** login: 계정 있음 · setup: 화면에서 첫 계정 만들기(클라우드) · local: 이 PC 전용 */
   mode: 'local' | 'login' | 'setup';
   allowed: boolean;
-  user: { id: number; username: string; displayName: string } | null;
+  /** role researcher = 연구자 계정 (연구자 계정이 있으면 승인은 연구자만) */
+  user: { id: number; username: string; displayName: string; role?: 'member' | 'researcher' } | null;
+  /** 연구자 계정이 정해졌는지 (아니면 누구나 승인할 수 있어 화면에서 정하게 한다) */
+  researcherSet?: boolean;
+  /** 설정 코드로 잊은 비밀번호를 바꿀 수 있는지 (클라우드) */
+  canReset?: boolean;
 }
 
 export const api = {
   me: () => request<AuthState>('GET', '/auth/me'),
+  resetPassword: (input: { code: string; username: string; password: string }) => request<{ ok: true }>('POST', '/auth/reset', input),
+  changePassword: (current: string, password: string) => request<{ ok: true }>('POST', '/auth/password', { current, password }),
+  users: () => request<{ users: NonNullable<AuthState['user']>[] }>('GET', '/auth/users'),
+  addUser: (input: { username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/users', input),
+  claimResearcher: () => request<{ user: AuthState['user'] }>('POST', '/auth/claim-researcher'),
   login: (username: string, password: string) => request<{ user: AuthState['user'] }>('POST', '/auth/login', { username, password }),
   logout: () => request<{ ok: true }>('POST', '/auth/logout'),
   instagram: () => request<InstagramStatus>('GET', '/instagram'),
@@ -165,7 +177,7 @@ export const api = {
   instagramPublish: (renderId: number, caption: string, confirmDuplicate = false, trial = false, kind: 'reel' | 'carousel' = 'reel') =>
     request<InstagramJob>('POST', `/renders/${renderId}/instagram`, { confirm: true, caption, confirmDuplicate, trial, kind }),
   instagramJob: (jobId: string) => request<InstagramJob>('GET', `/instagram/jobs/${jobId}`),
-  setup: (input: { code: string; username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
+  setup: (input: { code: string; username: string; displayName: string; password: string; researcher?: boolean }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
   setVoicePreset: (id: string) => request<{ selected: string; selectedPreset: string }>('PUT', '/voice/preset', { id }),
@@ -210,7 +222,7 @@ export const api = {
   restore: (id: number, version: number) => request<ProjectDetail>('POST', `/projects/${id}/versions/${version}/restore`),
   check: (id: number) => request<{ version: number; issues: Issue[]; estimatedSeconds: number }>('GET', `/projects/${id}/check`),
   review: (id: number, body: { version: number; reviewer: string; checklist: Record<string, boolean>; decision: string; note: string; acceptQa?: boolean }) =>
-    request<ProjectDetail>('POST', `/projects/${id}/reviews`, body),
+    request<ProjectDetail & { warning?: string }>('POST', `/projects/${id}/reviews`, body),
   voice: (id: number) => request<{ provider: string; generated: number }>('POST', `/projects/${id}/voice`),
   preview: (id: number) => request<{ version: number; voiced: boolean; props: VideoProps }>('GET', `/projects/${id}/preview`),
   blog: (id: number, style?: BlogStyle) =>
