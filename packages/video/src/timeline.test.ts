@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
+import { speechPlayback, speechVolume } from './speechPlayback.ts';
 import { buildTimeline, captionChunks, captionGroups, splitCaption, totalFrames, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
@@ -19,6 +20,26 @@ describe('타임라인', () => {
     expect(t[1]!.speechFrames).toBe(90);
     expect(t[1]!.durationInFrames).toBeGreaterThan(90);
     expect(t[1]!.audioUrl).toBe('/a1.mp3');
+  });
+
+  it('서버처럼 앞 무음·어절 시간을 함께 넣으면: 음성은 말소리를 다 내고 장면이 끝나기 전에 멈춘다', () => {
+    // 음성 파일: 0.4초 무음 뒤 2.5초 말소리, 어절 4개 (원본 파일 기준 초)
+    const extras = script.scenes.map(() => ({ trimStart: 0.4, words: [[0.4, 1], [1.05, 1.6], [1.7, 2.3], [2.35, 2.9]] as [number, number][] }));
+    const t = buildTimeline(script, script.scenes.map(() => 2.5), script.scenes.map((_, i) => `/a${i}.mp3`), extras);
+    for (const x of t) {
+      const p = speechPlayback(x);
+      expect(p.trimBefore).toBe(12);
+      // 말소리 2.5초(75프레임)를 다 재생하고, 페이드가 끝난 뒤 자른다
+      expect(p.fadeStart).toBeGreaterThanOrEqual(75 - 1);
+      expect(p.trimAfter - p.trimBefore).toBeGreaterThan(p.fadeEnd);
+      // 재생이 장면 안에서 끝난다 (다음 장면 대사와 겹치지 않음)
+      expect(p.trimAfter - p.trimBefore).toBeLessThanOrEqual(x.durationInFrames);
+      expect(speechVolume(p.fadeStart, p.end)).toBe(1);
+      expect(speechVolume(p.fadeEnd, p.end)).toBe(0);
+      // 어절 시간은 앞 무음을 뺀 장면 기준 프레임
+      expect(x.words?.[0]).toEqual([0, 18]);
+      expect(x.words?.at(-1)![1]).toBe(75);
+    }
   });
 });
 

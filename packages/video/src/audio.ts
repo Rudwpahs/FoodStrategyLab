@@ -86,7 +86,7 @@ export async function normalizeLoudness(input: string, output: string): Promise<
   await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
 }
 
-/** 영상·음성의 소리 크기(dB)를 0.05초 간격으로 (자동 품질 검사용) */
+/** 영상·음성의 소리 크기(dB)를 QA_STEP 간격으로 (자동 품질 검사용) */
 export async function audioDb(file: string): Promise<number[]> {
   return rmsDb(await decodePcm(file), RATE, QA_STEP);
 }
