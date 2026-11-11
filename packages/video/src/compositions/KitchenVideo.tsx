@@ -134,18 +134,25 @@ function clipLayers(script: VideoProps['script'], timings: SceneTiming[], media:
 }
 
 /** 가장자리 어둡게(비네트) + 은은한 필름 질감 */
-const PostFx: React.FC<{ frame: number }> = ({ frame }) => (
-  <AbsoluteFill style={{ pointerEvents: 'none' }}>
-    <AbsoluteFill style={{ background: 'radial-gradient(ellipse 75% 62% at 50% 52%, rgba(0,0,0,0) 58%, rgba(30,14,6,0.42) 100%)' }} />
-    <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.08, mixBlendMode: 'overlay' }}>
-      <filter id="grain">
-        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={frame % 12} stitchTiles="stitch" />
-        <feColorMatrix type="saturate" values="0" />
-      </filter>
-      <rect width="100%" height="100%" filter="url(#grain)" />
-    </svg>
-  </AbsoluteFill>
-);
+const PostFx: React.FC<{ frame: number }> = ({ frame }) => {
+  const [x, y] = GRAIN_OFFSETS[frame % GRAIN_OFFSETS.length]!;
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      <AbsoluteFill style={{ background: 'radial-gradient(ellipse 75% 62% at 50% 52%, rgba(0,0,0,0) 58%, rgba(30,14,6,0.42) 100%)' }} />
+      <AbsoluteFill style={{ opacity: 0.08, mixBlendMode: 'overlay', backgroundImage: `url("${GRAIN_URL}")`, backgroundPosition: `${x}px ${y}px` }} />
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * 필름 질감: 예전에는 화면 전체(1080×1920)에 잡음 필터를 프레임마다 새로 계산했다(휴대폰 미리보기·렌더가 느려짐).
+ * 같은 잡음(이음새 없는 256px 타일)을 한 번만 그려 깔고, 프레임마다 위치만 바꿔 12가지 무늬가 돌게 한다.
+ */
+const GRAIN_TILE = 256;
+const GRAIN_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${GRAIN_TILE}" height="${GRAIN_TILE}"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`,
+)}`;
+const GRAIN_OFFSETS = Array.from({ length: 12 }, (_, i) => [(i * 97) % GRAIN_TILE, (i * 151) % GRAIN_TILE] as const);
 
 /**
  * 생성 AI로 만든 장면 클립(또는 첫 프레임 이미지)을 3D 장면 대신 보여준다.
