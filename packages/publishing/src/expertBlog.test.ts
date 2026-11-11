@@ -91,6 +91,12 @@ describe('블로그 문체 검사', () => {
     expect(issues.some((i) => i.message.includes('면역'))).toBe(true);
   });
 
+  it('띄어쓰기가 달라도 상투구·효능 표현을 잡는다 (황금 레시피, 피부 미용)', () => {
+    const issues = lintBlog('이건 황금 레시피예요.\n피부 미용에도 좋아요.', { dish: '호두정과' }).map((i) => i.message);
+    expect(issues.some((m) => m.includes('황금 레시피'))).toBe(true);
+    expect(issues.some((m) => m.includes('피부 미용'))).toBe(true);
+  });
+
   it('연구자가 직접 답한 1인칭 문장은 허용한다', () => {
     const answer = '제가 처음 만들었을 때는 시럽이 하얗게 굳었어요.';
     const issues = lintBlog(`## 만들면서 있었던 일\n\n${answer}`, { dish: '호두정과', notes: { answers: { memory: answer } } });

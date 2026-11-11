@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IG_MAX_CAPTION, IG_MAX_HASHTAGS, SAMPLE_RECIPES, checkScript, contentCandidates, formatIngredient, instagramCaption, type RecipeInput } from './index.ts';
+import { IG_MAX_CAPTION, IG_MAX_HASHTAGS, SAMPLE_RECIPES, checkScript, contentCandidates, formatIngredient, instagramCaption, instagramCaptionChecks, type RecipeInput } from './index.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 /** 파일럿과 같은 입력 (흔한 실수 = 검수 필요 초안) */
@@ -110,6 +110,24 @@ describe('콘텐츠 후보 3가지', () => {
     expect(text).not.toContain('[만드는 법]');
     expect(text).toContain('블로그에 정리했어요');
     expect(text).toContain('[재료]');
+  });
+});
+
+describe('인스타그램 설명 점검', () => {
+  const level = (caption: string, word: string) => instagramCaptionChecks(caption).find((c) => c.text.includes(word))?.level;
+
+  it('효능 표현은 띄어쓰기와 상관없이 잡는다 (피부미용, 피부 미용)', () => {
+    expect(level('피부미용에 좋아요 AI', '건강·효능')).toBe('warn');
+    expect(level('피부 미용에 좋아요 AI', '건강·효능')).toBe('warn');
+  });
+
+  it('"재료" 낱말만 있고 [재료] 목록이 없으면 재료 없음으로 본다', () => {
+    const long = { ...SAMPLE_RECIPES[0]!, ingredients: Array.from({ length: 120 }, (_, i) => ({ name: `아주 긴 이름의 재료 ${i + 1}`, amount: '1큰술' })) };
+    const text = instagramCaption(long, null, false, []);
+    expect(text).not.toContain('[재료]');
+    expect(text).toContain('전체 재료와 만드는 법은 블로그에');
+    expect(level(text, '재료')).toBe('warn');
+    expect(level(instagramCaption(SAMPLE_RECIPES[0]!, null, false, []), '재료')).toBe('ok');
   });
 });
 

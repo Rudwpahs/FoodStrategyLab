@@ -1,4 +1,5 @@
 import { IG_MAX_CAPTION, IG_MAX_HASHTAGS } from './candidates.ts';
+import { findHealthClaims } from './wordLists.ts';
 
 /**
  * 인스타그램에 올리기 전 점검 (설명 글). 화면에서 글을 고칠 때마다 바로 다시 검사한다.
@@ -11,8 +12,6 @@ export interface IgCheck {
   level: 'ok' | 'warn' | 'error';
   text: string;
 }
-
-const HEALTH = ['다이어트', '살 빠', '체중 감량', '혈당', '혈압', '면역력', '항암', '암 예방', '해독', '디톡스', '피부 미용', '만병'];
 
 export function instagramCaptionChecks(caption: string): IgCheck[] {
   const out: IgCheck[] = [];
@@ -27,8 +26,9 @@ export function instagramCaptionChecks(caption: string): IgCheck[] {
         : { level: 'ok', text: `해시태그 ${tags.length}개 (5개 이하)` },
   );
   out.push(/AI/.test(caption) ? { level: 'ok', text: 'AI 캐릭터·AI 음성 표시가 있어요' } : { level: 'warn', text: 'AI 캐릭터·AI 음성이라는 표시가 없어요. 설명 글에 남겨 두는 편이 안전해요.' });
-  out.push(/\[재료\]|재료/.test(caption) ? { level: 'ok', text: '재료가 설명 글에 있어요 (저장·검색에 도움)' } : { level: 'warn', text: '설명 글에 재료가 없어요. 실제 요리 계정들은 재료·분량을 본문에 적어요.' });
-  const health = HEALTH.filter((w) => caption.includes(w));
+  // 재료 목록 블록이 있어야 한다 ("전체 재료와 만드는 법은 블로그에" 같은 문장의 '재료'는 목록이 아니다)
+  out.push(/^\[재료\]\s*$/m.test(caption) ? { level: 'ok', text: '재료가 설명 글에 있어요 (저장·검색에 도움)' } : { level: 'warn', text: '설명 글에 재료가 없어요. 실제 요리 계정들은 재료·분량을 본문에 적어요.' });
+  const health = findHealthClaims(caption);
   out.push(health.length ? { level: 'warn', text: `건강·효능 표현(${health.join(', ')})은 추천에서 빠질 수 있어요.` } : { level: 'ok', text: '건강·효능 표현 없음' });
   if (/댓글[^\n]{0,15}(?:DM|디엠)/.test(caption)) out.push({ level: 'warn', text: '"댓글 달면 DM으로" 방식은 거부감이 크다는 반응이 많아요. 레시피는 본문에 그대로 두는 편을 권해요.' });
   return out;
