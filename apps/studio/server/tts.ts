@@ -6,8 +6,8 @@ import https from 'node:https';
 import path from 'node:path';
 import { changeTempo, readFreshCache, removeAudioWithCache, writeCache } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
-import { VOICE_TEMPOS, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
-import { engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
+import { VOICE_TEMPOS, defaultPreset, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
+import { assertCommercialEngine, engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
 
 /**
  * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
@@ -27,9 +27,13 @@ export function resetTtsDetection() {
   detected = null;
 }
 
-/** 지금 쓰는 VoiceStudio 목소리 프로필 이름 (환경 변수 > 스튜디오 화면에서 고른 것 > 기본) */
+/**
+ * 지금 쓰는 VoiceStudio 목소리 프로필 이름 (환경 변수 > 스튜디오 화면에서 고른 것 > 기본 맛조수).
+ * 저장소 기준 녹음이 있는 목록의 목소리만 쓴다 (원칙 5): 목록에 없는 이름은 건너뛴다.
+ */
 export function voicestudioVoice(): string {
-  return ttsSettings().voicestudio.voiceOverride || readVoiceSettings().voicestudioVoice || 'default';
+  const wanted = [ttsSettings().voicestudio.voiceOverride, readVoiceSettings().voicestudioVoice];
+  return wanted.find((v) => v && presetByVoiceName(v)) ?? defaultPreset()?.voiceName ?? 'default';
 }
 
 /** 말 빠르기 배수 (설정 화면에서 고름, 1 = 보통) */
@@ -138,7 +142,7 @@ async function voicestudioSpeech(text: string, out: string, voice: string) {
   // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
   // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
   const timeoutMs = Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000;
-  const payload = JSON.stringify({ model, voice, input: text, response_format: 'mp3', speed, language: 'ko' });
+  const payload = JSON.stringify({ model: assertCommercialEngine(model), voice, input: text, response_format: 'mp3', speed, language: 'ko' });
   const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
   // VoiceStudio가 다른 음성을 만드는 중이면 429(바쁨, 다시 시도해도 안전)를 준다 → 잠시 기다렸다 다시 요청
   const retryMs = Number(process.env.VOICESTUDIO_RETRY_MS) || 15_000;

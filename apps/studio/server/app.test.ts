@@ -476,4 +476,16 @@ describe('목소리 고르기', () => {
     expect(after.body.tempo).toBe(1.1);
     await call('PUT', '/voice/tempo', { tempo: 1 });
   });
+
+  it('목소리 이름으로 고를 때도 기준 녹음이 있는 목록의 목소리만 받는다 (원칙 5)', async () => {
+    const info = await call('GET', '/voice');
+    expect((await call('PUT', '/voice', { voice: 'VoiceStudio에서 만든 목소리' })).status).toBe(400);
+    const second = info.body.presets[1];
+    const ok = await call('PUT', '/voice', { voice: second.voiceName });
+    expect(ok.status).toBe(200);
+    expect(ok.body.selected).toBe(second.voiceName);
+    // 설명 문장으로 새 목소리를 만드는 기능은 없다 (기준 녹음이 아님)
+    expect((await call('POST', '/voice/design', { name: '새 목소리' })).status).toBe(404);
+    await call('PUT', '/voice/preset', { id: info.body.presets[0].id });
+  });
 });
