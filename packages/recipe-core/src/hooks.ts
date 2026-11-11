@@ -253,11 +253,14 @@ interface Facts {
   timeTip: string;
 }
 
-/** 요리 이름 앞의 꾸미는 말(바삭한, 부드러운, 잘 익은)을 뺀다. 다 빼면 원래 이름 */
+/** 꾸미는 말처럼 끝나지만 수량·명사인 낱말 ("한 그릇", "양은 냄비") */
+const NOT_MODIFIER = new Set(['한', '양은']);
+
+/** 요리 이름 앞의 꾸미는 말(바삭한, 부드러운, 맛있는)을 뺀다. 다 빼면 원래 이름 */
 export function plainDishName(dish: string): string {
   const words = dish.trim().split(/\s+/);
   let i = 0;
-  while (i < words.length - 1 && /(?:한|운|은|던)$/.test(words[i]!)) i++;
+  while (i < words.length - 1 && /(?:한|운|은|던|는)$/.test(words[i]!) && !NOT_MODIFIER.has(words[i]!)) i++;
   return words.slice(i).join(' ') || dish;
 }
 
