@@ -45,6 +45,19 @@ describe('3D 장면 상태', () => {
     expect(Math.cos(turns.at(-1)!)).toBeCloseTo(1);
   });
 
+  it('비교 장면: 위쪽(건너뛴 쪽)은 실패한 접시·차분한 조명, 아래쪽은 완성 접시', () => {
+    const r = SAMPLE_RECIPES.find((x) => buildStyledScript(x, { style: 'before-after' }).script.scenes.some((s) => s.visual === 'compare'))!;
+    const s = buildStyledScript(r, { style: 'before-after' }).script;
+    const t = buildTimeline(s, s.scenes.map(() => null));
+    const i = s.scenes.findIndex((x) => x.visual === 'compare');
+    const f = t[i]!.from + 10;
+    const main = stageAt(s, t, f, 'pancake', 0)!;
+    const fail = stageAt(s, t, f, 'pancake', 0, 'compare-fail')!;
+    expect(main.plated).toBe('done');
+    expect(fail).toMatchObject({ plated: 'failed', mood: 'gloom' });
+    expect(fail.camera).toEqual(main.camera);
+  });
+
   it('실수 장면은 실패한 음식, 팁·엔딩은 완성 음식을 보여준다', () => {
     expect(stageAt(script, timings, frameOf('mistake', 0.5), 'pancake', props)!.plated).toBe('failed');
     expect(stageAt(script, timings, frameOf('tip', 0.5), 'pancake', props)!.plated).toBe('done');

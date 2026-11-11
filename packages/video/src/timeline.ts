@@ -3,6 +3,8 @@ import { estimateSceneSeconds } from '@mat-lab/recipe-core';
 
 export const FPS = 30;
 const PAD_SECONDS = 0.45;
+/** recipe-core의 estimateSceneSeconds는 말하는 시간에 0.5초 여유를 더해 돌려준다. 음성이 없을 때는 그 여유를 빼고 PAD_SECONDS를 따로 더한다 */
+const ESTIMATE_PAD_SECONDS = 0.5;
 const MIN_SCENE_SECONDS = 1.8;
 const MIN_INTRO_SECONDS = 2.4;
 const OUTRO_EXTRA_SECONDS = 1.6;
@@ -74,7 +76,7 @@ export function buildTimeline(
 ): SceneTiming[] {
   let cursor = 0;
   return script.scenes.map((scene, i) => {
-    const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - 0.5;
+    const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - ESTIMATE_PAD_SECONDS;
     let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
     if (scene.type === 'tip' || scene.type === 'mistake') seconds += PUNCH_BEAT_SECONDS;

@@ -21,8 +21,6 @@ export interface Shot {
   cook: [number, number];
   /** 접시 위 완성 음식 표시 */
   plated: 'none' | 'done' | 'failed';
-  /** 재료 소품 표시: 숨김 / 차례로 등장 / 계속 표시 */
-  props: 'hidden' | 'appear' | 'shown';
   mood: Mood;
 }
 
@@ -69,21 +67,20 @@ export function shotFor(type: SceneType, indexOfType: number): Shot {
     burnerOn: false,
     cook: [0, 0],
     plated: 'none',
-    props: 'shown',
   };
   switch (type) {
     case 'intro':
-      return { ...base, ...WIDE, props: 'hidden' };
+      return { ...base, ...WIDE };
     case 'mistake':
-      return { ...base, ...PRESENT, mood: 'gloom', plated: 'failed', props: 'hidden', action: 'present' };
+      return { ...base, ...PRESENT, mood: 'gloom', plated: 'failed', action: 'present' };
     case 'question':
-      return { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, props: 'hidden' };
+      return { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42 };
     case 'explain':
       return indexOfType % 2 === 0
-        ? { ...base, ...STOVE, mood: 'fire', action: 'cook', face: 'stove', burnerOn: true, cook: [0.15, 0.45], props: 'hidden' }
-        : { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, action: 'point', burnerOn: true, cook: [0.45, 0.5], props: 'hidden' };
+        ? { ...base, ...STOVE, mood: 'fire', action: 'cook', face: 'stove', burnerOn: true, cook: [0.15, 0.45] }
+        : { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42, action: 'point', burnerOn: true, cook: [0.45, 0.5] };
     case 'ingredients':
-      return { ...base, ...COUNTER, mood: 'fresh', props: 'appear' };
+      return { ...base, ...COUNTER, mood: 'fresh' };
     case 'steps':
       return { ...base, ...STOVE, mood: 'fire', action: 'cook', face: 'stove', burnerOn: true, cook: [0, 1] };
     case 'tip':
@@ -160,13 +157,13 @@ export function shotForScene(scene: Pick<Scene, 'type' | 'visual'>, indexOfType:
 }
 
 const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>> = {
-  result: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 38, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
-  fail: () => ({ ...PRESENT, mood: 'gloom', plated: 'failed', props: 'hidden', action: 'present', face: 'camera' }),
-  'fail-closeup': () => ({ ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
+  result: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 38, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false }),
+  fail: () => ({ ...PRESENT, mood: 'gloom', plated: 'failed', action: 'present', face: 'camera' }),
+  'fail-closeup': () => ({ ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false }),
   // 비교 장면은 화면을 위아래로 나눠 두 접시를 보여 준다 (KitchenVideo). 기본 상태는 '노트대로 한' 쪽.
-  compare: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], props: 'hidden', action: 'idle', burnerOn: false }),
-  sizzle: (b) => ({ ...STOVE_CLOSE, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6], props: 'hidden' }),
-  react: () => ({ ...CHEF_PUNCH, mood: 'curious', fov: 38, props: 'hidden', face: 'camera' }),
+  compare: () => ({ ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false }),
+  sizzle: (b) => ({ ...STOVE_CLOSE, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6] }),
+  react: () => ({ ...CHEF_PUNCH, mood: 'curious', fov: 38, face: 'camera' }),
   signature: () => ({ ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present', face: 'camera' }),
 };
 
