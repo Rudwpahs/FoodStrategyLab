@@ -383,6 +383,42 @@ describe('장면별 AI 클립', () => {
   });
 });
 
+describe('미디어 파일 보내기', () => {
+  const media = (p: string) => fetch(`${base.replace('/api', '')}/media/${p}`);
+
+  it('DB·설정 파일 같은 데이터 폴더의 다른 파일은 보내지 않는다', async () => {
+    fs.writeFileSync(path.join(DATA_DIR, 'studio.db'), 'SQLite format 3 secret');
+    fs.writeFileSync(path.join(DATA_DIR, 'settings.json'), '{}');
+    for (const p of ['studio.db', 'settings.json', 'studio%2edb', 'audio/..%2fstudio.db', 'renders/..%2fstudio.db']) {
+      const r = await media(p);
+      expect(r.status, p).not.toBe(200);
+      expect(await r.text(), p).not.toContain('SQLite');
+    }
+  });
+
+  it('렌더 폴더의 글·묶음 파일은 점을 인코딩해도 받을 수 없고, 영상·이미지는 받을 수 있다', async () => {
+    const dir = path.join(DATA_DIR, 'renders', '777');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'blog.md'), 'SECRET BLOG');
+    fs.writeFileSync(path.join(dir, 'package.zip'), 'SECRET ZIP');
+    fs.writeFileSync(path.join(dir, 'video.mp4'), 'mp4');
+    for (const p of ['blog.md', 'blog%2emd', 'blog%2Emd', 'package%2ezip', 'BLOG.MD']) {
+      const r = await media(`renders/777/${p}`);
+      expect(r.status, p).not.toBe(200);
+      expect(await r.text(), p).not.toContain('SECRET');
+    }
+    const ok = await media('renders/777/video.mp4');
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  it('없는 파일 오류에 서버 안의 경로를 드러내지 않는다', async () => {
+    const r = await media('audio/nope.mp3');
+    expect(r.status).toBe(404);
+    expect(await r.text()).not.toContain(DATA_DIR);
+  });
+});
+
 describe('테스트 격리', () => {
   it('테스트 파일마다 따로 만든 데이터 폴더를 쓴다 (동시에 돌 때 settings.json 등이 겹치지 않게)', () => {
     expect(path.basename(DATA_DIR)).toMatch(/^matlab-test-/);

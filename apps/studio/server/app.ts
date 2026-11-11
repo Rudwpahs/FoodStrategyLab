@@ -118,6 +118,19 @@ function reelChecks(render: { outputDir: string }): IgCheck[] {
   return out;
 }
 
+/** /media로 보낼 수 있는 폴더와 파일 종류 (렌더 폴더의 zip·md·txt·json 등은 빠짐) */
+const MEDIA_TYPES = new Map<string, RegExp>([
+  ['audio', /\.(mp3|wav)$/i],
+  ['photos', /\.(jpe?g|png|webp)$/i],
+  ['clips', /\.(mp4|webm|jpe?g|png|webp)$/i],
+  ['renders', /\.(mp4|jpe?g|png|webp)$/i],
+  ['sources', /\.(jpe?g|png|webp|gif|pdf|txt)$/i],
+]);
+
+/** 올린 원본 자료의 확장자: 사진·PDF는 그 형식으로, 나머지(글)는 모두 txt (HTML·SVG처럼 실행되는 형식으로 저장하지 않는다) */
+const SOURCE_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'application/pdf': 'pdf' };
+const sourceExt = (type: string) => (Object.hasOwn(SOURCE_EXT, type.toLowerCase()) ? SOURCE_EXT[type.toLowerCase()]! : 'txt');
+
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** 인스타그램 로그인 뒤 돌아오는 화면 (외부 브라우저에서 열릴 수 있어 간단한 페이지로 보여 준다) */
@@ -209,9 +222,28 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   // 그 밖의 모든 API·미디어는 로그인 확인
   app.use(['/api', '/media'], authGuard(auth));
-  // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
-  app.use('/media/renders', (req, _res, next) => (/\.(zip|md|html|txt|srt|json)$/i.test(req.path) ? next(new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.')) : next()));
-  app.use('/media', express.static(DATA_DIR, { fallthrough: false }));
+  // 정해 둔 미디어 폴더의 정해 둔 파일 종류만 보낸다 (DB·설정 파일 등은 보내지 않음). 확인은 디코딩한 주소로 한다
+  app.use('/media', (req, res, next) => {
+    let file: string;
+    try {
+      file = decodeURIComponent(req.path);
+    } catch {
+      return next(new HttpError(400, '잘못된 주소예요.'));
+    }
+    const [, dir = '', ...rest] = file.split('/');
+    const allowed = MEDIA_TYPES.get(dir);
+    if (!allowed || !rest.length || rest.some((p) => !p || p.startsWith('.'))) return next(new HttpError(404, '없는 파일이에요.'));
+    // 렌더 폴더의 글·묶음 파일은 직접 열 수 없다: 승인 확인을 거치는 내보내기 API로만 받는다
+    if (!allowed.test(file)) return next(dir === 'renders' ? new HttpError(403, '승인 후 내보내기에서 받을 수 있어요.') : new HttpError(404, '없는 파일이에요.'));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // 올린 원본 자료는 문서로 열려도 스크립트가 돌지 않게 한다
+    if (dir === 'sources') {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      if (/\.pdf$/i.test(file)) res.setHeader('Content-Disposition', 'attachment');
+    }
+    next();
+  });
+  for (const dir of MEDIA_TYPES.keys()) app.use(`/media/${dir}`, express.static(path.join(DATA_DIR, dir), { fallthrough: false, dotfiles: 'deny' }));
 
   // 목소리 후보 들어 보기 작업 (한 번에 하나)
   let samplesJob: VoiceSamplesJob | null = null;
@@ -350,8 +382,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const dir = path.join(DATA_DIR, 'sources', String(pid));
     fs.mkdirSync(dir, { recursive: true });
     const saved = files.map((f, i) => {
-      const ext = (f.type.split('/')[1] ?? 'bin').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin';
-      const rel = `sources/${pid}/${i + 1}.${ext}`;
+      const rel = `sources/${pid}/${i + 1}.${sourceExt(f.type)}`;
       fs.writeFileSync(path.join(DATA_DIR, rel), Buffer.from(f.data, 'base64'));
       return { name: f.name, type: f.type, file: rel };
     });
@@ -995,10 +1026,12 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       const first = err.issues[0];
       return res.status(400).json({ error: `${first?.path.join('.') || '입력'}: ${first?.message ?? '형식 오류'}` });
     }
-    const status = (err as { status?: number }).status;
-    if (status && status < 500) return res.status(status).json({ error: (err as Error).message });
-    console.error(err);
-    res.status(500).json({ error: (err as Error).message ?? '서버 오류' });
+    const e = err as Error & { status?: number; code?: unknown };
+    const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
+    if (status >= 500) console.error(err);
+    // 파일 경로·SQL 같은 시스템 오류 내용(code가 있는 오류)은 화면에 보내지 않고 로그에만 남긴다
+    const system = typeof e.code === 'string';
+    res.status(status).json({ error: system ? (status === 404 ? '없는 파일이에요.' : '서버 오류가 났어요. 잠시 뒤 다시 시도해 주세요.') : e.message || '서버 오류' });
   });
   return app;
 }

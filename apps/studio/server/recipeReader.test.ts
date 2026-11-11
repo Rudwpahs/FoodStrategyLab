@@ -357,6 +357,27 @@ describe('사진으로 새 콘텐츠 (API)', () => {
     fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
   });
 
+  it('올린 원본 자료는 HTML·SVG로 열리지 않는다 (글은 일반 텍스트로만)', async () => {
+    const html = Buffer.from('<script>fetch("/api/projects")</script> 김치 200g').toString('base64');
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>').toString('base64');
+    const res = await fetch(`${base}/api/projects/from-files`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ files: [{ name: 'recipe.txt', type: 'text/html', data: html }, { name: 'a.svg', type: 'text/svg+xml', data: svg }] }),
+    });
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: number };
+    for (const f of repo.getSource(id)!.files) {
+      expect(f.file).toMatch(/\.txt$/);
+      const served = await fetch(`${base}${f.url}`);
+      expect(served.status).toBe(200);
+      expect(served.headers.get('content-type')).toMatch(/^text\/plain/);
+      expect(served.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(served.headers.get('content-security-policy')).toContain('sandbox');
+    }
+    fs.rmSync(`${DATA_DIR}/sources/${id}`, { recursive: true, force: true });
+  });
+
   it('다른 요청은 여전히 2MB까지만 받는다', async () => {
     const res = await fetch(`${base}/api/projects`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipe: { topic: 'x'.repeat(3 * 1024 * 1024) } }) });
     expect(res.status).toBe(413);
