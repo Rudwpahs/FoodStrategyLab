@@ -10,7 +10,7 @@ import { DATA_DIR } from './config.ts';
 import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
 import { toJpeg } from '@mat-lab/video/audio';
 import type { IgCheck } from '@mat-lab/recipe-core';
-import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, startCandidateVoices, startRender } from './pipeline.ts';
+import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, removeProject, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
 import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, monthlyBudgetUsd, type UploadFile } from './recipeReader.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
@@ -400,7 +400,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/projects/:id', (req, res) => res.json(repo.getProject(id(req))));
 
   api.delete('/projects/:id', (req, res) => {
-    repo.deleteProject(id(req));
+    removeProject(repo, id(req));
     res.status(204).end();
   });
 

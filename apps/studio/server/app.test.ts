@@ -366,6 +366,19 @@ describe('완성 사진', () => {
     const removed = await call('DELETE', `/projects/${pid}/photo`);
     expect(removed.body.photo).toBe(null);
   });
+
+  it('콘텐츠를 지우면 올린 사진·영상 파일도 함께 지운다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[0] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5f1d2f40000000049454e44ae426082', 'hex');
+    const photo = (await (await fetch(`${base}/projects/${pid}/photo`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png })).json()).photo.file as string;
+    const rid = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    expect(fs.existsSync(path.join(DATA_DIR, photo))).toBe(true);
+    expect((await call('DELETE', `/projects/${pid}`)).status).toBe(204);
+    expect(fs.existsSync(path.join(DATA_DIR, photo))).toBe(false);
+    expect(fs.existsSync(path.join(DATA_DIR, 'renders', String(rid)))).toBe(false);
+    expect((await call('DELETE', `/projects/${pid}`)).status).toBe(404);
+  });
 });
 
 describe('장면별 AI 클립', () => {

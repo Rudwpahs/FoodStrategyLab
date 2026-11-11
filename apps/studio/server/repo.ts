@@ -1,6 +1,6 @@
 import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import type { CheckedSuggestion } from './recipeReader.ts';
-import type { QaReport } from '@mat-lab/video/qa';
+import type { QaIssue, QaReport } from '@mat-lab/video/qa';
 import {
   CATEGORIES,
   checkScript,
@@ -44,6 +44,10 @@ export interface Review {
   createdAt: string;
 }
 
+/** 서버가 기록하는 자동 검사 결과. code 'skipped' = 검사나 처리를 하지 못함 (검사했다고 적지 않고 경고로 남긴다) */
+export type RenderQaIssue = Omit<QaIssue, 'code'> & { code: QaIssue['code'] | 'skipped' };
+export type RenderQa = Omit<QaReport, 'issues'> & { issues: RenderQaIssue[] };
+
 export interface RenderRow {
   id: number;
   projectId: number;
@@ -56,7 +60,7 @@ export interface RenderRow {
   createdAt: string;
   finishedAt: string | null;
   /** 자동 품질 검사 결과 (예전 영상은 없음) */
-  qa: QaReport | null;
+  qa: RenderQa | null;
 }
 
 export interface ProjectSummary {
@@ -168,10 +172,10 @@ function toRender(r: Row): RenderRow {
   };
 }
 
-function parseQa(v: unknown): QaReport | null {
+function parseQa(v: unknown): RenderQa | null {
   if (!v) return null;
   try {
-    return JSON.parse(String(v)) as QaReport;
+    return JSON.parse(String(v)) as RenderQa;
   } catch {
     return null;
   }
@@ -516,7 +520,7 @@ export class Repo {
       .run(next.status, next.stage, next.progress, next.outputDir, next.error, patch.finished ? now() : cur.finishedAt, renderId);
   }
 
-  setRenderQa(renderId: number, qa: QaReport) {
+  setRenderQa(renderId: number, qa: RenderQa) {
     this.db.prepare('UPDATE renders SET qa_json = ? WHERE id = ?').run(JSON.stringify(qa), renderId);
   }
 
