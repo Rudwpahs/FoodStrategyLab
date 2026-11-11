@@ -18,6 +18,8 @@ frame.set([0xff, 0xf3, 0x64, 0xc4]);
 const mp3 = Buffer.concat(Array.from({ length: 50 }, () => frame));
 
 const requests: Record<string, unknown>[] = [];
+/** 가짜 VoiceStudio가 받은 모든 요청 (메서드 + 주소) */
+const hits: string[] = [];
 let busyTimes = 0;
 let notAvailableTimes = 0;
 const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: 'default', kind: 'design' }];
@@ -29,6 +31,7 @@ const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.url}`);
     const json = (code: number, body: unknown) => {
       res.statusCode = code;
       res.setHeader('content-type', 'application/json');
@@ -205,6 +208,17 @@ describe('VoiceStudio 음성', () => {
     notAvailableTimes = 10;
     await expect(synthesize('계속 엔진 없음', audioDir)).rejects.toThrow(/not available/);
     notAvailableTimes = 0;
+  });
+
+  it('한 문장을 만들 때 VoiceStudio 상태·엔진·목소리 목록을 한 번씩만 묻는다', async () => {
+    await ttsProvider();
+    hits.length = 0;
+    await synthesize('요청 수를 세는 새 문장', audioDir);
+    const count = (prefix: string) => hits.filter((h) => h.startsWith(prefix)).length;
+    expect(count('GET /health')).toBeLessThanOrEqual(1);
+    expect(count('GET /engines/tts')).toBe(1);
+    expect(count('GET /profiles')).toBeLessThanOrEqual(1);
+    expect(count('POST /v1/audio/speech')).toBe(1);
   });
 
   it('같은 문장을 동시에 만들면 한 번만 요청하고 둘 다 같은 파일을 받는다 (임시 파일이 겹치지 않게)', async () => {

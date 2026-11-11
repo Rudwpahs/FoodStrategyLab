@@ -113,13 +113,14 @@ function run(cmd: string, args: string[]): Promise<void> {
  * 지금 쓰는 목소리의 정체: 음성 도구 + 엔진 + 목소리 프로필 ID + 설정.
  * 같은 이름으로 목소리를 다시 만들거나 엔진이 바뀌면 값이 달라져서, 예전 음성 캐시를 쓰지 않는다.
  */
-export async function voiceIdentity(provider: TtsProvider, override: VoiceOverride = {}): Promise<string | null> {
+export async function voiceIdentity(provider: TtsProvider, override: VoiceOverride = {}, known?: VoiceStudioTarget): Promise<string | null> {
   const s = ttsSettings();
   if (provider === 'edge') return ['edge', s.edge.voice, s.edge.rate, s.edge.pitch].join('|');
   if (provider !== 'voicestudio') return null;
-  const url = await voicestudioUrl();
-  if (!url) return null;
-  const engine = (await engineInfo(url)).chosen ?? 'none';
+  const target = known ?? (await voicestudioTarget());
+  if (!target) return null;
+  const { url } = target;
+  const engine = target.engine ?? 'none';
   const voice = override.voice ?? voicestudioVoice();
   const profileId = (await listProfiles(url).catch(() => [])).find((p) => p.name === voice)?.id ?? 'builtin';
   const tempo = override.tempo ?? voiceTempo();
@@ -132,12 +133,21 @@ export function audioKey(text: string, identity: string): string {
   return crypto.createHash('sha1').update(`${identity}|${text}`).digest('hex').slice(0, 16);
 }
 
-async function voicestudioSpeech(text: string, out: string, voice: string) {
-  const { speed, apiKey } = ttsSettings().voicestudio;
+/** 한 문장을 만드는 동안 쓰는 VoiceStudio 주소와 엔진 (한 번 묻고 아래 단계에 넘긴다) */
+interface VoiceStudioTarget {
+  url: string;
+  /** 상업 이용 가능한 엔진 (없으면 null) */
+  engine: string | null;
+}
+
+async function voicestudioTarget(): Promise<VoiceStudioTarget | null> {
   const url = await voicestudioUrl();
-  if (!url) throw new Error('VoiceStudio에 연결할 수 없습니다. 앱을 켜 주세요.');
+  return url ? { url, engine: (await engineInfo(url)).chosen } : null;
+}
+
+async function voicestudioSpeech(text: string, out: string, voice: string, { url, engine: model }: VoiceStudioTarget) {
+  const { speed, apiKey } = ttsSettings().voicestudio;
   // 상업 이용 가능한 엔진만 쓴다 (기본 OmniVoice는 비상업 라이선스)
-  const model = (await engineInfo(url)).chosen;
   if (!model) throw new Error('상업적으로 쓸 수 있는 음성 엔진(VoxCPM2 등)이 설치되어 있지 않습니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
   // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
   // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
@@ -241,12 +251,11 @@ export async function synthesize(text: string, audioDir: string, override: Voice
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
   const voice = override.voice ?? voicestudioVoice();
   const tempo = override.tempo ?? voiceTempo();
+  // VoiceStudio 주소·엔진은 한 번만 묻고 아래 단계에 넘긴다.
   // 고른 목소리가 VoiceStudio에 아직 없으면 기준 녹음으로 먼저 만든다 (목소리 정체에 프로필 ID가 들어가므로 먼저)
-  if (provider === 'voicestudio') {
-    const url = await voicestudioUrl();
-    if (url) await ensurePresetVoice(url, voice);
-  }
-  const identity = await voiceIdentity(provider, { voice, tempo });
+  const target = provider === 'voicestudio' ? await voicestudioTarget() : null;
+  if (target) await ensurePresetVoice(target.url, voice);
+  const identity = await voiceIdentity(provider, { voice, tempo }, target ?? undefined);
   if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
@@ -254,7 +263,7 @@ export async function synthesize(text: string, audioDir: string, override: Voice
     // 같은 음성을 동시에 만들면(후보 목소리 작업 + 영상 제작) 먼저 시작한 작업을 기다린다
     let job = making.get(file);
     if (!job) {
-      job = makeAudio(provider, text, file, voice, tempo).finally(() => making.delete(file));
+      job = makeAudio(provider, text, file, voice, tempo, target).finally(() => making.delete(file));
       making.set(file, job);
     }
     await job;
@@ -265,7 +274,7 @@ export async function synthesize(text: string, audioDir: string, override: Voice
 /** 지금 만들고 있는 음성 파일 (같은 파일을 동시에 두 번 만들지 않게) */
 const making = new Map<string, Promise<void>>();
 
-async function makeAudio(provider: TtsProvider, text: string, file: string, voice: string, tempo: number) {
+async function makeAudio(provider: TtsProvider, text: string, file: string, voice: string, tempo: number, target: VoiceStudioTarget | null) {
   // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
   removeAudioWithCache(file);
   // 임시 파일 이름은 작업마다 다르게 (다른 작업의 임시 파일을 덮거나 지우지 않게)
@@ -273,7 +282,8 @@ async function makeAudio(provider: TtsProvider, text: string, file: string, voic
   const raw = `${tmp}.raw.mp3`;
   try {
     if (provider === 'voicestudio') {
-      await voicestudioSpeech(text, tmp, voice);
+      if (!target) throw new Error('VoiceStudio에 연결할 수 없습니다. 앱을 켜 주세요.');
+      await voicestudioSpeech(text, tmp, voice, target);
       // 말 빠르기 (음높이는 그대로)
       if (tempo !== 1) {
         fs.renameSync(tmp, raw);
