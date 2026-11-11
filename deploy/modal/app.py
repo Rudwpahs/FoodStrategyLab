@@ -273,8 +273,9 @@ def _studio_env(public_url: str | None, instance: str) -> dict:
             "VOICESTUDIO_INFO_TIMEOUT_MS": "1800000",
             # 목소리가 없으면 자막만으로 조용히 만들지 않고 알린다
             "TTS_PROVIDER": "voicestudio",
-            # 후보 목소리를 GPU 여러 대에서 동시에 (MATLAB_VOICE_GPUS와 맞춘다)
-            "VOICE_PARALLEL": os.environ.get("MATLAB_VOICE_GPUS", "3"),
+            # 후보 목소리를 GPU 여러 대에서 동시에 (Voice의 max_containers와 맞춘다).
+            # matlab-settings 비밀값의 VOICE_PARALLEL로 줄일 수 있다.
+            "VOICE_PARALLEL": os.environ.get("VOICE_PARALLEL") or os.environ.get("MATLAB_VOICE_GPUS", "3"),
             "NODE_OPTIONS": "--max-old-space-size=4096",
             "NODE_NO_WARNINGS": "1",
         }
@@ -335,7 +336,9 @@ def _setup_voice(env: dict, public_url: str | None) -> None:
 @app.function(
     image=web_image,
     volumes={"/data": data_volume},
-    secrets=[modal.Secret.from_name("matlab-studio")],
+    # matlab-studio: GitHub Actions가 배포 때마다 다시 쓰는 열쇠(설정 코드·API 열쇠)
+    # matlab-settings: 사용자가 Modal 화면에서 직접 고치는 설정 (배포가 덮어쓰지 않음, 같은 이름이면 이쪽이 우선)
+    secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")],
     cpu=(0.125, 8.0),
     memory=(1024, 16384),
     max_containers=1,  # DB를 한 곳에서만 쓴다
@@ -358,7 +361,7 @@ def web() -> None:
         try:
             public_url = web.get_web_url()
         except Exception as e:
-            print(f"⚠️ 공개 주소를 알아내지 못했어요 ({e}). 요청 헤더로 짐작합니다. Modal 비밀값 PUBLIC_URL로 정할 수 있어요.")
+            print(f"⚠️ 공개 주소를 알아내지 못했어요 ({e}). 요청 헤더로 짐작합니다. Modal 비밀값 matlab-settings의 PUBLIC_URL로 정할 수 있어요.")
     _wait_previous_owner(instance)
 
     def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
