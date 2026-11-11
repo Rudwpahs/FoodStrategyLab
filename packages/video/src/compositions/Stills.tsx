@@ -211,7 +211,7 @@ export const CarouselCard: React.FC<CarouselCardProps> = ({ recipe, reviewed, re
         <div style={box}>
           {title(p.parts > 1 ? `재료 (${p.part}/${p.parts})` : '재료')}
           {p.items.map((i, idx) => (
-            <div key={idx} style={{ fontSize: p.items.length > 9 ? 36 : 44, fontWeight: 650, lineHeight: 1.35, marginBottom: 6 }}>
+            <div key={idx} style={{ fontSize: p.items.length > 12 ? 30 : p.items.length > 9 ? 36 : 44, fontWeight: 650, lineHeight: 1.35, marginBottom: 6 }}>
               {i.group && (idx === 0 || p.items[idx - 1]!.group !== i.group) && <div style={{ fontSize: 32, fontWeight: 850, color: COLORS.navy, marginTop: idx ? 10 : 0 }}>[{i.group}]</div>}
               · {formatIngredient(i)}
             </div>
@@ -222,7 +222,7 @@ export const CarouselCard: React.FC<CarouselCardProps> = ({ recipe, reviewed, re
         <div style={box}>
           {title(p.parts > 1 ? `만드는 법 (${p.part}/${p.parts})` : '만드는 법')}
           {p.items.map((s, idx) => (
-            <div key={idx} style={{ display: 'flex', gap: 18, fontSize: 42, fontWeight: 650, lineHeight: 1.36, marginBottom: 22 }}>
+            <div key={idx} style={{ display: 'flex', gap: 18, fontSize: p.items.length > 5 ? 32 : p.items.length > 4 ? 36 : 42, fontWeight: 650, lineHeight: 1.36, marginBottom: p.items.length > 4 ? 14 : 22 }}>
               <b style={{ color: COLORS.red, minWidth: 40 }}>{p.start + idx}</b>
               <span>{s}</span>
             </div>
