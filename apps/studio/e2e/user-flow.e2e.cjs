@@ -1,9 +1,12 @@
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
-// 최종 사용자 흐름 점검 (호두정과 파일럿 C 영상 사용)
+const path = require('path');
+// 최종 사용자 흐름 점검 (휴대폰 폭 390px, 호두정과 파일럿 C 영상 사용). CI에는 넣지 않는다 (브라우저·서버 필요).
+// 0) Playwright 준비 (한 번): npm i --no-save playwright && npx playwright install chromium
 // 1) 빈 데이터로 서버: MATLAB_DATA_DIR=$PWD/tmp/e2e-flow PORT=5190 TTS_PROVIDER=none npm run dev
 // 2) node apps/studio/e2e/user-flow.e2e.cjs   (out/pilot/C-experiment.mp4 필요 — tools/content-lab/pilot.ts)
 const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
+const repoRoot = path.resolve(__dirname, '../../..');
 const log = (...a) => console.log(...a);
 (async () => {
   const meta = await (await fetch(`${base}/api/meta`)).json();
@@ -11,27 +14,38 @@ const log = (...a) => console.log(...a);
   const recipe = { ...walnut, commonMistake: '호두를 데치지 않고 바로 조리면 떫은맛이 남을 수 있어요.' };
   const { id } = await (await fetch(`${base}/api/projects`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipe }) })).json();
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 1360, height: 1400 } });
+  const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const errors = [];
   p.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
-  const go = async (step) => { await p.goto(`${base}/#/p/${id}/${step}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(2500); };
+  p.on('dialog', (d) => d.accept());
+  // 휴대폰에서 화면이 옆으로 밀리지 않는지 (가로 넘침)
+  const overflow = async (where) => {
+    const w = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    log(`가로 넘침 [${where}]`, w > 0 ? `${w}px ✕` : '없음 ✓');
+  };
+  const go = async (step) => { await p.goto(`${base}/#/p/${id}/${step}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(2500); await overflow(step); };
 
-  // 2~4. 후보 → 다른 후보 → C 선택
+  // 2~4. 후보 → 다른 후보 → 처음 후보로 → C로 만들기
   await go('script');
-  const titles = () => p.locator('div[style*="font-weight: 800"][style*="font-size: 17"]').allInnerTexts();
+  // 후보마다 '첫 대사' (같은 연출이면 제목이 같을 수 있어 첫 대사로 비교)
+  const titles = () => p.locator('.candidate').evaluateAll((els) => els.map((e) => e.querySelectorAll('.small')[0]?.textContent ?? ''));
   log('후보', JSON.stringify(await titles()));
-  await p.getByText('다른 후보 3개 보기').click();
+  await p.getByText('다른 후보 보기').click();
   await p.waitForTimeout(3500);
   log('다른 후보', JSON.stringify(await titles()));
   await p.screenshot({ path: 'f2-more.png' });
   await p.getByText('처음 후보로').click();
   await p.waitForTimeout(3500);
-  await p.locator('button', { hasText: '이 후보로 만들기' }).nth(2).click();
-  await p.waitForSelector('text=고른 후보로 대본을 만들었어요', { timeout: 15000 });
-  log('선택 후 첫 대사', await p.locator('.scene textarea').first().inputValue());
+  await p.locator('button', { hasText: '이 영상으로 만들기' }).nth(2).click();
+  await p.waitForSelector('text=영상을 만들기 시작했어요', { timeout: 15000 });
+  const chosen = await (await fetch(`${base}/api/projects/${id}`)).json();
+  log('선택 후 첫 대사', chosen.latest.script.scenes[0].line);
 
-  // 5. 검수용 영상: 이미 만든 파일럿 C 영상을 연결 (30분 렌더 대신)
-  log(execSync(`cd /home/user/FoodStrategyLab && MATLAB_DATA_DIR=$PWD/tmp/e2e-flow npx tsx tools/content-lab/seed-pilot-render.ts ${id} out/pilot/C-experiment.mp4 out/pilot/C-experiment-first.png 2>/dev/null`).toString().trim());
+  // 5. 검수용 영상: 시작된 렌더는 취소하고(30분 렌더 대신) 이미 만든 파일럿 C 영상을 연결
+  await p.waitForSelector('button:has-text("취소")', { timeout: 15000 });
+  await p.locator('button', { hasText: '취소' }).first().click();
+  await p.waitForTimeout(2000);
+  log(execSync(`MATLAB_DATA_DIR=${repoRoot}/tmp/e2e-flow npx tsx tools/content-lab/seed-pilot-render.ts ${id} out/pilot/C-experiment.mp4 out/pilot/C-experiment-first.png 2>/dev/null`, { cwd: repoRoot }).toString().trim());
   await go('video');
   log('영상 단계 배지', await p.locator('.badge.review').allInnerTexts());
   // 6. 블로그 후보 2개 중 첫 번째 선택
@@ -88,6 +102,7 @@ const log = (...a) => console.log(...a);
 
   // 승인 후 수정 → 재승인 필요
   await go('script');
+  await p.locator('summary', { hasText: '대본 직접 고치기' }).click();
   const ta = p.locator('.scene textarea').nth(1);
   await ta.fill((await ta.inputValue()) + ' 수정');
   await p.locator('button', { hasText: '새 버전으로 저장' }).click();

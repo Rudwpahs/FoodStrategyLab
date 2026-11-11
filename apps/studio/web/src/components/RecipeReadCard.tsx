@@ -2,6 +2,7 @@ import React from 'react';
 import { CATEGORY_LABELS, formatIngredient } from '@mat-lab/recipe-core';
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
+import { SuggestionDetails } from './TopicPicker.tsx';
 
 const FIELD_LABELS: Record<string, string> = {
   topic: '주제(질문)',
@@ -83,12 +84,7 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
                   <div>
                     <b>{s.topic}</b>
                   </div>
-                  <div>{s.principle}</div>
-                  <div className="muted">
-                    근거: {s.evidenceLabel} “{s.evidenceQuote}” · {CATEGORY_LABELS[s.category]}
-                  </div>
-                  {!s.grounded && <div className="issue warning small">확인 필요: {s.notes.join(' / ')}</div>}
-                  {(s.styleNotes ?? []).length > 0 && <div className="muted">문체(AI 티): {s.styleNotes.join(' / ')}</div>}
+                  <SuggestionDetails s={s} />
                   {current ? (
                     <span className="badge">지금 쓰는 제안</span>
                   ) : (
@@ -96,8 +92,8 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
                       <button
                         className="btn small ghost"
                         onClick={async () => {
-                          const next = { ...r, topic: s.topic, principle: s.principle, category: s.category };
-                          if ((await run(() => api.updateRecipe(project.id, next), '주제를 바꿨어요')) !== undefined) await onConfirmed();
+                          const body = { topic: s.topic, principle: s.principle, category: s.category };
+                          if ((await run(() => api.chooseTopic(project.id, body), '주제를 바꿨어요')) !== undefined) await onConfirmed();
                         }}
                       >
                         이 주제로 바꾸기

@@ -17,7 +17,7 @@ export const ProjectList: React.FC = () => {
       <div className="row">
         <div>
           <h1>콘텐츠 목록</h1>
-          <div className="muted">레시피 입력 → 대본 → 이희재 연구자 검수 → 영상·블로그 제작 → 내보내기</div>
+          <div className="muted">레시피 → 주제·영상 고르기 → 영상·블로그 → 검수·승인 → 게시·기록</div>
         </div>
         <div className="spacer" />
         <a className="btn primary" href="#/new">+ 새 콘텐츠</a>
@@ -26,7 +26,7 @@ export const ProjectList: React.FC = () => {
         <div className="empty">불러오는 중…</div>
       ) : items.length === 0 ? (
         <div className="card empty">
-          아직 콘텐츠가 없습니다. <a href="#/new">새 콘텐츠</a>를 만들거나, 터미널에서 <code>npm run seed</code>로 파일럿 샘플 3개를 넣어 보세요.
+          아직 콘텐츠가 없어요. <a href="#/new">새 콘텐츠</a>에서 레시피 사진을 올리거나 직접 입력해 보세요.
         </div>
       ) : (
         <div className="list">

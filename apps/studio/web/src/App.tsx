@@ -39,7 +39,19 @@ export const App: React.FC = () => {
   const [toast, setToast] = useState<Toast>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [auth, setAuth] = useState<AuthState | null>(null);
-  const checkAuth = useCallback(() => api.me().then(setAuth).catch(() => setAuth({ mode: 'login', allowed: false, user: null })), []);
+  // 로그인 확인 요청 자체가 실패했을 때(연결 끊김·서버 깨어나는 중): 로그인 화면으로 착각시키지 않는다
+  const [authError, setAuthError] = useState('');
+  const checkAuth = useCallback(
+    () =>
+      api.me().then(
+        (a) => {
+          setAuth(a);
+          setAuthError('');
+        },
+        (e: Error) => setAuthError(e.message),
+      ),
+    [],
+  );
   useEffect(() => {
     checkAuth();
     const on = () => checkAuth();
@@ -67,9 +79,21 @@ export const App: React.FC = () => {
   );
 
   useEffect(() => {
+    // 실패하면 meta가 비어 있고, 화면은 '모름'으로 다룬다 (목소리 엔진이 없다고 단정하지 않음)
     if (auth?.allowed) api.meta().then(setMeta).catch(() => undefined);
   }, [auth?.allowed]);
 
+  if (authError && !auth?.allowed) {
+    return (
+      <div className="empty stack" style={{ alignItems: 'center' }}>
+        <div>스튜디오에 연결하지 못했어요.</div>
+        <div className="small">{authError}</div>
+        <button className="btn primary" onClick={() => void checkAuth()}>
+          다시 시도
+        </button>
+      </div>
+    );
+  }
   if (!auth) return <div className="empty">불러오는 중…</div>;
   if (!auth.allowed) return <LoginPage auth={auth} onLoggedIn={checkAuth} />;
 
@@ -98,8 +122,8 @@ export const App: React.FC = () => {
               className="btn small ghost"
               title={`${auth.user.displayName} 로그아웃`}
               onClick={async () => {
-                await api.logout().catch(() => undefined);
-                checkAuth();
+                await run(() => api.logout());
+                void checkAuth();
               }}
             >
               로그아웃

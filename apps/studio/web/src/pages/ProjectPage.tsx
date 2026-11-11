@@ -7,24 +7,7 @@ import { PublishStep } from '../steps/PublishStep.tsx';
 import { ReviewStep } from '../steps/ReviewStep.tsx';
 import { ScriptStep } from '../steps/ScriptStep.tsx';
 import { VideoStep } from '../steps/VideoStep.tsx';
-
-const STEPS = [
-  { key: 'input', label: '레시피' },
-  { key: 'script', label: '주제·영상 고르기' },
-  { key: 'video', label: '영상·블로그' },
-  { key: 'review', label: '검수·승인' },
-  { key: 'publish', label: '게시·기록' },
-] as const;
-type StepKey = (typeof STEPS)[number]['key'];
-
-/** 최신 대본으로 만든 영상(검수용 포함)이 있는지 */
-const hasLatestRender = (p: ProjectDetail) => p.renders.some((r) => r.status === 'done' && r.scriptVersion === p.latest?.version);
-
-function defaultStep(p: ProjectDetail): StepKey {
-  if (p.status === 'draft') return 'script';
-  if (p.status === 'review') return hasLatestRender(p) ? 'review' : 'video';
-  return 'publish';
-}
+import { STEPS, defaultStep, doneUntil, type StepKey } from '../steps/progress.ts';
 
 export interface StepProps {
   project: ProjectDetail;
@@ -56,8 +39,7 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
   const go = (s: StepKey) => navigate(`/p/${id}/${s}`);
   const props: StepProps = { project, setProject, reload, go };
 
-  // 끝난 단계까지 표시: 입력(0) → 후보(1) → 영상·블로그(2) → 승인(3) → 게시(4)
-  const doneUntil = project.status === 'draft' ? 0 : project.status === 'review' ? (hasLatestRender(project) ? 2 : 1) : project.status === 'approved' ? 3 : 3;
+  const done = doneUntil(project);
 
   return (
     <div>
@@ -81,7 +63,7 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
 
       <div className="steps">
         {STEPS.map((s, i) => (
-          <button key={s.key} className={`${current === s.key ? 'active' : ''} ${i <= doneUntil ? 'done' : ''}`} onClick={() => go(s.key)}>
+          <button key={s.key} className={`${current === s.key ? 'active' : ''} ${i <= done ? 'done' : ''}`} onClick={() => go(s.key)}>
             <span className="num">{i + 1}</span>
             {s.label}
           </button>

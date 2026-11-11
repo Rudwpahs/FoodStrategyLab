@@ -12,27 +12,27 @@ export const QaPanel: React.FC<{ render: RenderRow | undefined; onRemake?: () =>
   const errors = qa.issues.filter((i) => i.level === 'error');
   const warnings = qa.issues.filter((i) => i.level === 'warning');
   return (
-    <div className="stack ig-checks">
+    <div className="stack check-list">
       <b className="small">
         자동 품질 검사 {errors.length ? `— 고쳐야 할 문제 ${errors.length}건` : warnings.length ? `— 확인할 점 ${warnings.length}건` : '— 통과'}
       </b>
       {qa.fixed.map((f, i) => (
-        <div key={`f${i}`} className="small ig-check ok">
+        <div key={`f${i}`} className="small check-item ok">
           🔧 {f}
         </div>
       ))}
       {errors.map((e, i) => (
-        <div key={`e${i}`} className="small ig-check error">
+        <div key={`e${i}`} className="small check-item error">
           ✕ {e.message}
         </div>
       ))}
       {warnings.map((w, i) => (
-        <div key={`w${i}`} className="small ig-check warn">
+        <div key={`w${i}`} className="small check-item warn">
           ! {w.message}
         </div>
       ))}
       {!errors.length && (
-        <div className="small ig-check ok">✓ 검사한 것: {qa.checked.join(' · ')}</div>
+        <div className="small check-item ok">✓ 검사한 것: {qa.checked.join(' · ')}</div>
       )}
       {errors.length > 0 && onRemake && (
         <div>

@@ -1,16 +1,20 @@
 name: Deploy to Modal
 
-# 스튜디오를 Modal 클라우드에 올린다.
+# 스튜디오를 Modal 클라우드에 올린다. 테스트·타입 검사가 통과해야 배포한다.
 # 필요한 저장소 비밀값(Settings → Secrets and variables → Actions):
 #   MODAL_TOKEN_ID, MODAL_TOKEN_SECRET : Modal 설정 → API Tokens 에서 만든 값
-#   STUDIO_SETUP_CODE                  : 처음 계정을 만들 때 화면에 넣을 설정 코드 (8자 이상, 직접 정함)
+#   STUDIO_SETUP_CODE                  : 처음 계정을 만들 때 화면에 넣을 설정 코드 (최소 8자, 12자 이상 권장, 직접 정함)
 # 선택 (인스타그램 공식 게시, docs/INSTAGRAM_SETUP.md):
 #   INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET : Meta 개발자 앱의 Instagram 앱 ID·비밀값
 # 선택 (레시피 사진·파일 읽기, docs/MODAL_SETUP.md):
 #   ANTHROPIC_API_KEY                  : Claude API 열쇠 (console.anthropic.com)
-#   CLAUDE_MONTHLY_BUDGET_USD          : 한 달 사용 한도(달러, 기본 100)
-#   CLAUDE_MODEL                       : 모델 (기본 claude-opus-5-5, 아끼려면 claude-haiku-5-5)
-# 비밀값이 없으면 아무것도 하지 않고 끝난다.
+#
+# 비밀값 두 묶음 (deploy/modal/app.py가 둘 다 붙인다):
+#   matlab-studio   : 위 GitHub 비밀값을 배포 때마다 이 묶음에 새로 써 넣는다 (손으로 고치면 다음 배포에서 덮어씀)
+#   matlab-settings : 사용자가 Modal 화면에서 직접 고치는 설정 (CLAUDE_EFFORT, CLAUDE_MODEL, CLAUDE_MONTHLY_BUDGET_USD,
+#                     IG_AI_LABEL, PUBLIC_URL, VOICE_PARALLEL …). 없을 때 한 번만 만들고, 그 뒤로는 절대 건드리지 않는다.
+# 예전처럼 GitHub 비밀값 CLAUDE_MONTHLY_BUDGET_USD·CLAUDE_MODEL을 넣어 두었다면 그대로 넘기지만, matlab-settings 값이 우선한다.
+# Modal 비밀값이 없으면 아무것도 하지 않고 끝난다.
 
 on:
   workflow_dispatch:
@@ -30,7 +34,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: tools 타입 검사 (tools/setup/voice.ts는 클라우드 서버가 켜질 때 돈다)
+        run: npx tsc -p tools/tsconfig.json --noEmit
+      - run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -52,7 +72,7 @@ jobs:
             exit 0
           fi
           if [ "${#STUDIO_SETUP_CODE}" -lt 8 ]; then
-            echo "::error::STUDIO_SETUP_CODE 비밀값을 8자 이상으로 넣어 주세요 (처음 계정 만들 때 쓰는 코드)."
+            echo "::error::STUDIO_SETUP_CODE 비밀값을 8자 이상(권장 12자 이상)으로 넣어 주세요 (처음 계정 만들 때 쓰는 코드)."
             exit 1
           fi
           echo "ready=1" >> "$GITHUB_OUTPUT"
@@ -69,7 +89,7 @@ jobs:
         if: steps.check.outputs.ready == '1'
         run: pip install -q modal==1.6.3
 
-      - name: 설정 코드(와 인스타그램 앱 정보)를 Modal 비밀값으로 저장
+      - name: GitHub 비밀값을 Modal 비밀값(matlab-studio)으로 저장
         if: steps.check.outputs.ready == '1'
         run: |
           args=("STUDIO_SETUP_CODE=$STUDIO_SETUP_CODE")
@@ -81,6 +101,7 @@ jobs:
             args+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
             echo "레시피 읽기(Claude API) 열쇠도 저장해요."
           fi
+          # 예전 방식 호환: GitHub 비밀값에 있으면 넘긴다 (matlab-settings에 같은 이름이 있으면 그쪽이 우선)
           if [ -n "$CLAUDE_MONTHLY_BUDGET_USD" ]; then
             args+=("CLAUDE_MONTHLY_BUDGET_USD=$CLAUDE_MONTHLY_BUDGET_USD")
           fi
@@ -88,6 +109,19 @@ jobs:
             args+=("CLAUDE_MODEL=$CLAUDE_MODEL")
           fi
           modal secret create matlab-studio "${args[@]}" --force >/dev/null
+
+      - name: 사용자 설정 묶음(matlab-settings) 확인 — 없을 때만 빈 묶음을 만든다
+        if: steps.check.outputs.ready == '1'
+        run: |
+          # --force 없이 만들면 이미 있을 때 실패한다. 그 경우 사용자가 넣은 설정을 그대로 둔다.
+          if out=$(modal secret create matlab-settings MATLAB_SETTINGS=1 2>&1); then
+            echo "설정 묶음 matlab-settings를 새로 만들었어요. Modal 화면 → Secrets → matlab-settings 에서 설정을 넣을 수 있어요."
+          elif echo "$out" | grep -qi "already exists"; then
+            echo "설정 묶음 matlab-settings가 이미 있어요. 그대로 둡니다."
+          else
+            echo "::error::설정 묶음 matlab-settings를 확인하지 못했어요. Modal 토큰을 확인해 주세요."
+            exit 1
+          fi
 
       - name: 배포 (처음에는 이미지 만들기로 20~40분)
         if: steps.check.outputs.ready == '1'
@@ -97,28 +131,31 @@ jobs:
         if: steps.check.outputs.ready == '1'
         run: |
           URL=$(python deploy/modal/url.py)
-          echo "스튜디오 주소: $URL"
           code=000
           for i in $(seq 1 12); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/api/health" || true)
             [ "$code" = 200 ] && break
             sleep 10
           done
+          # 로그인 확인 주소도 답하는지 (화면이 실제로 열리는지)
+          me=000
+          if [ "$code" = 200 ]; then
+            me=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/api/auth/me" || true)
+          fi
           {
             echo "## 스튜디오 주소"
             echo ""
             echo "$URL"
             echo ""
-            if [ "$code" = 200 ]; then
+            if [ "$code" = 200 ] && [ "$me" = 200 ]; then
               echo "서버가 켜졌어요. 휴대폰에서 이 주소를 열어 첫 계정을 만드세요."
               echo "맛조수 목소리는 처음 한 번 GPU에서 준비돼요 (10~30분). 그동안에도 스튜디오는 쓸 수 있어요."
             else
-              echo "서버 응답을 확인하지 못했어요 (마지막 응답 $code). 몇 분 뒤 주소를 열어 보세요."
+              echo "서버 응답을 확인하지 못했어요 (상태 $code / 로그인 $me). 몇 분 뒤 주소를 열어 보세요."
+              echo "오류 기록은 공개 로그에 남기지 않아요. Modal 화면 → Apps → matlab-studio → web 의 Logs 에서 보세요."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$code" != 200 ]; then
-            echo "::group::Modal 서버 오류 로그 (최근 150줄)"
-            modal app logs matlab-studio --source stderr --tail 150 --timestamps || true
-            echo "::endgroup::"
+          if [ "$code" != 200 ] || [ "$me" != 200 ]; then
+            echo "::error::스튜디오가 응답하지 않아요 (상태 $code / 로그인 $me). 자세한 오류는 Modal 화면의 web 로그에서 확인하세요."
             exit 1
           fi

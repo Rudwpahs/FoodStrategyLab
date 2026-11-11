@@ -3,11 +3,25 @@ import { CATEGORIES, CATEGORY_LABELS, type Category } from '@mat-lab/recipe-core
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
 
+type Suggestion = NonNullable<ProjectDetail['source']>['suggestions'][number];
+
+/** 주제 후보의 원리·근거 인용·확인할 점 (주제 고르기와 읽은 레시피 카드가 같이 쓴다) */
+export const SuggestionDetails: React.FC<{ s: Suggestion }> = ({ s }) => (
+  <>
+    <div>{s.principle}</div>
+    <div className="muted">
+      근거: {s.evidenceLabel} “{s.evidenceQuote}” · {CATEGORY_LABELS[s.category]}
+    </div>
+    {!s.grounded && <div className="issue warning small">확인 필요: {s.notes.join(' / ')}</div>}
+    {(s.styleNotes ?? []).length > 0 && <div className="muted">문체(AI 티): {s.styleNotes.join(' / ')}</div>}
+  </>
+);
+
 /** 사진에서 읽은 레시피라 아직 영상 주제를 고르지 않았는지 (대본이 이미 있으면 고른 것으로 본다) */
 export const needsTopic = (p: ProjectDetail) => Boolean(p.source?.suggestions?.length && !p.source.topicChosenAt && !p.latest);
 
 /**
- * 영상 주제 고르기: AI가 레시피에서 찾은 후보 3개(근거 인용 포함) 중 하나, 또는 직접 쓰기.
+ * 영상 주제 고르기: AI가 레시피에서 찾은 주제 후보(근거 인용 포함) 중 하나, 또는 직접 쓰기.
  * 주제를 고른 뒤에야 후보 영상 5개를 만든다 (AI가 고른 주제로 바로 영상을 만들지 않는다).
  */
 export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: ProjectDetail) => void }> = ({ project, onChosen }) => {
@@ -36,7 +50,7 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
   return (
     <div className="card stack">
       <div>
-        <h2 style={{ margin: 0 }}>③ 영상 주제 고르기</h2>
+        <h2 style={{ margin: 0 }}>영상 주제 고르기</h2>
         <div className="muted small">
           AI가 레시피에서 찾은 주제예요. 하나를 고르거나 직접 써 주세요. 주제를 정한 뒤에 그 주제로 후보 영상 5개를 만들어요.
         </div>
@@ -49,12 +63,7 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
             {s.angle && <span className="badge">{s.angle}</span>}
             {i === 0 && <span className="badge approved">AI 추천</span>}
           </div>
-          <div>{s.principle}</div>
-          <div className="muted">
-            근거: {s.evidenceLabel} “{s.evidenceQuote}” · {CATEGORY_LABELS[s.category]}
-          </div>
-          {!s.grounded && <div className="issue warning small">확인 필요: {s.notes.join(' / ')}</div>}
-          {(s.styleNotes ?? []).length > 0 && <div className="muted">문체(AI 티): {s.styleNotes.join(' / ')}</div>}
+          <SuggestionDetails s={s} />
         </label>
       ))}
       <div className="row small" style={{ gap: 8 }}>

@@ -20,8 +20,23 @@ function useFrame() {
   return frame;
 }
 
-export const CharacterPage: React.FC = () => {
+/** 감정별 캐릭터 미리보기. 매 프레임 이 칸만 다시 그린다 (목소리 설정 화면까지 다시 그리지 않게) */
+const CharacterGrid: React.FC<{ talking: boolean }> = ({ talking }) => {
   const frame = useFrame();
+  return (
+    <div className="chars">
+      {EMOTIONS.map((e) => (
+        <div className="card" key={e}>
+          <Character emotion={e} frame={frame} talking={talking} size={200} />
+          <h3 style={{ marginTop: 8 }}>{EMOTION_LABELS[e]}</h3>
+          <div className="muted small">{e}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export const CharacterPage: React.FC = () => {
   const { meta } = useApp();
   const [talking, setTalking] = useState(false);
 
@@ -40,15 +55,7 @@ export const CharacterPage: React.FC = () => {
 
       <VoicePanel />
 
-      <div className="chars">
-        {EMOTIONS.map((e) => (
-          <div className="card" key={e}>
-            <Character emotion={e} frame={frame} talking={talking} size={200} />
-            <h3 style={{ marginTop: 8 }}>{EMOTION_LABELS[e]}</h3>
-            <div className="muted small">{e}</div>
-          </div>
-        ))}
-      </div>
+      <CharacterGrid talking={talking} />
 
       <div className="grid2">
         <div className="card stack">
@@ -72,7 +79,7 @@ export const CharacterPage: React.FC = () => {
             목소리: {meta ? meta.tts.voice : '…'}
           </div>
           <div className="muted small">
-            캐릭터는 코드로 그린 SVG라 매 영상에서 모양이 바뀌지 않습니다. 측면·3/4 시점 시트와 2D 리깅은 다음 단계 과제입니다.
+            캐릭터는 코드로 그려서 매 영상에서 모양이 바뀌지 않습니다.
           </div>
         </div>
       </div>

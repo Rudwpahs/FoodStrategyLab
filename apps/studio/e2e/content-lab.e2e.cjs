@@ -1,6 +1,8 @@
 const { chromium } = require('playwright');
-// 사용법: 빈 데이터로 스튜디오를 띄운 뒤 (MATLAB_DATA_DIR=tmp/e2e-data PORT=5190 TTS_PROVIDER=none npm run dev)
-// node apps/studio/e2e/content-lab.e2e.cjs  — 스크린샷은 현재 폴더에 저장
+// 연출·훅 직접 고르기와 블로그 질문지 점검. CI에는 넣지 않는다 (브라우저·서버 필요).
+// 0) Playwright 준비 (한 번): npm i --no-save playwright && npx playwright install chromium
+// 1) 빈 데이터로 스튜디오를 띄운 뒤 (MATLAB_DATA_DIR=tmp/e2e-data PORT=5190 TTS_PROVIDER=none npm run dev)
+// 2) node apps/studio/e2e/content-lab.e2e.cjs  — 스크린샷은 현재 폴더에 저장
 const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
 (async () => {
   // 호두정과 프로젝트 생성 (API)
@@ -14,9 +16,9 @@ const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
   p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await p.goto(`${base}/#/p/${id}`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(1500);
-  // 대본 단계로 이동
-  const scriptTab = p.locator('.steps').getByText('AI 대본');
-  await scriptTab.click().catch(() => {});
+  // 주제·영상 고르기 단계 → '다른 방법으로 대본 만들기' 펼치기
+  await p.locator('.steps').getByText('주제·영상 고르기').click();
+  await p.locator('summary', { hasText: '다른 방법으로 대본 만들기' }).click();
   await p.waitForSelector('text=연출과 첫 장면 고르기', { timeout: 15000 });
   await p.locator('button', { hasText: '캐릭터 코미디형' }).click();
   await p.waitForTimeout(800);
@@ -24,16 +26,16 @@ const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
   await p.getByText('③ 이 연출과 첫 장면으로 새 대본 만들기').click();
   await p.waitForSelector('text=첫 장면', { timeout: 15000 });
   await p.waitForTimeout(800);
-  const firstLine = await p.locator('textarea').first().inputValue();
+  const firstLine = await p.locator('.scene textarea').first().inputValue();
   console.log('first scene line after comedy:', firstLine);
   // 훅만 바꾸기: 결과 선공개형 선택
   await p.getByText('결과 선공개형').first().click();
   await p.getByText('지금 대본의 첫 장면만 바꾸기').click();
   await p.waitForTimeout(1500);
-  console.log('first scene line after hook change:', await p.locator('textarea').first().inputValue());
+  console.log('first scene line after hook change:', await p.locator('.scene textarea').first().inputValue());
   await p.screenshot({ path: 'script-after.png', fullPage: true });
-  // 게시 단계: 블로그 유형 선택
-  await p.locator('.steps').getByText('블로그·내보내기').click();
+  // 게시 단계: 블로그 유형 선택 (서버에 저장된다)
+  await p.locator('.steps').getByText('게시·기록').click();
   await p.waitForSelector('text=네이버 블로그 원고', { timeout: 15000 });
   await p.selectOption('select', { label: '전문가 조리 노트형 — 핵심 단계의 이유와 실패를 줄이는 방법 중심' });
   await p.waitForSelector('text=이희재 연구자에게 묻기', { timeout: 15000 });

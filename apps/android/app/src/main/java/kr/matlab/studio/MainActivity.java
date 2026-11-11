@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.Menu;
@@ -31,9 +32,10 @@ import android.widget.Toast;
 
 /**
  * 맛 연구소 스튜디오 앱.
- * 영상·음성 제작은 스튜디오 서버(어머니 PC 또는 클라우드)에서 하고, 이 앱은 그 화면을 휴대폰에서 연다.
- * - 처음 실행하면 스튜디오 주소를 입력한다 (나중에 메뉴에서 바꿀 수 있음)
- * - 사진·클립 올리기, ZIP·이미지 내려받기 지원
+ * 영상·음성 제작은 클라우드 스튜디오 서버(Modal)에서 하고, 이 앱은 그 화면을 휴대폰에서 연다.
+ * - 설치하면 바로 클라우드 주소가 열린다 (연결이 안 되거나 메뉴의 '스튜디오 주소 바꾸기'를 누르면 주소 입력 화면)
+ * - 사진 찍기·사진/파일 고르기, ZIP·이미지 내려받기 지원
+ * - https 주소만 연다 (예전 집 네트워크·Tailscale용 http 허용은 뺐다)
  * - 인스타그램·네이버 같은 다른 사이트 링크는 휴대폰 브라우저로 연다
  */
 public class MainActivity extends Activity {
@@ -45,6 +47,8 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    /** 카메라로 찍을 때 사진이 들어갈 자리 */
+    private Uri pendingPhoto;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,8 +150,22 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
+                pendingPhoto = null;
                 try {
-                    startActivityForResult(params.createIntent(), REQ_FILE);
+                    Intent chooser = Intent.createChooser(params.createIntent(), "사진·파일 고르기");
+                    // 사진을 받는 칸이면 '사진 찍기'(카메라)도 함께 보여 준다
+                    if (acceptsImages(params)) {
+                        pendingPhoto = PhotoProvider.newPhotoUri(MainActivity.this);
+                        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        camera.putExtra(MediaStore.EXTRA_OUTPUT, pendingPhoto);
+                        camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        if (camera.resolveActivity(getPackageManager()) != null) {
+                            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] {camera});
+                        } else {
+                            pendingPhoto = null;
+                        }
+                    }
+                    startActivityForResult(chooser, REQ_FILE);
                 } catch (Exception e) {
                     fileCallback = null;
                     Toast.makeText(MainActivity.this, "파일을 고를 수 없어요.", Toast.LENGTH_LONG).show();
@@ -177,11 +195,30 @@ public class MainActivity extends Activity {
         web.loadUrl(base);
     }
 
+    /** 받는 파일 종류에 사진이 들어 있는지 (종류를 정하지 않았으면 사진도 받는다) */
+    private static boolean acceptsImages(WebChromeClient.FileChooserParams params) {
+        String[] types = params.getAcceptTypes();
+        if (types == null || types.length == 0) return true;
+        for (String t : types) {
+            for (String one : t.split(",")) {
+                String s = one.trim().toLowerCase();
+                if (s.isEmpty() || s.startsWith("image/") || s.equals(".heic") || s.equals(".jpg") || s.equals(".jpeg") || s.equals(".png")) return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQ_FILE && fileCallback != null) {
-            fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+            Uri[] picked = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            // 카메라 앱은 보통 결과에 주소를 주지 않는다: 사진 자리에 사진이 들어왔으면 그것을 쓴다
+            if (picked == null && resultCode == RESULT_OK && pendingPhoto != null && PhotoProvider.hasPhoto(this, pendingPhoto)) {
+                picked = new Uri[] {pendingPhoto};
+            }
+            fileCallback.onReceiveValue(picked);
             fileCallback = null;
+            pendingPhoto = null;
             return;
         }
         super.onActivityResult(requestCode, resultCode, data);

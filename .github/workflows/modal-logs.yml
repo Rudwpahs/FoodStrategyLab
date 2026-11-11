@@ -1,7 +1,9 @@
 name: Modal logs
 
-# 진단용: Modal 서버의 최근 상태·오류 기록을 보여 준다 (버튼으로 실행).
-# 공개 저장소이므로 시스템 기록과 오류(stderr)만, 한 줄 300자까지만 보여 준다.
+# 진단용: Modal 서버의 최근 상태 기록을 보여 준다 (버튼으로 실행).
+# 공개 저장소이므로 시스템 기록(컨테이너 시작·종료·메모리)만, 한 줄 300자까지만 보여 준다.
+# 서버 오류 기록(stderr)에는 레시피 문장·외부 서비스 응답이 섞일 수 있어 여기에 찍지 않는다.
+# 오류 기록은 Modal 화면 → Apps → matlab-studio → web(또는 Voice) → Logs 에서 본다.
 
 on:
   workflow_dispatch:
@@ -28,5 +30,5 @@ jobs:
         run: modal container list || true
       - name: 시스템 기록 (컨테이너 시작·종료·메모리)
         run: modal app logs matlab-studio --source system --tail "${LINES:-200}" --timestamps --show-function-id 2>&1 | cut -c1-300 || true
-      - name: 오류 기록 (stderr)
-        run: modal app logs matlab-studio --source stderr --tail "${LINES:-200}" --timestamps --show-function-id 2>&1 | cut -c1-300 || true
+      - name: 오류 기록 보는 곳
+        run: echo "오류 기록(stderr)은 공개 로그에 찍지 않아요. Modal 화면 → Apps → matlab-studio → web/Voice → Logs 에서 보세요."

@@ -44,6 +44,8 @@ export const VoicePanel: React.FC = () => {
 
   if (!info) return <div className="card">목소리 설정 불러오는 중…</div>;
   const vs = info.voicestudio;
+  // 클라우드(Modal)의 목소리 중계기는 GPU를 깨우지 않고 바로 '켜짐'으로 답한다 (deploy/modal/voice_proxy.py)
+  const cloud = vs.state === 'ok' && vs.version === 'modal';
   const done = samples ? Object.values(samples.items).filter(Boolean).length : 0;
   const total = samples ? Object.keys(samples.items).length : 0;
   const tempoLabel = (v: number) => info.tempos.find((t) => t.value === v)?.label ?? `${v}배`;
@@ -53,7 +55,7 @@ export const VoicePanel: React.FC = () => {
       <div className="row">
         <h2 style={{ margin: 0 }}>맛조수 목소리</h2>
         <span className={`badge ${vs.state === 'ok' ? 'approved' : vs.state === 'starting' ? 'review' : 'draft'}`}>
-          {vs.state === 'ok' ? '목소리 엔진 연결됨' : vs.state === 'starting' ? '목소리 엔진 준비 중…' : '목소리 엔진 꺼짐'}
+          {cloud ? '클라우드 목소리 엔진 · 쓸 때만 켜져요' : vs.state === 'ok' ? '목소리 엔진 연결됨' : vs.state === 'starting' ? '목소리 엔진 준비 중…' : '목소리 엔진 꺼짐'}
         </span>
         <div className="spacer" />
         <span className="muted small">지금: {info.describe}</span>
