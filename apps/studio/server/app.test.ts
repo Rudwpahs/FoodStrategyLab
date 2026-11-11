@@ -119,6 +119,19 @@ describe('스튜디오 API 흐름', () => {
     expect(updated.body.recipe.tips).toEqual(['새 팁']);
   });
 
+  it('승인 전이라도 원본 레시피를 고치면 새 대본 버전이 되어, 옛 레시피로 만든 영상·카드는 내보낼 수 없다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[2] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const old = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    // 같은 내용으로 저장만 하면 새 버전을 만들지 않는다
+    expect((await call('PUT', `/projects/${pid}/recipe`, { recipe: SAMPLE_RECIPES[2] })).body.latest.version).toBe(1);
+    const recipe = { ...SAMPLE_RECIPES[2], tips: [...SAMPLE_RECIPES[2]!.tips, '새 팁'] };
+    const updated = await call('PUT', `/projects/${pid}/recipe`, { recipe });
+    expect(updated.body.latest.version).toBe(2);
+    expect((await call('POST', `/projects/${pid}/reviews`, { version: 2, reviewer: '이희재', checklist: allChecked, decision: 'approved' })).status).toBe(200);
+    expect((await call('GET', `/renders/${old}/download`)).status).toBe(409);
+  });
+
   it('영상 자동 검사에서 대사 잘림 같은 오류가 나오면, 확인 없이 승인하지 않는다', async () => {
     const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[2] })).body.id;
     await call('POST', `/projects/${pid}/script/template`);

@@ -215,14 +215,16 @@ export class Repo {
     return RecipeInputSchema.parse(JSON.parse(String(row.recipe_json)));
   }
 
-  /** 원본 레시피를 고치면, 승인된 대본이 있더라도 재검수를 받도록 새 버전을 만든다. */
+  /**
+   * 원본 레시피를 고치면, 대본이 있을 때(승인 여부와 상관없이) 새 대본 버전을 만든다.
+   * 그래야 옛 레시피로 그린 재료·순서 카드가 든 영상이 승인·내보내기·게시되지 않는다.
+   */
   updateRecipe(id: number, input: unknown) {
-    this.getRecipe(id);
+    const before = this.getRecipe(id);
     const recipe = RecipeInputSchema.parse(input);
     this.db.prepare('UPDATE projects SET recipe_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(recipe), now(), id);
-    const state = this.versionState(id);
-    if (state.latestScriptVersion !== null && state.approvedScriptVersion === state.latestScriptVersion) {
-      const latest = this.latestScript(id)!;
+    const latest = this.latestScript(id);
+    if (latest && JSON.stringify(before) !== JSON.stringify(recipe)) {
       this.addScriptVersion(id, latest.script, 'edit', '원본 레시피 수정으로 재검수 필요');
     }
     this.logEvent(id, 'recipe', '원본 레시피 수정');
