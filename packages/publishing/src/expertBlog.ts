@@ -1,5 +1,5 @@
 import { BRAND, CATEGORY_LABELS, formal, formatIngredient, quantityIssues, splitSentences, type RecipeInput } from '@mat-lab/recipe-core';
-import { groupIngredients, kstDate, markdownToHtml, type BlogPost, type ReviewInfo } from './blog.ts';
+import { BLOG_AI_NOTICE, REVIEWER_CREDIT, groupIngredients, image, kstDate, markdownToHtml, uniqueTags, type BlogPost, type ReviewInfo } from './blog.ts';
 
 /**
  * 연구자의 실제 지식을 편집하는 블로그 원고.
@@ -92,8 +92,8 @@ function paragraphs(text: string): string[] {
 const SECTION_ORDER: Record<BlogStyle, (ExpertQuestionId | 'principle' | 'ingredients' | 'steps' | 'tips')[]> = {
   everyday: ['why-dish', 'memory', 'ingredients', 'steps', 'key-step', 'failure', 'fix', 'student-question', 'tips', 'why-method', 'serving', 'limits'],
   'expert-note': ['key-step', 'principle', 'failure', 'fix', 'why-method', 'ingredients', 'steps', 'student-question', 'tips', 'limits', 'why-dish'],
-  culture: ['history', 'why-dish', 'memory', 'principle', 'ingredients', 'steps', 'key-step', 'serving', 'limits', 'reference'],
-  experiment: ['comparison', 'key-step', 'principle', 'why-method', 'failure', 'fix', 'ingredients', 'steps', 'limits', 'reference'],
+  culture: ['history', 'why-dish', 'memory', 'principle', 'ingredients', 'steps', 'key-step', 'tips', 'serving', 'limits', 'reference'],
+  experiment: ['comparison', 'key-step', 'principle', 'why-method', 'failure', 'fix', 'ingredients', 'steps', 'tips', 'limits', 'reference'],
 };
 
 function titleFor(style: BlogStyle, recipe: RecipeInput): string {
@@ -119,9 +119,11 @@ export function buildExpertBlog(input: { recipe: RecipeInput; style: BlogStyle; 
   const { required, optional } = questionsFor(style);
   const used = new Set([...required, ...optional].map((q) => q.id));
   const pending = required.filter((q) => !answerOf(notes, q.id));
-  const tags = [...new Set(['이희재의맛연구소', dish, `${dish}만들기`, CATEGORY_LABELS[recipe.category], BRAND.researcherTitle, '요리팁'].map((t) => t.replace(/[\s·]/g, '')))];
+  const tags = uniqueTags([BRAND.labName, dish, `${dish}만들기`, CATEGORY_LABELS[recipe.category], BRAND.researcherTitle, '요리팁']);
 
   const md: string[] = [`# ${title}`, ''];
+  // 본문에 실제로 옮긴 연구자 답변이 있는지 (이 글 유형에 쓰지 않는 답변은 세지 않는다)
+  let anyAnswer = false;
   md.push(image(images.thumbnail, `${dish} 완성 사진`), '');
   md.push(`> ${recipe.topic}`, '');
 
@@ -154,11 +156,13 @@ export function buildExpertBlog(input: { recipe: RecipeInput; style: BlogStyle; 
     if (!used.has(key)) continue;
     const q = EXPERT_QUESTIONS.find((x) => x.id === key)!;
     const a = answerOf(notes, key);
-    if (a) md.push(`## ${q.heading}`, '', ...paragraphs(a));
+    if (a) {
+      md.push(`## ${q.heading}`, '', ...paragraphs(a));
+      anyAnswer = true;
+    }
     else if (q.required.includes(style)) md.push(`## ${q.heading}`, '', `> ✍️ [연구자 답변 대기] ${q.question}`, '');
   }
 
-  const anyAnswer = Object.values(notes.answers).some((v) => v && v.trim());
   const blockers: string[] = [];
   if (!review) blockers.push('대본(조리 정보)이 아직 승인되지 않았어요.');
   if (pending.length) blockers.push(`필수 질문 ${pending.length}개에 연구자 답변이 필요해요.`);
@@ -166,16 +170,12 @@ export function buildExpertBlog(input: { recipe: RecipeInput; style: BlogStyle; 
 
   md.push('## 영상으로 보기', '', '[여기에 릴스·쇼츠 링크를 붙여넣으세요]', '');
   md.push('---', '');
-  md.push(review ? `조리 정보 검토: ${BRAND.researcherTitle} ${review.reviewer} (${kstDate(review.reviewedAt)})` : '⚠️ 검수 전 초안입니다. 게시하지 마세요.');
+  md.push(review ? `조리 정보 검토: ${REVIEWER_CREDIT} (${kstDate(review.reviewedAt)})` : '⚠️ 검수 전 초안입니다. 게시하지 마세요.');
   if (anyAnswer) md.push(notes.confirmedBy ? `본문의 경험·의견은 연구자 답변을 그대로 옮겼습니다 (확인: ${notes.confirmedBy}, ${notes.confirmedAt ? kstDate(notes.confirmedAt) : ''}).` : '⚠️ 연구자 본인 확인 전 답변이 포함되어 있습니다.');
-  md.push('캐릭터 영상은 AI 도구로 만들었습니다.', `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
+  md.push(BLOG_AI_NOTICE, `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
 
   const markdown = md.join('\n');
   return { title, markdown, html: markdownToHtml(markdown), tags, style, pending, ready: blockers.length === 0, blockers };
-}
-
-function image(src: string | undefined, alt: string): string {
-  return src ? `![${alt}](${src})` : `[사진 첨부: ${alt}]`;
 }
 
 /**

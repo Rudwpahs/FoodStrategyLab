@@ -18,6 +18,12 @@ describe('AI 티 탐지 (im-not-ai 규칙)', () => {
     expect(findAiTells(human)).toEqual([]);
   });
 
+  it('C-11: 명사(참고·창고·최고·광고)와 목록 줄은 연결어미로 세지 않는다', () => {
+    expect(findAiTells('참고, 창고, 최고, 광고, 원고는 따로 봐요.').map((t) => t.rule)).not.toContain('C-11');
+    expect(findAiTells('- 양파를 썰고, 마늘을 다지고, 파를 썰고, 고추를 썰고, 볶아요.').map((t) => t.rule)).not.toContain('C-11');
+    expect(findAiTells('양파를 썰고, 마늘을 다지고, 파를 썰고, 고추를 썰고, 볶아요.').map((t) => t.rule)).toContain('C-11');
+  });
+
   it('사람도 쓰는 표현은 반복될 때만 알린다 ("~할 수 있다" 4번 이상)', () => {
     expect(findAiTells('맛을 살릴 수 있다. 향을 살릴 수 있다. 짠맛을 줄일 수 있다.').map((t) => t.rule)).not.toContain('A-10');
     expect(findAiTells('맛을 살릴 수 있다. 향을 살릴 수 있다. 짠맛을 줄일 수 있다. 색을 낼 수 있다.').map((t) => t.rule)).toContain('A-10');

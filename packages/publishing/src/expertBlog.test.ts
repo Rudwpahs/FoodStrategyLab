@@ -38,6 +38,30 @@ describe('전문가 노트 블로그', () => {
     expect(post.blockers.join(' ')).toContain('본인');
   });
 
+  it('검토 문구에 승인한 사람 이름 대신 연구소 연구자를 쓴다', () => {
+    const post = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review: { reviewer: '김민준', reviewedAt: review.reviewedAt } });
+    expect(post.markdown).not.toContain('조리기능장 김민준');
+    expect(post.markdown).toContain('조리 정보 검토: 조리기능장 이희재');
+  });
+
+  it('음식문화·실험형에도 연구자 팁이 들어가 일관성 경고가 뜨지 않는다', () => {
+    const { script } = buildStyledScript(walnut, { style: 'experiment' });
+    for (const style of ['culture', 'experiment'] as const) {
+      const post = buildExpertBlog({ recipe: walnut, style, notes: { answers: {} }, review });
+      expect(post.markdown, style).toContain(walnut.tips[0]!);
+      expect(checkConsistency({ recipe: walnut, script, blogMarkdown: post.markdown, social: '', reviewed: true }).filter((i) => i.message.includes('팁')), style).toEqual([]);
+    }
+  });
+
+  it('이 글 유형에 쓰지 않는 답변만 있으면 "답변을 옮겼습니다" 꼬리말·확인 요구를 붙이지 않는다', () => {
+    const post = buildExpertBlog({ recipe: walnut, style: 'culture', notes: { answers: { history: '정과는 잔칫상에 오르던 과자입니다.', 'student-question': '시럽은 언제 끄나요? 실처럼 늘어나기 직전에요.' }, confirmedBy: undefined }, review });
+    expect(post.markdown).not.toContain('시럽은 언제 끄나요');
+    expect(post.blockers.join(' ')).toContain('본인');
+    const unused = buildExpertBlog({ recipe: walnut, style: 'experiment', notes: { answers: { 'student-question': '시럽은 언제 끄나요? 실처럼 늘어나기 직전에요.' } }, review });
+    expect(unused.blockers.join(' ')).not.toContain('본인');
+    expect(unused.markdown).not.toContain('연구자 본인 확인 전');
+  });
+
   it('승인 전에는 검토 문구 없이 경고만 넣는다', () => {
     const post = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review: null });
     expect(post.markdown).toContain('검수 전 초안');
@@ -76,6 +100,13 @@ describe('영상·블로그·SNS 일관성 검사', () => {
     expect(issues.some((i) => i.message.includes('300g'))).toBe(true);
   });
 
+  it('블로그에서 조리 순서를 바꾸면 잡아낸다', () => {
+    const [a, , c] = walnut.steps;
+    const swapped = blog.markdown.replace(a!, '@@A@@').replace(c!, a!).replace('@@A@@', c!);
+    const issues = checkConsistency({ recipe: walnut, script, blogMarkdown: swapped, social, reviewed: true });
+    expect(issues.some((i) => i.where === '블로그' && i.level === 'error' && i.message.includes('순서'))).toBe(true);
+  });
+
   it('승인 전 "검토한" 표현을 막는다', () => {
     const issues = checkConsistency({ recipe: walnut, script, blogMarkdown: blog.markdown, social: '이희재가 검토한 레시피', reviewed: false });
     expect(issues.some((i) => i.where === 'SNS')).toBe(true);
@@ -95,6 +126,11 @@ describe('블로그 문체 검사', () => {
     const issues = lintBlog('이건 황금 레시피예요.\n피부 미용에도 좋아요.', { dish: '호두정과' }).map((i) => i.message);
     expect(issues.some((m) => m.includes('황금 레시피'))).toBe(true);
     expect(issues.some((m) => m.includes('피부 미용'))).toBe(true);
+  });
+
+  it.each(['어머니께서 명절마다 이렇게 부쳐 주셨어요.', '수강생들이 늘 이 부분에서 실패합니다.', '우리 집에서는 꼭 들기름을 써요.', '할머니는 항상 들기름을 쓰셨어요.', '처음 만들었을 때 시럽이 굳어 버렸어요.'])('가족·수강생·우리 집 이야기도 답변에 없으면 지어낸 경험으로 본다: %s', (sentence) => {
+    expect(lintBlog(`## 이야기\n\n${sentence}`, { dish: '호두정과', notes: { answers: {} } }).some((i) => i.level === 'error')).toBe(true);
+    expect(lintBlog(`## 이야기\n\n${sentence}`, { dish: '호두정과', notes: { answers: { memory: sentence } } }).filter((i) => i.level === 'error')).toEqual([]);
   });
 
   it('연구자가 직접 답한 1인칭 문장은 허용한다', () => {

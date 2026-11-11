@@ -73,13 +73,18 @@ describe('블로그: 다듬을 문단만 고르고, 저장한 윤문을 적용',
 
   it('원문 문단이 그대로일 때만 바꾸고, 원고가 바뀌면 원래 문장으로 돌아간다', () => {
     const post = buildBlogPost({ recipe, review });
-    const [first] = polishableBlogLines(post.markdown);
-    const polished = polishPost(post, { [first!]: '다듬은 문장입니다.' });
+    // 원리 문단 줄을 직접 고른다 (원리가 바뀌면 이 줄이 원고에서 사라진다)
+    const principleLine = polishableBlogLines(post.markdown).find((l) => l.includes(recipe.principle.slice(0, 10)))!;
+    expect(principleLine).toBeTruthy();
+    const polished = polishPost(post, { [principleLine]: '다듬은 문장입니다.' });
     expect(polished.polished).toBe(1);
     expect(polished.markdown).toContain('다듬은 문장입니다.');
     expect(polished.html).toContain('다듬은 문장입니다.');
     const changed = buildBlogPost({ recipe: { ...recipe, principle: '완전히 다른 원리 문장입니다.' }, review });
-    expect(applyPolish(changed.markdown, { [first!]: '다듬은 문장입니다.' }).applied).toBe(first!.includes('원리') ? 0 : 1);
+    const reverted = applyPolish(changed.markdown, { [principleLine]: '다듬은 문장입니다.' });
+    expect(reverted.applied).toBe(0);
+    expect(reverted.markdown).not.toContain('다듬은 문장입니다.');
+    expect(reverted.markdown).toContain('완전히 다른 원리 문장입니다.');
     expect(applyPolish(changed.markdown, { '없는 문장입니다만 길게': 'x' }).applied).toBe(0);
   });
 });

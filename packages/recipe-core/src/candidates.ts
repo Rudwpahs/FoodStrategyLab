@@ -1,5 +1,5 @@
 import { BRAND } from './brand.ts';
-import { causeEffect, findSensory, spoken } from './korean.ts';
+import { causeEffect, findSensory, josa, spoken } from './korean.ts';
 import { formatIngredient, splitSentences } from './format.ts';
 import { plainDishName, suggestHooks, type HookCandidate, type HookType, type RecentFormat } from './hooks.ts';
 import { STYLE_IDS, STYLE_INFO, buildStyledScript, type StyleId } from './styles.ts';
@@ -221,7 +221,7 @@ export function instagramCaption(recipe: RecipeInput, script: Script | null, rev
   }
   const stepLines = recipe.steps.map((s, i) => `${i + 1}. ${s}`);
   const credit = [
-    reviewed ? `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 레시피예요.` : `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}의 레시피예요. (검수 전 초안)`,
+    reviewed ? `레시피: ${josa(`${BRAND.researcherTitle} ${BRAND.researcher}`, '이/가')} 검토한 레시피예요.` : `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}의 레시피예요. (검수 전 초안)`,
     `진행: ${BRAND.character} (AI 캐릭터 · AI 합성 음성)`,
   ];
   const hashtags = instagramTags(recipe, tags).map((t) => `#${t}`).join(' ');

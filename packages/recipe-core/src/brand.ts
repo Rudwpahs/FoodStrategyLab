@@ -1,3 +1,5 @@
+import { josa } from './korean.ts';
+
 /** 브랜드 고정 문구. 콘텐츠 안에 연구자 이름이 자연스럽게 들어가도록 한다. */
 export const BRAND = {
   labName: '이희재의 맛 연구소',
@@ -30,6 +32,6 @@ export const BRAND = {
  */
 export function brandDescription(reviewed: boolean): string {
   return reviewed
-    ? `${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다.`
+    ? `${josa(`${BRAND.researcherTitle} ${BRAND.researcher}`, '이/가')} 검토한 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다.`
     : `${BRAND.researcherTitle} ${BRAND.researcher}의 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다. (검수 전 초안)`;
 }
