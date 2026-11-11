@@ -283,7 +283,7 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
 
     // 4. C(실험형) 선택 → 새 대본 버전
     const pick = c.body.candidates[2];
-    const sel = await call('POST', `/projects/${pid}/candidates/select`, { style: pick.style, hookType: pick.hookType });
+    const sel = await call('POST', `/projects/${pid}/candidates/make`, { style: pick.style, hookType: pick.hookType });
     expect(sel.body.project.latest.script.title).toBe(pick.title);
     expect(sel.body.project.latest.script.scenes[0].line).toBe(pick.firstLine);
     expect(sel.body.project.status).toBe('review');
@@ -331,7 +331,7 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     // 10. 성과 입력 → 연출·훅별 모음
     expect((await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 'abc' })).status).toBe(400);
     await call('PUT', `/publications/${pub.body.id}/metrics`, { reach: 1000, skipRate: 35, avgWatchSeconds: 12.5, saves: 20, shares: 10 });
-    const ins = await call('GET', '/insights');
+    const ins = { body: (await call('GET', `/projects/${pid}/candidates`)).body.insights };
     const exp = ins.body.find((x: { kind: string; key: string }) => x.kind === 'style' && x.key === 'experiment');
     expect(exp.medianSavesSharesPerK).toBe(30);
     expect(exp.enough).toBe(false);

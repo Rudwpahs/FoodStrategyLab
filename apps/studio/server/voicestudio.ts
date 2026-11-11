@@ -15,7 +15,7 @@ export type VoiceStudioStatus = { state: 'ok' | 'starting'; url: string; version
 const CANDIDATE_PORTS = Array.from({ length: 17 }, (_, i) => 3900 + i * 1000);
 
 function headers(): Record<string, string> {
-  const key = process.env.OMNIVOICE_API_KEY;
+  const key = process.env.VOICESTUDIO_API_KEY;
   return key ? { authorization: `Bearer ${key}` } : {};
 }
 

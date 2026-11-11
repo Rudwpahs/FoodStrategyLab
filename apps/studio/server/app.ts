@@ -16,7 +16,7 @@ import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
 import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
-import { HttpError, type Publication, type Repo, type Review } from './repo.ts';
+import { HttpError, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -165,10 +165,21 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const ig = deps.instagram ?? new Instagram(repo.db);
   const reader = deps.recipeReader ?? new RecipeReader(repo.db);
   const humanizer = deps.humanizer ?? new Humanizer(repo.db);
+  /** 블로그·SNS 문구에 넣을 승인 정보 (승인 전이면 null) */
+  const reviewOf = (project: ProjectDetail) => (project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null);
+  /** 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영 */
+  const recentFormats = (pid: number) =>
+    repo
+      .listProjects()
+      .filter((p) => p.id !== pid)
+      .slice(0, 5)
+      .map((p) => repo.latestScript(p.id)?.script)
+      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
+      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
   /** 윤문하기 전 원래 블로그 원고 (style이 없으면 기본 자동 원고) */
   const rawBlog = (pid: number, styleParam: unknown) => {
     const project = repo.getProject(pid);
-    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const review = reviewOf(project);
     const style = (BLOG_STYLES as readonly string[]).includes(String(styleParam)) ? (String(styleParam) as BlogStyle) : null;
     const notes = repo.getExpertNotes(pid);
     const expert = style ? buildExpertBlog({ recipe: project.recipe, style, notes, review }) : null;
@@ -409,14 +420,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/projects/:id/hooks', (req, res) => {
     const pid = id(req);
     const style = isStyleId(req.query.style) ? req.query.style : undefined;
-    // 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영
-    const recent = repo
-      .listProjects()
-      .filter((p) => p.id !== pid)
-      .slice(0, 5)
-      .map((p) => repo.latestScript(p.id)?.script)
-      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
-      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
+    const recent = recentFormats(pid);
     res.json({
       styles: STYLE_INFO,
       hookInfo: HOOK_INFO,
@@ -830,16 +834,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.download(file, `matlab-${r.projectId}-v${r.scriptVersion}.zip`);
   });
 
-  // ── 콘텐츠 후보 3가지 ──
-  const recentFormats = (pid: number) =>
-    repo
-      .listProjects()
-      .filter((p) => p.id !== pid)
-      .slice(0, 5)
-      .map((p) => repo.latestScript(p.id)?.script)
-      .filter((sc): sc is NonNullable<typeof sc> => Boolean(sc?.style || sc?.hookType))
-      .map((sc) => ({ style: sc.style, hookType: sc.hookType }));
-
+  // ── 콘텐츠 후보 ──
   // 사진에서 읽은 레시피는 영상 주제를 먼저 고른다 (AI가 고른 주제로 바로 후보 영상을 만들지 않는다)
   api.put('/projects/:id/topic', (req, res) => {
     const pid = id(req);
@@ -924,27 +919,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.status(202).json({ project: repo.getProject(pid), renderId, notes: [...built.notes, ...detached] });
   });
 
-  api.post('/projects/:id/candidates/select', (req, res) => {
-    const pid = id(req);
-    requireTopic(pid);
-    const { style, hookType } = req.body ?? {};
-    if (!isStyleId(style) || !isHookType(hookType)) throw new HttpError(400, '후보를 다시 골라 주세요.');
-    let built;
-    try {
-      built = scriptForCandidate(repo.getRecipe(pid), style, hookType);
-    } catch (e) {
-      throw new HttpError(400, (e as Error).message);
-    }
-    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, built.script);
-    repo.addScriptVersion(pid, built.script, 'template', `후보 선택: ${built.title} (${STYLE_INFO[style].label} · ${HOOK_INFO[hookType].label})`);
-    res.json({ project: repo.getProject(pid), notes: [...built.notes, ...detached] });
-  });
-
   // ── 블로그 문체 후보 2개 비교·선택 ──
   api.get('/projects/:id/blog/compare', (req, res) => {
     const pid = id(req);
     const project = repo.getProject(pid);
-    const review = project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null;
+    const review = reviewOf(project);
     const notes = repo.getExpertNotes(pid);
     const dish = project.recipe.dishName || project.recipe.topic;
     const options = blogStylePair(project.recipe).map((style) => {
@@ -1018,8 +997,6 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     }
     res.json(repo.setPublicationMetrics(id(req), metrics));
   });
-
-  api.get('/insights', (_req, res) => res.json(formatInsights(repo.allPublications())));
 
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));

@@ -10,9 +10,9 @@ import { VOICE_TEMPOS, defaultPreset, ensurePresetVoice, isVoiceTempo, presetByV
 import { assertCommercialEngine, engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
 
 /**
- * 비용 0원 음성. 두 가지 무료 방식을 지원한다.
- * - voicestudio: 내 PC에서 돌아가는 VoiceStudio 앱의 로컬 API (목소리 디자인·복제 가능)
- * - edge: edge-tts 파이썬 패키지 (Microsoft Edge 읽어주기 음성)
+ * 음성 만들기.
+ * - voicestudio: VoiceStudio API (내 PC의 앱, 또는 클라우드 배포의 GPU 목소리 서버). 저장소 기준 녹음으로 고정한 목소리만 쓴다
+ * - edge: edge-tts 파이썬 패키지 (VoiceStudio가 없을 때 'auto' 설정에서만. 맛조수 목소리가 아니라서 영상 검사 결과에 알린다)
  * 둘 다 없으면 음성 없이 자막만으로 영상을 만든다.
  */
 export type TtsProvider = 'voicestudio' | 'edge' | 'none';

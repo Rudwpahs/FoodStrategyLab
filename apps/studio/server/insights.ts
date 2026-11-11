@@ -3,15 +3,6 @@ import type { Publication } from './repo.ts';
 
 /** 사용자가 인사이트 화면을 보고 입력하는 성과 (조회수는 판정에 쓰지 않는다) */
 export const METRIC_KEYS = ['reach', 'views', 'skipRate', 'avgWatchSeconds', 'saves', 'shares', 'follows'] as const;
-export const METRIC_LABELS: Record<(typeof METRIC_KEYS)[number], string> = {
-  reach: '도달 계정',
-  views: '조회수(참고)',
-  skipRate: '건너뛰기 비율(%)',
-  avgWatchSeconds: '평균 시청 시간(초)',
-  saves: '저장',
-  shares: '보내기·공유',
-  follows: '팔로우',
-};
 
 const median = (xs: number[]) => {
   if (!xs.length) return null;
