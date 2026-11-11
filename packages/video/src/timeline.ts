@@ -3,6 +3,8 @@ import { estimateSceneSeconds } from '@mat-lab/recipe-core';
 
 export const FPS = 30;
 const PAD_SECONDS = 0.45;
+/** recipe-core의 estimateSceneSeconds는 말하는 시간에 0.5초 여유를 더해 돌려준다. 음성이 없을 때는 그 여유를 빼고 PAD_SECONDS를 따로 더한다 */
+const ESTIMATE_PAD_SECONDS = 0.5;
 const MIN_SCENE_SECONDS = 1.8;
 const MIN_INTRO_SECONDS = 2.4;
 const OUTRO_EXTRA_SECONDS = 1.6;
@@ -52,14 +54,12 @@ export interface VideoProps {
    */
   cleanDraft?: boolean;
   /** 원본 레시피 (3D 음식·재료 소품을 만들 때 사용) */
-  recipe?: RecipeInput;
+  recipe: RecipeInput;
   /** 완성 사진 URL과 사진의 대표 색 (있으면 음식 색에 반영) */
   photoUrl?: string;
   photoColor?: string;
   /** 장면별 생성 AI 클립·이미지 (있으면 그 장면은 3D 대신 이것을 보여준다) */
   sceneMedia?: Record<string, { url: string; kind: 'video' | 'image' }>;
-  /** 영상 스타일: 3D 주방(기본) 또는 2D 카드형 */
-  look?: '3d' | '2d';
   [key: string]: unknown;
 }
 
@@ -76,7 +76,7 @@ export function buildTimeline(
 ): SceneTiming[] {
   let cursor = 0;
   return script.scenes.map((scene, i) => {
-    const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - 0.5;
+    const speech = speechSeconds[i] ?? estimateSceneSeconds(scene) - ESTIMATE_PAD_SECONDS;
     let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
     if (scene.type === 'tip' || scene.type === 'mistake') seconds += PUNCH_BEAT_SECONDS;
@@ -100,52 +100,6 @@ export function buildTimeline(
 export function totalFrames(timings: SceneTiming[]): number {
   const last = timings.at(-1);
   return last ? last.from + last.durationInFrames : 1;
-}
-
-export interface CaptionChunk {
-  text: string;
-  /** 장면 시작 기준 프레임 */
-  from: number;
-  to: number;
-}
-
-const MAX_CHUNK_CHARS = 22;
-
-/**
- * 대사를 자막 단위로 나눈다.
- * 단어를 최대 글자 수까지 채우되, 문장이 끝나면(. ! ?) 적당한 길이에서 끊는다.
- */
-export function splitCaption(line: string, max = MAX_CHUNK_CHARS): string[] {
-  const chunks: string[] = [];
-  let current = '';
-  for (const word of line.trim().split(/\s+/).filter(Boolean)) {
-    if (current && (current + ' ' + word).length > max) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = current ? `${current} ${word}` : word;
-    }
-    if (/[.!?…]$/.test(current) && current.length >= 5) {
-      chunks.push(current);
-      current = '';
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-/** 자막 조각을 글자 수 비율로 대사 구간에 배치한다. */
-export function captionChunks(line: string, speechFrames: number): CaptionChunk[] {
-  const texts = splitCaption(line);
-  const weights = texts.map((t) => Math.max(1, t.replace(/\s/g, '').length));
-  const total = weights.reduce((a, b) => a + b, 0);
-  let cursor = 0;
-  return texts.map((text, i) => {
-    const len = Math.round((weights[i]! / total) * speechFrames);
-    const chunk = { text, from: cursor, to: i === texts.length - 1 ? speechFrames : cursor + len };
-    cursor += len;
-    return chunk;
-  });
 }
 
 export interface WordTiming {
@@ -203,4 +157,19 @@ export function captionGroups(line: string, speechFrames: number, measured?: [nu
   }
   flush();
   return groups;
+}
+
+export interface CaptionChunk {
+  text: string;
+  /** 장면 시작 기준 프레임 */
+  from: number;
+  to: number;
+}
+
+/**
+ * SRT(유튜브 자막 파일)용 조각: 영상에 굽는 자막과 같은 묶음·시간(captionGroups)을 글자로 바꾼 것.
+ * 잰 어절 시간(timing.words)을 넘기면 영상 자막처럼 그 시간을 따른다.
+ */
+export function captionChunks(line: string, speechFrames: number, measured?: [number, number][]): CaptionChunk[] {
+  return captionGroups(line, speechFrames, measured).map((g) => ({ text: g.words.map((w) => w.text).join(' '), from: g.from, to: g.to }));
 }

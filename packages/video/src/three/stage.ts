@@ -70,7 +70,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     burnerOn: shot.burnerOn,
     showFoodInVessel: scene.type === 'steps' || scene.visual === 'sizzle' || (scene.type === 'explain' && !scene.visual),
     cook,
-    flip: flip >= 1 ? 0 : flip,
+    flip,
     plated: shot.plated,
     propPop,
     chefPop: index === 0 ? popIn(local / 10) : 1,
@@ -78,12 +78,21 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   };
 }
 
+/** 화면 좌표 계산용 카메라·벡터 하나를 계속 쓴다 (한 프레임에 이름표 수만큼 불리므로 매번 만들지 않는다) */
+const projCam = new PerspectiveCamera();
+const projVec = new Vector3();
+
 /** 3D 좌표 → 화면 픽셀 (재료 이름표를 소품 위에 붙이기 위해) */
 export function projectToScreen(point: Vec3, camera: StageState['camera'], width: number, height: number): { x: number; y: number; visible: boolean } {
-  const cam = new PerspectiveCamera(camera.fov, width / height, 0.05, 30);
+  const cam = projCam;
+  cam.fov = camera.fov;
+  cam.aspect = width / height;
+  cam.near = 0.05;
+  cam.far = 30;
+  cam.updateProjectionMatrix();
   cam.position.set(...camera.pos);
   cam.lookAt(...camera.target);
   cam.updateMatrixWorld();
-  const v = new Vector3(...point).project(cam);
+  const v = projVec.set(...point).project(cam);
   return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height, visible: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 };
 }

@@ -27,12 +27,22 @@ const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || null;
 type Gl = 'angle' | 'swangle' | 'egl' | 'swiftshader' | 'vulkan' | 'angle-egl';
 let chromiumOptions = { gl: (process.env.REMOTION_GL as Gl | undefined) ?? 'angle' };
 
-/** 'angle'(GPU)이 안 되는 PC면 한 번만 소프트웨어 렌더링('swangle')으로 다시 시도한다. */
-async function withGlFallback<T>(fn: () => Promise<T>): Promise<T> {
+/** 3D(WebGL)를 시작하지 못한 오류인지. 취소·시간 초과·화면 코드 오류는 GPU 탓이 아니므로 다시 시도하지 않는다 */
+export function isGlFailure(e: unknown): boolean {
+  const message = e instanceof Error ? e.message : String(e);
+  if (/got cancell?ed/i.test(message)) return false;
+  return /webgl|gl context|angle|\bgpu\b|swiftshader|\begl\b/i.test(message);
+}
+
+/**
+ * 'angle'(GPU)로 3D를 시작하지 못하는 PC면 소프트웨어 렌더링('swangle')으로 한 번 다시 시도한다.
+ * 이 PC에 쓸 수 있는 GPU가 없다는 뜻이라 이후 렌더도 소프트웨어로 한다. (배포 서버는 REMOTION_GL을 정해 두어 해당 없음)
+ */
+export async function withGlFallback<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    if (process.env.REMOTION_GL || chromiumOptions.gl !== 'angle') throw e;
+    if (process.env.REMOTION_GL || chromiumOptions.gl !== 'angle' || !isGlFailure(e)) throw e;
     chromiumOptions = { gl: 'swangle' };
     return fn();
   }

@@ -4,6 +4,8 @@ export type Vec3 = [number, number, number];
 export const COUNTER_TOP = 0.94;
 /** 캐릭터가 올라선 발판 위치 */
 export const CHEF_POS: Vec3 = [-0.62, 0.42, -0.5];
+/** 맛조수 얼굴 가운데 (카메라가 겨누는 곳) */
+export const CHEF_FACE: Vec3 = [CHEF_POS[0], CHEF_POS[1] + 0.42, CHEF_POS[2]];
 /** 가스레인지 불 위치 (팬·냄비가 놓이는 곳) */
 export const BURNER: Vec3 = [-1.08, COUNTER_TOP + 0.015, -1.14];
 /** 완성 접시 위치 */
@@ -22,6 +24,16 @@ export function propPositions(count: number): Vec3[] {
     const x = PROP_CENTER[0] + (col - (inRow - 1) / 2) * PROP_GAP + row * 0.08;
     return [x, COUNTER_TOP, PROP_CENTER[2] + 0.12 - row * 0.27];
   });
+}
+
+/** from에서 to를 바라보는 y축 회전 (0 = +z) */
+export function faceAngle(from: Vec3, to: Vec3): number {
+  return Math.atan2(to[0] - from[0], to[2] - from[2]);
+}
+
+/** 맛조수가 몸을 돌린 각도: 가스레인지 쪽 또는 카메라 쪽(살짝 덜 돌린다) */
+export function chefFacing(state: { face: 'camera' | 'stove'; camera: { pos: Vec3 } }): number {
+  return state.face === 'stove' ? faceAngle(CHEF_POS, BURNER) : faceAngle(CHEF_POS, state.camera.pos) * 0.85;
 }
 
 /** 캐릭터가 접시를 들고 보여줄 때 접시 위치 */

@@ -62,7 +62,10 @@ export function writeCache<T>(cacheFile: string, file: string, value: T) {
   fs.writeFileSync(cacheFile, JSON.stringify({ stamp: fileStamp(file), value }));
 }
 
-/** 음성 파일과 옆에 저장한 분석 결과를 함께 지운다 (다시 만든 파일에 옛 길이가 붙지 않게) */
+/**
+ * 음성 파일과 옆에 저장한 분석 결과를 함께 지운다 (다시 만든 파일에 옛 길이가 붙지 않게).
+ * .bounds2/.words/.words2는 예전 버전이 만든 캐시 이름이다. 서버 데이터 폴더에 남아 있을 수 있어 함께 지운다.
+ */
 export function removeAudioWithCache(file: string) {
   for (const f of [file, `${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
 }
@@ -86,7 +89,7 @@ export async function normalizeLoudness(input: string, output: string): Promise<
   await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
 }
 
-/** 영상·음성의 소리 크기(dB)를 0.05초 간격으로 (자동 품질 검사용) */
+/** 영상·음성의 소리 크기(dB)를 QA_STEP 간격으로 (자동 품질 검사용) */
 export async function audioDb(file: string): Promise<number[]> {
   return rmsDb(await decodePcm(file), RATE, QA_STEP);
 }

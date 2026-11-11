@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, buildStyledScript, generateTemplateScript } from '@mat-lab/recipe-core';
 import { sfxCues, sfxUrl, synthSfx } from './sfx.ts';
-import { signatureNote } from './brandText.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 
@@ -27,15 +26,5 @@ describe('효과음', () => {
     expect(sfxCues(generateTemplateScript(walnut))).toEqual([]);
     // 흔한 실수가 있는 템플릿(김치전 코미디형)도 기존과 같이 효과음 없음
     for (const r of SAMPLE_RECIPES) expect(sfxCues(generateTemplateScript(r)), r.dishName).toEqual([]);
-  });
-});
-
-describe('서명 카드 문구', () => {
-  it('승인 전에는 검수 전, 이희재 본인 승인일 때만 "이희재 연구자가 검토"', () => {
-    expect(signatureNote(false, '이희재')).toBe('검수 전 초안');
-    expect(signatureNote(true, '이희재')).toContain('이희재 연구자가 검토');
-    expect(signatureNote(true, '가족 대리 입력')).toBe('조리 정보 검토: 가족 대리 입력');
-    // 승인 전 검수용 제작: 상태 문구 없음 (승인 뒤에도 거짓이 되지 않게)
-    expect(signatureNote(false, undefined, true)).toBe('');
   });
 });

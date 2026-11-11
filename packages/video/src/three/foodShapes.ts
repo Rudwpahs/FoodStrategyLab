@@ -11,15 +11,10 @@ import {
 } from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { PieceShape } from '@mat-lab/recipe-core';
+import { seeded } from '../random.ts';
 
 /** 같은 레시피면 항상 같은 모양이 나오도록 고정 난수 */
-export function seeded(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) % 4294967296;
-    return s / 4294967296;
-  };
-}
+export { seeded };
 
 /** 부드러운 울퉁불퉁함 (사인파 몇 개를 겹친 값, 대략 -1~1) */
 function bumps(x: number, y: number, z: number, k: number, seed: number): number {

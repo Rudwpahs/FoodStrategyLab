@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
-import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
+import { BRAND, clipGroups, ingredientProps, type Scene } from '@mat-lab/recipe-core';
+import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
@@ -9,22 +9,17 @@ import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
-import { COLORS, FONT_FAMILY } from '../theme.ts';
-import { KitchenScene } from '../three/KitchenScene.tsx';
+import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
+import { KitchenScene, foodFor } from '../three/KitchenScene.tsx';
 import { propPositions } from '../three/layout.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import type { SceneTiming, VideoProps } from '../timeline.ts';
 
 ensureFonts();
 
-export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
-  const food = foodProfile(recipe);
-  // 완성 사진이 있으면 사진의 대표 색을 익은 색으로 쓴다
-  return photoColor ? { ...food, cookedColor: photoColor } : food;
-}
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
+export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -37,25 +32,14 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
-  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
-  const half = Math.round(height / 2);
+  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
       {/* 색 보정: 대비·채도를 살짝 올려 영화 같은 느낌 */}
       <AbsoluteFill style={{ filter: 'contrast(1.07) saturate(1.1)' }}>
-        {state && compare && failState ? (
-          <>
-            <div style={{ position: 'absolute', left: 0, top: 0, width, height: half, overflow: 'hidden' }}>
-              <KitchenScene width={width} height={half} frame={frame} state={failState} food={food} props={[]} />
-            </div>
-            <div style={{ position: 'absolute', left: 0, top: half, width, height: height - half, overflow: 'hidden' }}>
-              <KitchenScene width={width} height={height - half} frame={frame} state={state} food={food} props={[]} />
-            </div>
-          </>
-        ) : (
-          state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />
-        )}
+        {/* 캔버스는 언제나 이 자리에 하나만: 비교 장면은 같은 캔버스 위쪽 절반에 '건너뛴 쪽'을 그린다 */}
+        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={compare ? [] : props} split={failState} />}
       </AbsoluteFill>
       {/* 재료 이름표: 3D 소품 위에 붙는다 */}
       {state &&
@@ -66,12 +50,14 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
           const pos = propPositions(props.length)[i]!;
           const s = projectToScreen([pos[0], pos[1] + 0.2, pos[2]], state.camera, width, height);
           if (!s.visible) return null;
+          // 화면 가장자리 소품의 이름표가 잘리지 않게 안쪽으로 당긴다 (글자 34px + 여백으로 어림한 폭의 절반)
+          const half = (p.label.length * 34 + 40) / 2;
           return (
             <div
               key={i}
               style={{
                 position: 'absolute',
-                left: s.x,
+                left: Math.min(width - 16 - half, Math.max(16 + half, s.x)),
                 top: s.y - (i % 2) * 64,
                 transform: `translate(-50%, -100%) scale(${Math.min(1, pop)})`,
                 background: COLORS.white,
@@ -148,18 +134,25 @@ function clipLayers(script: VideoProps['script'], timings: SceneTiming[], media:
 }
 
 /** 가장자리 어둡게(비네트) + 은은한 필름 질감 */
-const PostFx: React.FC<{ frame: number }> = ({ frame }) => (
-  <AbsoluteFill style={{ pointerEvents: 'none' }}>
-    <AbsoluteFill style={{ background: 'radial-gradient(ellipse 75% 62% at 50% 52%, rgba(0,0,0,0) 58%, rgba(30,14,6,0.42) 100%)' }} />
-    <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.08, mixBlendMode: 'overlay' }}>
-      <filter id="grain">
-        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={frame % 12} stitchTiles="stitch" />
-        <feColorMatrix type="saturate" values="0" />
-      </filter>
-      <rect width="100%" height="100%" filter="url(#grain)" />
-    </svg>
-  </AbsoluteFill>
-);
+const PostFx: React.FC<{ frame: number }> = ({ frame }) => {
+  const [x, y] = GRAIN_OFFSETS[frame % GRAIN_OFFSETS.length]!;
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      <AbsoluteFill style={{ background: 'radial-gradient(ellipse 75% 62% at 50% 52%, rgba(0,0,0,0) 58%, rgba(30,14,6,0.42) 100%)' }} />
+      <AbsoluteFill style={{ opacity: 0.08, mixBlendMode: 'overlay', backgroundImage: `url("${GRAIN_URL}")`, backgroundPosition: `${x}px ${y}px` }} />
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * 필름 질감: 예전에는 화면 전체(1080×1920)에 잡음 필터를 프레임마다 새로 계산했다(휴대폰 미리보기·렌더가 느려짐).
+ * 같은 잡음(이음새 없는 256px 타일)을 한 번만 그려 깔고, 프레임마다 위치만 바꿔 12가지 무늬가 돌게 한다.
+ */
+const GRAIN_TILE = 256;
+const GRAIN_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${GRAIN_TILE}" height="${GRAIN_TILE}"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`,
+)}`;
+const GRAIN_OFFSETS = Array.from({ length: 12 }, (_, i) => [(i * 97) % GRAIN_TILE, (i * 151) % GRAIN_TILE] as const);
 
 /**
  * 생성 AI로 만든 장면 클립(또는 첫 프레임 이미지)을 3D 장면 대신 보여준다.
@@ -214,7 +207,7 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         <TitleChip text={scene.cardTitle ?? '준비물'} frame={frame} fps={fps} />
       ) : (
         <div style={{ position: 'absolute', inset: 0, transform: 'translateY(40px) scale(0.8)', transformOrigin: '50% 8%' }}>
-          <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} />
+          <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
         </div>
       )}
       {showPhoto && <PhotoInset url={photoUrl} frame={frame} fps={fps} />}
@@ -360,86 +353,3 @@ const PhotoInset: React.FC<{ url: string; frame: number; fps: number }> = ({ url
     </div>
   );
 };
-
-/** 3D 커버·썸네일: 완성 접시를 든 맛조수 + 제목 */
-export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoColor?: string; emotion: Scene['emotion'] }> = ({ title, recipe, photoColor, emotion }) => {
-  const { width, height } = useVideoConfig();
-  const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
-  const square = width === height;
-  const state = coverState(emotion, square);
-  return (
-    <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
-      <KitchenScene width={width} height={height} frame={0} state={state} food={food} props={[]} />
-      {/* 세로 표지: 프로필 격자는 가운데 3:4(위아래 240px씩 잘림)만 보여서, 글씨는 모두 그 안(330~1600)에 둔다 */}
-      <BrandBadge scale={square ? 0.8 : 1} top={square ? undefined : 330} />
-      <div
-        style={{
-          position: 'absolute',
-          left: 50,
-          right: 50,
-          top: square ? 170 : 440,
-          textAlign: 'center',
-          fontFamily: FONT_FAMILY,
-          fontWeight: 950,
-          fontSize: square ? 76 : 104,
-          lineHeight: 1.18,
-          letterSpacing: -3,
-          color: COLORS.ink,
-          wordBreak: 'keep-all',
-          textShadow: `0 0 18px ${COLORS.white}, 0 6px 0 ${COLORS.white}`,
-        }}
-      >
-        {title}
-      </div>
-      {!square && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 1596,
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: FONT_FAMILY,
-              fontWeight: 850,
-              fontSize: 38,
-              color: COLORS.ink,
-              background: COLORS.yellow,
-              border: `5px solid ${COLORS.ink}`,
-              borderRadius: 999,
-              padding: '10px 30px',
-              letterSpacing: -1,
-            }}
-          >
-            🧪 {BRAND.series} · 레시피 {BRAND.researcherTitle} {BRAND.researcher}
-          </div>
-        </div>
-      )}
-    </AbsoluteFill>
-  );
-};
-
-function coverState(emotion: Scene['emotion'], square: boolean): import('../three/KitchenScene.tsx').StageState {
-  const face: [number, number, number] = [-0.62, 0.84, -0.5];
-  return {
-    camera: square
-      ? { pos: [face[0] + 0.3, face[1] + 0.3, face[2] + 1.8], target: [face[0] + 0.05, face[1] + 0.12, face[2]], fov: 46 }
-      : { pos: [face[0] + 0.3, face[1] + 0.25, face[2] + 2.2], target: [face[0] + 0.05, face[1] + 0.2, face[2]], fov: 46 },
-    emotion,
-    talking: false,
-    action: 'present',
-    face: 'camera',
-    burnerOn: false,
-    showFoodInVessel: false,
-    cook: 1,
-    flip: 0,
-    plated: 'done',
-    propPop: [],
-    chefPop: 1,
-    mood: 'golden',
-  };
-}
