@@ -90,6 +90,7 @@ VoiceStudio 없이 간단히 쓰려면 edge-tts도 됩니다(`pip install edge-t
 | `TTS_PROVIDER` | `auto` | `auto`(VoiceStudio → edge-tts → 없음 순) · `voicestudio` · `edge` · `none` |
 | `VOICESTUDIO_URL` | (자동 찾기) | VoiceStudio 주소를 직접 정할 때만 |
 | `VOICESTUDIO_VOICE` / `VOICESTUDIO_MODEL` | (화면에서 고름) / `tts-1` | 목소리 강제 지정 / 엔진 (`tts-1` = 앱에서 고른 엔진) |
+| `VOICESTUDIO_API_KEY` | (없음) | VoiceStudio에 키가 걸려 있을 때 (예전 이름 `OMNIVOICE_API_KEY`). 목소리·엔진은 저장소 목록의 목소리와 상업 이용 가능한 엔진만 받는다 |
 | `TTS_VOICE` | `ko-KR-SunHiNeural` | 캐릭터 목소리 (`edge-tts --list-voices`로 확인) |
 | `TTS_RATE` / `TTS_PITCH` | `+8%` / `+15Hz` | 말 속도·높이 |
 | `REMOTION_BROWSER_EXECUTABLE` | (자동 다운로드) | 이미 있는 크롬/크로미움 경로 |

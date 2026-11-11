@@ -462,7 +462,8 @@ describe('미디어 파일 보내기', () => {
 
 describe('테스트 격리', () => {
   it('테스트 파일마다 따로 만든 데이터 폴더를 쓴다 (동시에 돌 때 settings.json 등이 겹치지 않게)', () => {
-    expect(path.basename(DATA_DIR)).toMatch(/^matlab-test-/);
+    expect(path.basename(DATA_DIR)).toMatch(/^run-/);
+    expect(path.basename(path.dirname(DATA_DIR))).toBe('.matlab-tests');
   });
 });
 

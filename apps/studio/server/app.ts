@@ -202,7 +202,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   app.get('/public/reels/:file', (req, res, next) => {
     const file = resolvePublicLink(String(req.params.file).replace(/\.(?:mp4|jpg)$/, ''));
     if (!file) return next(new HttpError(404, '없는 주소예요.'));
-    res.sendFile(file, { headers: { 'cache-control': 'no-store' } });
+    // 서버가 정한 파일 경로라 숨은 폴더(.으로 시작) 안에 데이터 폴더가 있어도 보낸다
+    res.sendFile(file, { headers: { 'cache-control': 'no-store' }, dotfiles: 'allow' });
   });
   // 인스타그램 로그인에서 돌아오는 곳: 휴대폰 앱 밖(브라우저)에서 열릴 수 있어 로그인 대신 1회용 state로 확인한다
   app.get('/api/instagram/callback', async (req, res) => {
@@ -878,7 +879,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.get('/renders/:id/download', (req, res) => {
     const r = repo.getRender(id(req));
     const file = exportPackage(repo, r.id);
-    res.download(file, `matlab-${r.projectId}-v${r.scriptVersion}.zip`);
+    res.download(file, `matlab-${r.projectId}-v${r.scriptVersion}.zip`, { dotfiles: 'allow' });
   });
 
   // ── 콘텐츠 후보 ──

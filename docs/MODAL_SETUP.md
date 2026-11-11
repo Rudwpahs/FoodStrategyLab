@@ -64,7 +64,10 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 
 **계정 추가 · 비밀번호를 잊었을 때**
 
-- 지금은 휴대폰 화면에서 계정을 더 만들거나 비밀번호를 바꿀 수 없습니다. **개발자에게 부탁**해 주세요(클라우드 서버에서 계정을 고치는 기능은 아직 만드는 중).
+- **계정 추가**: 로그인한 뒤 위쪽 **계정** → **도와주는 사람 계정 추가**. 연구자 계정이 정해져 있으면 연구자 계정만 추가할 수 있어요.
+- **내 비밀번호 바꾸기**: **계정** → **비밀번호 바꾸기** (다른 기기의 로그인은 끊겨요).
+- **비밀번호를 잊었을 때**: 로그인 화면의 **비밀번호를 잊었어요** → 설정 코드(3단계에서 정한 값)와 새 비밀번호. 그 계정의 로그인은 모두 끊겨요.
+- **연구자 계정**: 첫 계정을 만들 때 "연구자 본인 계정이에요"를 체크하면 그 계정만 승인할 수 있어요. 예전에 만든 계정이라면 연구자 본인이 로그인해 **계정** → **이 계정을 연구자 계정으로 정하기**를 한 번 누르세요(한 번 정하면 화면에서는 바꿀 수 없어요).
 - 비밀번호를 10번 틀리면 15분 동안 잠깁니다. 15분 뒤 다시 해 보세요.
 
 ## 6. 처음 한 번: 맛조수 목소리 준비
@@ -149,7 +152,7 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 - 비밀값: `secrets=[matlab-studio, matlab-settings]` — 뒤의 `matlab-settings`가 같은 이름을 덮는다. 워크플로는 `matlab-settings`를 `--force` 없이 만들어 이미 있으면 건드리지 않는다.
 - 배포 워크플로: `test` 작업(typecheck·tools 타입 검사·vitest)이 통과해야 `deploy` 작업이 돈다. 배포 뒤 `/api/health`와 `/api/auth/me`가 200인지 확인한다. stderr 로그는 Actions에 찍지 않는다(`modal-logs.yml`도 시스템 기록만).
 - 목소리 중계: `deploy/modal/voice_proxy.py` — 웹 컨테이너 안 `127.0.0.1:3901`이 VoiceStudio처럼 보이고, 요청을 GPU 함수 호출로 넘긴다. `/health`(버전 `modal`)·엔진/목소리 목록은 GPU를 깨우지 않게 바로 답하거나 기억해 둔 값을 쓴다. 화면은 버전 `modal`을 보고 '쓸 때만 켜져요'로 표시한다.
-- DB: 컨테이너 디스크(`/root/matlab-db/studio.db`)에서 쓰고 5초마다 `/data/studio.db`로 복사(`apps/studio/server/dbSnapshot.ts`). 새 컨테이너는 복사본에서 시작. 그래서 볼륨의 `studio.db`를 밖에서 고치면 다음 복사 때 덮어써진다(계정 추가·비밀번호 재설정은 서버 안에서 해야 함 — 아직 기능 없음).
+- DB: 컨테이너 디스크(`/root/matlab-db/studio.db`)에서 쓰고 5초마다 `/data/studio.db`로 복사(`apps/studio/server/dbSnapshot.ts`). 새 컨테이너는 복사본에서 시작. 그래서 볼륨의 `studio.db`를 밖에서 고치면 다음 복사 때 덮어써진다(계정 추가·비밀번호 재설정은 서버 안에서 한다: `POST /api/auth/users`, `/api/auth/password`, `/api/auth/reset`).
 - 제작 중 깨워 두기: `KEEPALIVE=1`이면 제작하는 동안 1분마다 공개 주소의 `/api/health`를 부른다.
 - 첫 계정: `STUDIO_SETUP_CODE`(8자 이상)가 있고 계정이 없으면 화면에서 만들기(`POST /api/auth/setup`), 틀리면 로그인 실패처럼 횟수 제한.
 - 로컬 검증(2026-11-04): 실제 VoiceStudio(CPU) ↔ 중계기 ↔ 클라우드 설정의 스튜디오로 첫 계정 만들기·목소리 준비·43초 음성 영상 제작까지 확인.

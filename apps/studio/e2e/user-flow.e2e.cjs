@@ -7,6 +7,9 @@ const path = require('path');
 // 2) node apps/studio/e2e/user-flow.e2e.cjs   (out/pilot/C-experiment.mp4 필요 — tools/content-lab/pilot.ts)
 const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
 const repoRoot = path.resolve(__dirname, '../../..');
+// 화면 사진은 tmp/ 아래에 (저장소에 올라가지 않게)
+const shots = path.join(repoRoot, 'tmp/e2e-shots');
+require('fs').mkdirSync(shots, { recursive: true });
 const log = (...a) => console.log(...a);
 (async () => {
   const meta = await (await fetch(`${base}/api/meta`)).json();
@@ -33,7 +36,7 @@ const log = (...a) => console.log(...a);
   await p.getByText('다른 후보 보기').click();
   await p.waitForTimeout(3500);
   log('다른 후보', JSON.stringify(await titles()));
-  await p.screenshot({ path: 'f2-more.png' });
+  await p.screenshot({ path: `${shots}/f2-more.png` });
   await p.getByText('처음 후보로').click();
   await p.waitForTimeout(3500);
   await p.locator('button', { hasText: '이 영상으로 만들기' }).nth(2).click();
@@ -51,7 +54,7 @@ const log = (...a) => console.log(...a);
   // 6. 블로그 후보 2개 중 첫 번째 선택
   await p.locator('button', { hasText: '이 원고 고르기' }).first().click();
   await p.waitForTimeout(1500);
-  await p.screenshot({ path: 'f3-video-blog.png', fullPage: true });
+  await p.screenshot({ path: `${shots}/f3-video-blog.png`, fullPage: true });
 
   // 승인 전 ZIP·게시 기록은 막힘
   const proj = await (await fetch(`${base}/api/projects/${id}`)).json();
@@ -60,7 +63,7 @@ const log = (...a) => console.log(...a);
 
   // 7. 검수·승인
   await go('review');
-  await p.screenshot({ path: 'f4-review.png' });
+  await p.screenshot({ path: `${shots}/f4-review.png` });
   for (const box of await p.locator('label.check input').all()) await box.check();
   await p.locator('button.primary', { hasText: '승인' }).click();
   await p.waitForTimeout(2500);
@@ -95,10 +98,9 @@ const log = (...a) => console.log(...a);
   await metric('보내기', '9');
   await p.locator('button', { hasText: '성과 저장' }).click();
   await p.waitForTimeout(1500);
-  await p.screenshot({ path: 'f5-publish.png', fullPage: true });
+  await p.screenshot({ path: `${shots}/f5-publish.png`, fullPage: true });
   const after = await (await fetch(`${base}/api/projects/${id}`)).json();
   log('게시 기록', JSON.stringify(after.publications.map((x) => [x.platform, x.status, x.url, x.metrics])));
-  log('인사이트', JSON.stringify(await (await fetch(`${base}/api/insights`)).json()));
 
   // 승인 후 수정 → 재승인 필요
   await go('script');
