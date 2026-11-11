@@ -2,6 +2,7 @@ import { EXPERT_QUESTION_IDS, type ExpertNotes } from '@mat-lab/publishing';
 import type { CheckedSuggestion } from './recipeReader.ts';
 import type { QaIssue, QaReport } from '@mat-lab/video/qa';
 import {
+  BRAND,
   CATEGORIES,
   checkScript,
   ChecklistSchema,
@@ -47,6 +48,16 @@ export interface Review {
   decision: 'approved' | 'changes_requested';
   note: string;
   createdAt: string;
+  /** 승인한 계정이 연구자 계정이었는지 */
+  byResearcher: boolean;
+}
+
+/**
+ * 공개 문구(영상·카드·블로그)에 넘길 검토자: 연구자 계정이 승인했을 때만 브랜드의 연구자 이름,
+ * 아니면 빈 값 (연구자 이름 없이 '조리 정보 검토'로 나온다). 승인자의 표시 이름은 공개 문구에 쓰지 않는다.
+ */
+export function creditedReviewer(approval: Review | null | undefined): string {
+  return approval?.byResearcher ? BRAND.researcher : '';
 }
 
 /** 서버가 기록하는 자동 검사 결과. code 'skipped' = 검사나 처리를 하지 못함 (검사했다고 적지 않고 경고로 남긴다) */
@@ -195,6 +206,7 @@ function toReview(r: Row): Review {
     decision: r.decision as Review['decision'],
     note: String(r.note),
     createdAt: String(r.created_at),
+    byResearcher: Number(r.by_researcher ?? 0) === 1,
   };
 }
 
@@ -485,7 +497,7 @@ export class Repo {
     };
   }
 
-  addReview(id: number, input: { version: number; reviewer: string; checklist: unknown; decision: string; note?: string }): Review {
+  addReview(id: number, input: { version: number; reviewer: string; checklist: unknown; decision: string; note?: string; byResearcher?: boolean }): Review {
     const latest = this.latestScript(id);
     if (!latest) throw new HttpError(400, '검수할 대본이 없습니다.');
     if (input.version !== latest.version) throw new HttpError(409, `최신 대본(v${latest.version})만 검수할 수 있습니다.`);
@@ -506,8 +518,8 @@ export class Repo {
       throw new HttpError(400, '검수자 이름을 입력하세요.');
     }
     this.db
-      .prepare('INSERT INTO reviews (project_id, script_version, reviewer, checklist_json, decision, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, latest.version, input.reviewer.trim(), JSON.stringify(checklist), decision, input.note ?? '', now());
+      .prepare('INSERT INTO reviews (project_id, script_version, reviewer, checklist_json, decision, note, created_at, by_researcher) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, latest.version, input.reviewer.trim(), JSON.stringify(checklist), decision, input.note ?? '', now(), input.byResearcher ? 1 : 0);
     this.logEvent(id, 'review', `대본 v${latest.version} ${decision === 'approved' ? '승인' : '수정 요청'} (${input.reviewer.trim()})${input.note ? ` — ${input.note}` : ''}`);
     return this.lastReview(id, latest.version)!;
   }

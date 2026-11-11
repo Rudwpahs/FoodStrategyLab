@@ -135,6 +135,8 @@ describe('계정이 있을 때', () => {
     const checklist = { ingredients: true, safety: true, noFakeClaims: true, expression: true };
     const r = await (await req(`/api/projects/${pid}/reviews`, { method: 'POST', cookie: fam, body: JSON.stringify({ version: 1, reviewer: '이희재', checklist, decision: 'approved' }) })).json();
     expect(r.approval.reviewer).toBe('가족');
+    // 연구자 계정이 아닌 승인: 공개 문구에 연구자 이름을 쓰지 않는다
+    expect(r.approval.byResearcher).toBe(false);
     // 연구자 계정이 아직 없으면 누구나 승인할 수 있지만, 화면에 알릴 경고를 함께 준다
     expect(r.warning).toContain('연구자 계정');
   });
@@ -174,6 +176,7 @@ describe('계정이 있을 때', () => {
     expect(ok.status).toBe(200);
     const body = await ok.json();
     expect(body.approval.reviewer).toBe('이희재');
+    expect(body.approval.byResearcher).toBe(true);
     expect(body.warning).toBeUndefined();
   });
 

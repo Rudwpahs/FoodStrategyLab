@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS reviews (
   checklist_json TEXT NOT NULL,
   decision TEXT NOT NULL CHECK (decision IN ('approved', 'changes_requested')),
   note TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  by_researcher INTEGER NOT NULL DEFAULT 0
 );
 ${RENDERS_TABLE}
 CREATE TABLE IF NOT EXISTS scene_media (
@@ -152,5 +153,8 @@ export function openDb(file: string): Db {
   // 계정 역할: 연구자(researcher) 계정이 하나라도 있으면 승인은 연구자 계정만 할 수 있다
   const userCols = new Set((db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name));
   if (!userCols.has('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
+  // 승인한 계정이 연구자 계정이었는지 (공개 '검토' 문구에 연구자 이름을 쓸지 정한다)
+  const reviewCols = new Set((db.prepare('PRAGMA table_info(reviews)').all() as { name: string }[]).map((c) => c.name));
+  if (!reviewCols.has('by_researcher')) db.exec('ALTER TABLE reviews ADD COLUMN by_researcher INTEGER NOT NULL DEFAULT 0');
   return db;
 }

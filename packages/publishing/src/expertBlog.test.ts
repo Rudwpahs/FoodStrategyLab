@@ -38,10 +38,12 @@ describe('전문가 노트 블로그', () => {
     expect(post.blockers.join(' ')).toContain('본인');
   });
 
-  it('검토 문구에 승인한 사람 이름 대신 연구소 연구자를 쓴다', () => {
-    const post = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review: { reviewer: '김민준', reviewedAt: review.reviewedAt } });
-    expect(post.markdown).not.toContain('조리기능장 김민준');
-    expect(post.markdown).toContain('조리 정보 검토: 조리기능장 이희재');
+  it('검토 문구에 승인한 사람 이름을 쓰지 않고, 연구자 이름은 연구자가 승인했을 때만 쓴다', () => {
+    const other = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review: { reviewer: '', reviewedAt: review.reviewedAt } }).markdown;
+    expect(other).not.toContain('조리기능장 이희재 (');
+    expect(other).toContain('조리 정보 검토 완료');
+    const byResearcher = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review: { reviewer: '이희재', reviewedAt: review.reviewedAt } }).markdown;
+    expect(byResearcher).toContain('조리 정보 검토: 조리기능장 이희재');
   });
 
   it('음식문화·실험형에도 연구자 팁이 들어가 일관성 경고가 뜨지 않는다', () => {

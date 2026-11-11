@@ -1,6 +1,7 @@
 import { BRAND, CATEGORY_LABELS, formalParagraph, formatIngredient, josa, type RecipeInput } from '@mat-lab/recipe-core';
 
 export interface ReviewInfo {
+  /** 연구자 계정이 승인했으면 브랜드의 연구자 이름, 아니면 빈 값 (서버 creditedReviewer). 승인자 표시 이름은 넣지 않는다 */
   reviewer: string;
   reviewedAt: string; // ISO
 }
@@ -32,6 +33,9 @@ export const BLOG_AI_NOTICE = '캐릭터 애니메이션과 일부 문장은 AI 
 /** 검토한 사람: 승인한 계정 이름이 아니라 연구소 연구자 (원칙 3: 검토 문구는 승인된 결과물에만) */
 export const REVIEWER_CREDIT = `${BRAND.researcherTitle} ${BRAND.researcher}`;
 
+/** 연구자 본인이 승인했을 때만 연구자 이름으로 '검토'라고 쓴다 (영상·카드의 brandText와 같은 규칙) */
+export const creditsResearcher = (review: ReviewInfo) => review.reviewer.includes(BRAND.researcher);
+
 /**
  * 네이버 블로그 원고. 재료·분량·순서는 원본 데이터를 그대로 쓴다 (AI 문장 사용 안 함).
  * 네이버 블로그 글쓰기 API는 종료되어, 복사해서 붙여넣는 방식으로 게시한다.
@@ -41,7 +45,9 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
   const title = `${recipe.topic} | ${BRAND.researcherTitle} ${BRAND.researcher}의 ${dish} 노하우`;
   const tags = uniqueTags([BRAND.labName, '요리팁', dish, CATEGORY_LABELS[recipe.category], BRAND.character, '요리과학']);
   const reviewLine = review
-    ? `이 글의 조리 정보는 ${josa(REVIEWER_CREDIT, '이/가')} 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
+    ? creditsResearcher(review)
+      ? `이 글의 조리 정보는 ${josa(REVIEWER_CREDIT, '이/가')} 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
+      : `이 글의 조리 정보는 검토를 마쳤습니다. (검토일 ${kstDate(review.reviewedAt)})`
     : '⚠️ 검수 전 초안입니다. 게시하지 마세요.';
 
   const md: string[] = [];

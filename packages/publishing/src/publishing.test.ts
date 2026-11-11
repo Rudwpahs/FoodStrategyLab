@@ -26,10 +26,12 @@ describe('블로그 원고', () => {
   });
 
   it('검토 문구는 승인된 글에만, 연구소 연구자 이름으로 쓴다 (승인한 사람 이름에 연구자 직함을 붙이지 않는다)', () => {
-    const md = buildBlogPost({ recipe, review: { reviewer: '김민준', reviewedAt: review.reviewedAt } }).markdown;
-    expect(md).not.toContain('조리기능장 김민준');
-    expect(md).not.toContain('김민준가');
-    expect(md).toContain('조리기능장 이희재가 검토했습니다');
+    // 연구자 계정이 아닌 사람이 승인: 서버는 빈 검토자를 넘기고, 연구자 이름 없이 '검토를 마쳤습니다'
+    const md = buildBlogPost({ recipe, review: { reviewer: '', reviewedAt: review.reviewedAt } }).markdown;
+    expect(md).not.toContain('조리기능장 이희재가 검토했습니다');
+    expect(md).toContain('조리 정보는 검토를 마쳤습니다');
+    // 연구자 본인 승인
+    expect(buildBlogPost({ recipe, review: { reviewer: '이희재', reviewedAt: review.reviewedAt } }).markdown).toContain('조리기능장 이희재가 검토했습니다');
   });
 
   it('검수 전이면 게시 금지 문구를 넣는다', () => {

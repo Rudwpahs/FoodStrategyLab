@@ -7,7 +7,7 @@ import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, normalizeLo
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPages } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
-import { HttpError, type RenderQa, type RenderQaIssue, type Repo } from './repo.ts';
+import { HttpError, creditedReviewer, type RenderQa, type RenderQaIssue, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
 import { cachedAudio, measuredWords, synthesize, transcribeAudio, ttsProvider, voiceIdentity } from './tts.ts';
 
@@ -266,7 +266,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
       script,
       timings,
       reviewed: Boolean(approval),
-      reviewer: approval?.reviewer,
+      reviewer: creditedReviewer(approval),
       // 승인 전 검수용: 워터마크·상태 문구 없이 (승인 뒤 다시 렌더하지 않아도 되게)
       cleanDraft: !approval,
       recipe,
@@ -333,14 +333,14 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     const cover = { title: recipe.topic, emotion: 'joy' as const, recipe, photoColor: photo?.color || undefined };
     await renderer.renderStillImage('Cover', cover, path.join(outDir, 'cover.png'));
     await renderer.renderStillImage('SquareThumb', cover, path.join(outDir, 'thumbnail.png'));
-    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
+    await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), reviewer: creditedReviewer(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
     // 넘겨 보는 레시피 카드 (인스타그램 캐러셀용, JPEG). 실패해도 영상 제작은 끝낸다
     set('레시피 카드 묶음', 0.9);
     try {
       const pages = recipeCardPages(recipe);
       for (let i = 0; i < pages.length; i++) {
         const png = path.join(outDir, `carousel-${String(i + 1).padStart(2, '0')}.png`);
-        await renderer.renderStillImage('CarouselCard', { recipe, reviewed: Boolean(approval), cleanDraft: !approval, page: i }, png);
+        await renderer.renderStillImage('CarouselCard', { recipe, reviewed: Boolean(approval), reviewer: creditedReviewer(approval), cleanDraft: !approval, page: i }, png);
         await toJpeg(png, png.replace(/\.png$/, '.jpg'));
         fs.rmSync(png);
       }
@@ -482,7 +482,7 @@ export function exportPackage(repo: Repo, renderId: number): string {
   const timelineFile = path.join(r.outputDir, 'timeline.json');
   const timings = fs.existsSync(timelineFile) ? (JSON.parse(fs.readFileSync(timelineFile, 'utf8')) as SceneTiming[]) : [];
   const style = repo.getBlogStyle(r.projectId);
-  writePackage(r.outputDir, recipe, script, timings, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
+  writePackage(r.outputDir, recipe, script, timings, { reviewer: creditedReviewer(approval), reviewedAt: approval.createdAt }, {
     blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
     notes: repo.getExpertNotes(r.projectId),
     polish: repo.getPolish(r.projectId),
@@ -527,7 +527,7 @@ export function approvedRender(repo: Repo, renderId: number) {
 export function instagramText(repo: Repo, renderId: number): string {
   const { render, approval } = approvedRender(repo, renderId);
   const style = repo.getBlogStyle(render.projectId);
-  return publishTexts(repo.getRecipe(render.projectId), repo.getScript(render.projectId, render.scriptVersion).script, { reviewer: approval.reviewer, reviewedAt: approval.createdAt }, {
+  return publishTexts(repo.getRecipe(render.projectId), repo.getScript(render.projectId, render.scriptVersion).script, { reviewer: creditedReviewer(approval), reviewedAt: approval.createdAt }, {
     blogStyle: (BLOG_STYLES as readonly string[]).includes(style) ? (style as BlogStyle) : undefined,
     notes: repo.getExpertNotes(render.projectId),
     polish: repo.getPolish(render.projectId),

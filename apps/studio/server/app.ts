@@ -16,7 +16,7 @@ import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
 import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
-import { HttpError, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
+import { HttpError, creditedReviewer, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, lastVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -104,12 +104,12 @@ function carouselFiles(dir: string): string[] {
 }
 
 /** 올리기 전 점검 중 영상·표지에 관한 것 (설명 글 점검은 화면에서 instagramCaptionChecks로 바로 한다) */
-function reelChecks(render: { outputDir: string }, approval: Review, researcherApproved: boolean): IgCheck[] {
+function reelChecks(render: { outputDir: string }, approval: Review): IgCheck[] {
   // approvedRender를 거친 뒤에만 부른다: 승인된 최신 대본의 영상인 것은 확인됐다. 연구자 계정의 승인인지는 따로 본다
   const out: IgCheck[] = [
-    researcherApproved
+    approval.byResearcher
       ? { level: 'ok', text: `연구자 계정(${approval.reviewer})이 승인한 최신 대본의 영상이에요` }
-      : { level: 'warn', text: `승인한 최신 대본의 영상이에요 (승인: ${approval.reviewer}). 연구자 계정이 정해지지 않아 연구자 본인의 승인인지는 확인하지 못했어요.` },
+      : { level: 'warn', text: `승인한 최신 대본의 영상이에요 (승인: ${approval.reviewer}). 연구자 계정이 아닌 계정이 승인해서, 공개 문구에는 연구자 이름 없이 '조리 정보 검토'로 나가요.` },
   ];
   const hasVideo = fs.existsSync(path.join(render.outputDir, 'video.mp4'));
   if (!hasVideo) out.push({ level: 'error', text: '영상 파일이 없어요. 영상을 다시 만들어 주세요.' });
@@ -166,7 +166,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const reader = deps.recipeReader ?? new RecipeReader(repo.db);
   const humanizer = deps.humanizer ?? new Humanizer(repo.db);
   /** 블로그·SNS 문구에 넣을 승인 정보 (승인 전이면 null) */
-  const reviewOf = (project: ProjectDetail) => (project.approval ? { reviewer: project.approval.reviewer, reviewedAt: project.approval.createdAt } : null);
+  const reviewOf = (project: ProjectDetail) => (project.approval ? { reviewer: creditedReviewer(project.approval), reviewedAt: project.approval.createdAt } : null);
   /** 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영 */
   const recentFormats = (pid: number) =>
     repo
@@ -565,7 +565,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       // 검사 오류를 직접 보고 넘긴 승인은 검수 기록·작업 기록에 남긴다
       if (errs.length) notes.push(`자동 검사 오류 ${errs.length}건을 직접 확인하고 승인 (${errs.map((e) => e.message).join(' / ').slice(0, 300)})`);
     }
-    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: notes.filter(Boolean).join(' — ') });
+    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: notes.filter(Boolean).join(' — '), byResearcher: (res.locals.user as User | undefined)?.role === 'researcher' });
     res.json({ ...repo.getProject(pid), ...(warning ? { warning } : {}) });
   });
 
@@ -800,8 +800,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   });
   api.get('/renders/:id/instagram', (req, res) => {
     const { render, approval } = approvedRender(repo, id(req));
-    const researcherApproved = auth.researcherCount() > 0 && auth.isResearcherName(approval.reviewer);
-    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render, approval, researcherApproved), cards: carouselFiles(render.outputDir).length });
+    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render, approval), cards: carouselFiles(render.outputDir).length });
   });
   /**
    * 실제 게시. 연구자가 승인한 최신 대본의 영상만, 화면에서 '올리기'를 다시 확인했을 때만.
@@ -1003,7 +1002,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       const style = repo.getBlogStyle(pid);
       if ((BLOG_STYLES as readonly string[]).includes(style)) {
         const approval = repo.lastReview(pid, version)!;
-        const post = buildExpertBlog({ recipe: repo.getRecipe(pid), style: style as BlogStyle, notes: repo.getExpertNotes(pid), review: { reviewer: approval.reviewer, reviewedAt: approval.createdAt } });
+        const post = buildExpertBlog({ recipe: repo.getRecipe(pid), style: style as BlogStyle, notes: repo.getExpertNotes(pid), review: { reviewer: creditedReviewer(approval), reviewedAt: approval.createdAt } });
         if (!post.ready) throw new HttpError(409, `블로그 원고가 아직 준비되지 않았어요: ${post.blockers.join(' ')}`);
       }
     }
