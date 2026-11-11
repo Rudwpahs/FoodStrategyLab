@@ -57,7 +57,8 @@ export const ProjectPage: React.FC<{ id: number }> = ({ id }) => {
   const props: StepProps = { project, setProject, reload, go };
 
   // 끝난 단계까지 표시: 입력(0) → 후보(1) → 영상·블로그(2) → 승인(3) → 게시(4)
-  const doneUntil = project.status === 'draft' ? 0 : project.status === 'review' ? (hasLatestRender(project) ? 2 : 1) : project.status === 'approved' ? 3 : 3;
+  const published = project.publications.some((x) => x.status === 'published' && x.scriptVersion === project.latest?.version);
+  const doneUntil = project.status === 'draft' ? 0 : project.status === 'review' ? (hasLatestRender(project) ? 2 : 1) : published ? 4 : 3;
 
   return (
     <div>

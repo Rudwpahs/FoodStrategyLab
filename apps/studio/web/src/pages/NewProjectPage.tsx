@@ -16,7 +16,10 @@ async function toUpload(file: File): Promise<UploadFile> {
       canvas.width = Math.round(bmp.width * scale);
       canvas.height = Math.round(bmp.height * scale);
       canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      // 원본 크기로 푼 사진은 바로 놓아준다 (아이폰은 큰 사진 몇 장에 탭이 다시 로드될 수 있다)
+      bmp.close();
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      canvas.width = canvas.height = 0;
       return { name: file.name.replace(/\.\w+$/, '') + '.jpg', type: 'image/jpeg', data: dataUrl.split(',')[1]! };
     } catch {
       /* 줄이지 못하면 원본 그대로 */
@@ -45,7 +48,15 @@ export const NewProjectPage: React.FC = () => {
   }, []);
 
   const max = ai?.maxFiles ?? 4;
-  const previews = files.map((f) => ({ f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }));
+  // 미리보기 주소는 파일이 바뀔 때만 만들고, 바뀌거나 화면을 떠나면 놓아준다
+  const [previews, setPreviews] = useState<{ f: File; url: string | null }[]>([]);
+  useEffect(() => {
+    const list = files.map((f) => ({ f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }));
+    setPreviews(list);
+    return () => {
+      for (const p of list) if (p.url) URL.revokeObjectURL(p.url);
+    };
+  }, [files]);
 
   return (
     <div className="stack">
@@ -55,7 +66,7 @@ export const NewProjectPage: React.FC = () => {
       </div>
 
       <div className="card stack">
-        <h2 style={{ margin: 0 }}>① 레시피 사진·파일 올리기</h2>
+        <h2 style={{ margin: 0 }}>레시피 사진·파일 올리기</h2>
         {ai && !ai.configured && (
           <div className="issue warning">레시피 읽기(Claude API)가 아직 설정되지 않았어요. 관리자가 서버에 열쇠를 넣으면 쓸 수 있어요. 그 전에는 아래 "직접 입력"을 써 주세요.</div>
         )}
@@ -84,6 +95,8 @@ export const NewProjectPage: React.FC = () => {
               }
             }
             setConverting(false);
+            const room = Math.max(0, max - files.length);
+            if (ok.length > room) notify(`한 번에 ${max}개까지 올릴 수 있어요. ${ok.length - room}개는 빼고 담았어요.`, true);
             setFiles((cur) => [...cur, ...ok].slice(0, max));
           }}
         />
@@ -109,13 +122,17 @@ export const NewProjectPage: React.FC = () => {
           disabled={reading || converting || files.length === 0 || ai?.configured === false}
           onClick={async () => {
             setReading(true);
-            const uploads = await Promise.all(files.map(toUpload));
-            const r = await run(() => api.createFromFiles(uploads, memo), '레시피를 읽었어요. 영상 주제를 골라 주세요');
+            const r = await run(async () => {
+              // 한 장씩 차례로 줄인다 (여러 장을 동시에 원본 크기로 풀면 아이폰 메모리가 모자란다)
+              const uploads: UploadFile[] = [];
+              for (const f of files) uploads.push(await toUpload(f));
+              return api.createFromFiles(uploads, memo);
+            }, '레시피를 읽었어요. 영상 주제를 골라 주세요');
             setReading(false);
             if (r) navigate(`/p/${r.id}/script`);
           }}
         >
-          {reading ? '레시피 읽는 중… (10~40초)' : '② 레시피 읽기 → 주제 고르기'}
+          {reading ? '레시피 읽는 중… (10~40초)' : '레시피 읽기 → 주제 고르기'}
         </button>
         <div className="muted small">재료·분량·순서는 적힌 그대로 옮기고, 자료에 없는 주제·원리는 "AI 제안"으로 표시해요. 꼭 확인해 주세요.</div>
       </div>

@@ -15,7 +15,7 @@ export const HumanizePanel: React.FC<{
   polished?: number;
   onApplied: (project?: ProjectDetail) => void;
 }> = ({ project, target, style, polished = 0, onApplied }) => {
-  const { run } = useApp();
+  const { run, notify } = useApp();
   const [result, setResult] = useState<(HumanizeResult & { version?: number }) | null>(null);
   const [busy, setBusy] = useState(false);
   const what = target === 'blog' ? '블로그 문단' : '대사';
@@ -98,11 +98,11 @@ export const HumanizePanel: React.FC<{
               className="btn small primary"
               disabled={!changed.length}
               onClick={async () => {
-                const r = await run(
-                  () => api.applyHumanize(project.id, target, changed.map((i) => ({ id: i.id, before: i.before, after: i.after })), { style, version: result.version }),
-                  target === 'script' ? '다듬은 대사를 새 버전으로 저장했어요 (재검수 필요)' : '다듬은 문장을 블로그 원고에 적용했어요',
-                );
+                const r = await run(() => api.applyHumanize(project.id, target, changed.map((i) => ({ id: i.id, before: i.before, after: i.after })), { style, version: result.version }));
                 if (r) {
+                  const saved = target === 'script' ? `다듬은 대사 ${r.applied}개를 새 버전으로 저장했어요 (재검수 필요)` : `다듬은 문장 ${r.applied}개를 블로그 원고에 적용했어요`;
+                  if (r.rejected.length) notify(`${saved}. ${r.rejected.length}개는 다시 검사에 걸려 원래 문장으로 뒀어요.`, true);
+                  else notify(saved);
                   setResult(null);
                   onApplied(r.project);
                 }

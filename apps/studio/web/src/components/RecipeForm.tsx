@@ -22,11 +22,10 @@ interface Props {
   submitLabel: string;
   onSubmit: (recipe: RecipeInput) => void;
   busy?: boolean;
-  extra?: React.ReactNode;
 }
 
 /** 원본 레시피·조리 지식 입력. 여기 입력한 재료·분량은 AI가 바꾸지 않는다. */
-export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, busy, extra }) => {
+export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, busy }) => {
   const [r, setR] = useState<RecipeInput>(initial);
   const [steps, setSteps] = useState(initial.steps.join('\n'));
   const [tips, setTips] = useState(initial.tips.join('\n'));
@@ -121,7 +120,6 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
       </div>
 
       <div className="row">
-        {extra}
         <div className="spacer" />
         <button className="btn primary" disabled={busy}>{submitLabel}</button>
       </div>
