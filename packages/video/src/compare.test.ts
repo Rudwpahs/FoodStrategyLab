@@ -11,7 +11,8 @@ import { buildTimeline, type VideoProps } from './timeline.ts';
  */
 let frame = 0;
 vi.mock('./fonts.ts', () => ({ ensureFonts: () => Promise.resolve() }));
-vi.mock('./three/KitchenScene.tsx', () => ({
+vi.mock('./three/KitchenScene.tsx', async (orig) => ({
+  ...(await orig<typeof import('./three/KitchenScene.tsx')>()),
   KitchenScene: (p: { split?: unknown }) => React.createElement('canvas', { 'data-split': p.split ? 'yes' : 'no' }),
 }));
 vi.mock('remotion', async (orig) => {

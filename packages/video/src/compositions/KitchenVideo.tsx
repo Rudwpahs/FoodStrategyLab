@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, clipGroups, ingredientProps, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
@@ -10,21 +10,16 @@ import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
 import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
-import { KitchenScene } from '../three/KitchenScene.tsx';
-import { CHEF_FACE, propPositions } from '../three/layout.ts';
+import { KitchenScene, foodFor } from '../three/KitchenScene.tsx';
+import { propPositions } from '../three/layout.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import type { SceneTiming, VideoProps } from '../timeline.ts';
 
 ensureFonts();
 
-export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
-  const food = foodProfile(recipe);
-  // 완성 사진이 있으면 사진의 대표 색을 익은 색으로 쓴다
-  return photoColor ? { ...food, cookedColor: photoColor } : food;
-}
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
+export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -351,86 +346,3 @@ const PhotoInset: React.FC<{ url: string; frame: number; fps: number }> = ({ url
     </div>
   );
 };
-
-/** 3D 커버·썸네일: 완성 접시를 든 맛조수 + 제목 */
-export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoColor?: string; emotion: Scene['emotion'] }> = ({ title, recipe, photoColor, emotion }) => {
-  const { width, height } = useVideoConfig();
-  const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
-  const square = width === height;
-  const state = coverState(emotion, square);
-  return (
-    <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
-      <KitchenScene width={width} height={height} frame={0} state={state} food={food} props={[]} />
-      {/* 세로 표지: 프로필 격자는 가운데 3:4(위아래 240px씩 잘림)만 보여서, 글씨는 모두 그 안(330~1600)에 둔다 */}
-      <BrandBadge scale={square ? 0.8 : 1} top={square ? undefined : 330} />
-      <div
-        style={{
-          position: 'absolute',
-          left: 50,
-          right: 50,
-          top: square ? 170 : 440,
-          textAlign: 'center',
-          fontFamily: FONT_FAMILY,
-          fontWeight: 950,
-          fontSize: square ? 76 : 104,
-          lineHeight: 1.18,
-          letterSpacing: -3,
-          color: COLORS.ink,
-          wordBreak: 'keep-all',
-          textShadow: `0 0 18px ${COLORS.white}, 0 6px 0 ${COLORS.white}`,
-        }}
-      >
-        {title}
-      </div>
-      {!square && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 1596,
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: FONT_FAMILY,
-              fontWeight: 850,
-              fontSize: 38,
-              color: COLORS.ink,
-              background: COLORS.yellow,
-              border: `5px solid ${COLORS.ink}`,
-              borderRadius: 999,
-              padding: '10px 30px',
-              letterSpacing: -1,
-            }}
-          >
-            🧪 {BRAND.series} · 레시피 {BRAND.researcherTitle} {BRAND.researcher}
-          </div>
-        </div>
-      )}
-    </AbsoluteFill>
-  );
-};
-
-function coverState(emotion: Scene['emotion'], square: boolean): import('../three/KitchenScene.tsx').StageState {
-  const face = CHEF_FACE;
-  return {
-    camera: square
-      ? { pos: [face[0] + 0.3, face[1] + 0.3, face[2] + 1.8], target: [face[0] + 0.05, face[1] + 0.12, face[2]], fov: 46 }
-      : { pos: [face[0] + 0.3, face[1] + 0.25, face[2] + 2.2], target: [face[0] + 0.05, face[1] + 0.2, face[2]], fov: 46 },
-    emotion,
-    talking: false,
-    action: 'present',
-    face: 'camera',
-    burnerOn: false,
-    showFoodInVessel: false,
-    cook: 1,
-    flip: 0,
-    plated: 'done',
-    propPop: [],
-    chefPop: 1,
-    mood: 'golden',
-  };
-}

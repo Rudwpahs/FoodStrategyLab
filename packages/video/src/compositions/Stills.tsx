@@ -5,9 +5,9 @@ import { AbsoluteFill } from 'remotion';
 import { BRAND, EMOTIONS, EMOTION_LABELS, formalParagraph, formatIngredient, type Emotion, type RecipeInput } from '@mat-lab/recipe-core';
 import { Character } from '../components/Character.tsx';
 import { fitSize } from '../components/SceneCard.tsx';
-import { BrandBadge, LabBackground, LogoMark } from '../components/Stage.tsx';
+import { LogoMark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
-import { KitchenCover } from './KitchenVideo.tsx';
+import { KitchenCover } from './KitchenCover.tsx';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 
 ensureFonts();
@@ -15,89 +15,14 @@ ensureFonts();
 export interface CoverProps {
   title: string;
   emotion: Emotion;
-  /** 있으면 3D 주방 커버로 만든다 */
-  recipe?: RecipeInput;
+  recipe: RecipeInput;
   photoColor?: string;
   [key: string]: unknown;
 }
 
-/** 릴스·쇼츠 커버 (1080×1920) */
-export const Cover: React.FC<CoverProps> = (props) =>
-  props.recipe ? <KitchenCover title={props.title} recipe={props.recipe} photoColor={props.photoColor} emotion={props.emotion} /> : <FlatCover {...props} />;
-
-/** 정사각 썸네일 (1080×1080) */
-export const SquareThumb: React.FC<CoverProps> = (props) =>
-  props.recipe ? <KitchenCover title={props.title} recipe={props.recipe} photoColor={props.photoColor} emotion={props.emotion} /> : <FlatSquare {...props} />;
-
-const FlatCover: React.FC<CoverProps> = ({ title, emotion }) => (
-  <AbsoluteFill>
-    <LabBackground />
-    <BrandBadge />
-    <div
-      style={{
-        position: 'absolute',
-        left: 60,
-        right: 60,
-        top: 330,
-        fontFamily: FONT_FAMILY,
-        fontWeight: 950,
-        fontSize: fitSize(title, 112, 12, 70),
-        lineHeight: 1.18,
-        letterSpacing: -3,
-        color: COLORS.ink,
-        textAlign: 'center',
-        wordBreak: 'keep-all',
-        textShadow: `0 6px 0 ${COLORS.white}`,
-      }}
-    >
-      {highlightQuestion(title)}
-    </div>
-    <div style={{ position: 'absolute', left: 540 - 300, top: 1490 - 600 * 1.15 }}>
-      <Character emotion={emotion} frame={0} size={600} still />
-    </div>
-    <div style={{ position: 'absolute', left: 0, right: 0, top: 1560, textAlign: 'center', fontFamily: FONT_FAMILY, color: COLORS.white, fontSize: 48, fontWeight: 800 }}>
-      {BRAND.slogan}
-    </div>
-  </AbsoluteFill>
-);
-
-const FlatSquare: React.FC<CoverProps> = ({ title, emotion }) => (
-  <AbsoluteFill style={{ background: COLORS.cream, fontFamily: FONT_FAMILY }}>
-    <LabBackground counterTop={860} height={1080} />
-    <BrandBadge scale={0.8} />
-    <div
-      style={{
-        position: 'absolute',
-        left: 60,
-        width: 600,
-        top: 240,
-        fontWeight: 950,
-        fontSize: fitSize(title, 88, 10, 56),
-        lineHeight: 1.2,
-        letterSpacing: -2.5,
-        color: COLORS.ink,
-        wordBreak: 'keep-all',
-      }}
-    >
-      {highlightQuestion(title)}
-    </div>
-    <div style={{ position: 'absolute', right: 20, top: 870 - 420 * 1.15 }}>
-      <Character emotion={emotion} frame={0} size={420} still />
-    </div>
-    <div style={{ position: 'absolute', left: 60, top: 930, color: COLORS.white, fontSize: 40, fontWeight: 800 }}>{BRAND.slogan}</div>
-  </AbsoluteFill>
-);
-
-function highlightQuestion(title: string) {
-  const m = title.match(/^(.*?)([^\s]+\?)$/);
-  if (!m) return title;
-  return (
-    <>
-      {m[1]}
-      <span style={{ color: COLORS.red }}>{m[2]}</span>
-    </>
-  );
-}
+/** 릴스·쇼츠 커버 (1080×1920)와 정사각 썸네일 (1080×1080): 3D 주방 커버 */
+export const Cover: React.FC<CoverProps> = (props) => <KitchenCover title={props.title} recipe={props.recipe} photoColor={props.photoColor} emotion={props.emotion} />;
+export const SquareThumb = Cover;
 
 export interface RecipeCardProps {
   recipe: RecipeInput;

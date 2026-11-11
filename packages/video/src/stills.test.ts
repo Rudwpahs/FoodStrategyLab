@@ -5,8 +5,12 @@ import { BRAND, SAMPLE_RECIPES, formatIngredient, type RecipeInput } from '@mat-
 
 // 글꼴 파일은 브라우저(렌더러)에서만 불러온다
 vi.mock('./fonts.ts', () => ({ ensureFonts: () => Promise.resolve() }));
+// 3D 장면(WebGL)은 브라우저에서만 그린다
+vi.mock('./three/KitchenScene.tsx', async (orig) => ({ ...(await orig<typeof import('./three/KitchenScene.tsx')>()), KitchenScene: () => null }));
+let screen = { width: 1080, height: 1920 };
+vi.mock('remotion', async (orig) => ({ ...(await orig<typeof import('remotion')>()), useVideoConfig: () => ({ ...screen, fps: 30, durationInFrames: 1, id: 'Cover', defaultProps: {}, props: {} }) }));
 
-const { CarouselCard, RecipeCard } = await import('./compositions/Stills.tsx');
+const { CarouselCard, Cover, RecipeCard } = await import('./compositions/Stills.tsx');
 const { SceneCard } = await import('./components/SceneCard.tsx');
 const { reviewNote, signatureNote } = await import('./brandText.ts');
 
@@ -78,5 +82,20 @@ describe('레시피 카드는 원본 재료 순서를 지킨다 (원칙 1)', () 
       expect(html.match(/\[양념\]/g)).toHaveLength(2);
       expect(html.match(/\[반죽\]/g)).toHaveLength(1);
     }
+  });
+});
+
+describe('3D 표지 제목', () => {
+  const titleSize = (title: string, size = { width: 1080, height: 1920 }) => {
+    screen = size;
+    const html = renderToStaticMarkup(React.createElement(Cover, { title, emotion: 'joy', recipe }));
+    const before = html.slice(0, html.indexOf(title));
+    return Number(before.slice(before.lastIndexOf('font-size:')).match(/font-size:([\d.]+)px/)![1]);
+  };
+  it('짧은 제목은 크게, 긴 제목은 글자를 줄여 3:4 안쪽 글씨 영역을 넘지 않게 한다', () => {
+    expect(titleSize('김치전 바삭하게')).toBe(104);
+    const long = '엄마가 알려 준 바삭한 김치전, 반죽을 언제 섞어야 할까요?';
+    expect(titleSize(long)).toBeLessThan(104);
+    expect(titleSize(long, { width: 1080, height: 1080 })).toBeLessThan(76);
   });
 });

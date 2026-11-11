@@ -2,12 +2,19 @@ import React, { useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
 import { Object3D, PerspectiveCamera, Scene } from 'three';
-import type { Emotion, FoodProfile, IngredientProp } from '@mat-lab/recipe-core';
+import { foodProfile, type Emotion, type FoodProfile, type IngredientProp, type RecipeInput } from '@mat-lab/recipe-core';
 import { Chef3D } from './Chef3D.tsx';
 import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
 import { KitchenSet } from './Kitchen.tsx';
 import { BURNER, CHEF_POS, PLATE, chefFacing, handPlate, propPositions, type Vec3 } from './layout.ts';
 import type { ChefAction, Mood, Shot } from './shots.ts';
+
+/** 3D 장면에 넣을 음식 */
+export function foodFor(recipe: RecipeInput, photoColor?: string): FoodProfile {
+  const food = foodProfile(recipe);
+  // 완성 사진이 있으면 사진의 대표 색을 익은 색으로 쓴다
+  return photoColor ? { ...food, cookedColor: photoColor } : food;
+}
 
 /** 한 프레임의 3D 장면 상태 */
 export interface StageState {
