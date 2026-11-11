@@ -176,25 +176,36 @@ function lcs(a: string, b: string): number {
 }
 
 /**
+ * 한 글자만 달라도 뜻이 반대가 되는 조리 핵심어 (불 세기). 받아쓰기가 조금 틀려도 넘어가는 어절 비교(60% 일치)와 달리
+ * 이 말은 대사와 똑같이 들려야 한다. 긴 말(중약불)을 먼저 찾아 '약불'과 헷갈리지 않게 한다.
+ */
+const KEY_TERMS = /중강불|중약불|센불|강불|중불|약불/g;
+const keyTerms = (text: string): string[] => norm(text).match(KEY_TERMS) ?? [];
+
+/**
  * 대본 대사와 받아쓴 말을 비교한다.
  * - ratio: 대사 글자 중 들린 비율 (0~1)
  * - truncated: 들린 말이 대사보다 눈에 띄게 짧고 대사의 앞부분과 같음 → 음성이 중간에 끊겨 만들어짐
- * - missing: 들리지 않은 어절
+ * - missing: 들리지 않은 어절 (조리 핵심어가 다르게 들린 어절 포함)
+ * - critical: 다르게 들린 조리 핵심어 (불 세기) — 받아쓰기 일치율과 상관없이 알려야 한다
  */
-export function lineMatch(expected: string, heard: string): { ratio: number; truncated: boolean; missing: string[] } {
+export function lineMatch(expected: string, heard: string): { ratio: number; truncated: boolean; missing: string[]; critical: string[] } {
   const e = norm(expected);
   const h = norm(heard);
-  if (!e) return { ratio: 1, truncated: false, missing: [] };
+  if (!e) return { ratio: 1, truncated: false, missing: [], critical: [] };
   const common = lcs(e, h);
   const ratio = common / e.length;
   const tail = norm(expected.trim().split(/\s+/).slice(-2).join(''));
   const truncated = h.length < e.length * 0.85 && tail.length > 0 && lcs(tail, h.slice(-tail.length - 4)) < tail.length * 0.5;
+  const heardTerms = keyTerms(heard);
+  const unheard = (term: string) => !heardTerms.includes(term);
   const missing = expected
     .trim()
     .split(/\s+/)
     .filter((w) => {
       const n = norm(w);
-      return n.length >= 2 && lcs(n, h) < n.length * 0.6;
+      return (n.length >= 2 && lcs(n, h) < n.length * 0.6) || keyTerms(w).some(unheard);
     });
-  return { ratio, truncated, missing };
+  const critical = [...new Set(keyTerms(expected).filter(unheard))];
+  return { ratio, truncated, missing, critical };
 }

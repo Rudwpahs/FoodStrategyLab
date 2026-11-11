@@ -249,6 +249,14 @@ describe('받아쓰기로 대사 대조', () => {
     expect(m.truncated).toBe(false);
     expect(m.ratio).toBeGreaterThan(0.9);
   });
+  it('불 세기처럼 한 글자로 뜻이 반대가 되는 조리 핵심어는 정확히 같아야 한다', () => {
+    const m = lineMatch('간장 두 숟갈을 넣고 센불에서 볶아요', '된장 두 숟갈을 넣고 약불에서 볶아요');
+    expect(m.missing).toEqual(expect.arrayContaining(['간장', '센불에서']));
+    expect(m.critical).toEqual(['센불']);
+    expect(lineMatch('중약불로 줄여요', '중약불로 줄여요').critical).toEqual([]);
+    expect(lineMatch('중약불로 줄여요', '약불로 줄여요').critical).toEqual(['중약불']);
+    expect(lineMatch('바른 순서는 핵심 5단계', '다른 순서는 핵심 5단계').critical).toEqual([]);
+  });
   it('이름이 다르게 들리면 그 어절을 알려 준다', () => {
     const m = lineMatch('오늘의 실험 끝! 이희재의 맛 연구소였어요.', '오늘의 실험 끝! 이제의 맛연구소였어요!');
     expect(m.truncated).toBe(false);
