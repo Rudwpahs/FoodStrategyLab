@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
-import { buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
+import { FPS, buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
 import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPages } from '@mat-lab/video/cards';
@@ -408,6 +408,13 @@ export async function auditVideo(video: string, timings: SceneTiming[], script: 
 }
 
 /**
+ * 받아쓰기와 대사의 글자 일치 비율 문턱 (실험으로 정한 값, 근거 데이터는 없다).
+ * MATCH_REDO 미만이면 음성을 다시 만들고, MATCH_CLOSE 미만이면서 빠진 어절이 있으면 들어 보라고 알린다.
+ */
+const MATCH_REDO = 0.6;
+const MATCH_CLOSE = 0.92;
+
+/**
  * 장면별 음성을 받아써서 대사와 맞춰 본다 (받아쓰기를 쓸 수 있을 때만).
  * - 뒷부분이 없거나(중간에 끊겨 만들어짐) 대사와 많이 다르면 그 음성을 지우고 한 번 다시 만든다
  * - 그래도 다르면 문제로 남긴다. 받아쓰기도 틀릴 수 있어 '다르게 들림'은 경고로 둔다
@@ -425,20 +432,28 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
     checked++;
     let m = lineMatch(scene.line, heard.text);
     let text = heard.text;
-    if (m.truncated || m.ratio < 0.6) {
+    if (m.truncated || m.ratio < MATCH_REDO) {
       removeAudioWithCache(a.file);
       const again = await synthesize(scene.line, AUDIO_DIR);
-      const heard2 = await transcribeAudio(again.file).catch(() => undefined);
-      if (heard2) {
-        const m2 = lineMatch(scene.line, heard2.text);
-        if (!m2.truncated && m2.ratio >= 0.6) qa.fixed.push(`장면 ${i + 1} 음성이 ${m.truncated ? '중간에 끊겨' : '대사와 다르게'} 만들어져서 다시 만들었어요.`);
-        m = m2;
-        text = heard2.text;
+      // 다시 만든 음성도 빈 음성인지 본다 (generateVoice와 같은 검사)
+      if ((await cachedSpeechBounds(again.file).catch(() => null))?.silent) {
+        removeAudioWithCache(again.file);
+        throw new Error(`"${scene.line.slice(0, 20)}…" 대사의 음성이 비어 있습니다. 음성 생성을 다시 눌러 주세요.`);
       }
+      const heard2 = await transcribeAudio(again.file).catch(() => undefined);
+      if (!heard2) {
+        // 옛 음성의 판정을 새 음성에 붙이지 않는다
+        qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성을 다시 만들었지만 받아쓰기로 확인하지 못했어요. 들어 보고 확인해 주세요.` });
+        continue;
+      }
+      const m2 = lineMatch(scene.line, heard2.text);
+      if (!m2.truncated && m2.ratio >= MATCH_REDO) qa.fixed.push(`장면 ${i + 1} 음성이 ${m.truncated ? '중간에 끊겨' : '대사와 다르게'} 만들어져서 다시 만들었어요.`);
+      m = m2;
+      text = heard2.text;
     }
     if (m.truncated) qa.issues.push({ level: 'error', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사 중간에서 끊겨요 (들린 말: "${text.trim().slice(0, 40)}").` });
-    else if (m.ratio < 0.6) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사와 많이 다르게 들려요 (들린 말: "${text.trim().slice(0, 40)}").` });
-    else if (m.missing.length && m.ratio < 0.92) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });
+    else if (m.ratio < MATCH_REDO) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사와 많이 다르게 들려요 (들린 말: "${text.trim().slice(0, 40)}").` });
+    else if (m.missing.length && m.ratio < MATCH_CLOSE) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });
   }
   if (checked) qa.checked.push(`받아쓰기로 대사 대조 (${checked}개 장면)`);
 }
@@ -452,7 +467,7 @@ export async function captionCheckFrames(video: string, script: Script, timings:
     if (!scene) continue;
     for (const g of captionGroups(scene.line, Math.max(1, t.speechFrames), t.words)) {
       n++;
-      const at = (t.from + (g.from + g.to) / 2) / 30;
+      const at = (t.from + (g.from + g.to) / 2) / FPS;
       await extractFrame(video, at, path.join(dir, `${String(n).padStart(2, '0')}-${scene.id}.png`));
     }
   }
