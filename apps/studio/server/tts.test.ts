@@ -207,6 +207,14 @@ describe('VoiceStudio 음성', () => {
     notAvailableTimes = 0;
   });
 
+  it('같은 문장을 동시에 만들면 한 번만 요청하고 둘 다 같은 파일을 받는다 (임시 파일이 겹치지 않게)', async () => {
+    const before = requests.length;
+    const [a, b, c] = await Promise.all([1, 2, 3].map(() => synthesize('동시에 만드는 같은 문장', audioDir)));
+    expect(requests.length).toBe(before + 1);
+    expect(new Set([a!.file, b!.file, c!.file]).size).toBe(1);
+    expect(fs.readdirSync(audioDir).filter((f) => f.includes('.tmp'))).toEqual([]);
+  });
+
   it('같은 문장은 캐시를 써서 다시 요청하지 않는다', async () => {
     await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     const before = requests.length;

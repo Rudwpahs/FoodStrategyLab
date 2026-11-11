@@ -251,20 +251,33 @@ export async function synthesize(text: string, audioDir: string, override: Voice
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
   if (!fs.existsSync(file)) {
-    // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
-    removeAudioWithCache(file);
-    const tmp = `${file}.tmp`;
+    // 같은 음성을 동시에 만들면(후보 목소리 작업 + 영상 제작) 먼저 시작한 작업을 기다린다
+    let job = making.get(file);
+    if (!job) {
+      job = makeAudio(provider, text, file, voice, tempo).finally(() => making.delete(file));
+      making.set(file, job);
+    }
+    await job;
+  }
+  return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
+}
+
+/** 지금 만들고 있는 음성 파일 (같은 파일을 동시에 두 번 만들지 않게) */
+const making = new Map<string, Promise<void>>();
+
+async function makeAudio(provider: TtsProvider, text: string, file: string, voice: string, tempo: number) {
+  // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
+  removeAudioWithCache(file);
+  // 임시 파일 이름은 작업마다 다르게 (다른 작업의 임시 파일을 덮거나 지우지 않게)
+  const tmp = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  const raw = `${tmp}.raw.mp3`;
+  try {
     if (provider === 'voicestudio') {
       await voicestudioSpeech(text, tmp, voice);
       // 말 빠르기 (음높이는 그대로)
       if (tempo !== 1) {
-        const raw = `${tmp}.raw.mp3`;
         fs.renameSync(tmp, raw);
-        try {
-          await changeTempo(raw, tmp, tempo);
-        } finally {
-          fs.rmSync(raw, { force: true });
-        }
+        await changeTempo(raw, tmp, tempo);
       }
     } else {
       const e = ttsSettings().edge;
@@ -273,8 +286,10 @@ export async function synthesize(text: string, audioDir: string, override: Voice
       await run(e.command, args);
     }
     fs.renameSync(tmp, file);
+  } finally {
+    fs.rmSync(raw, { force: true });
+    fs.rmSync(tmp, { force: true });
   }
-  return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
 
 /** 지금 목소리(identity)로 만든 캐시가 있으면 돌려준다 */
