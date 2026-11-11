@@ -1,4 +1,4 @@
-import { BRAND, CATEGORY_LABELS, extractQuantities, formal, formatIngredient, recipeText, splitSentences, type RecipeInput } from '@mat-lab/recipe-core';
+import { BRAND, CATEGORY_LABELS, formal, formatIngredient, quantityIssues, splitSentences, type RecipeInput } from '@mat-lab/recipe-core';
 import { groupIngredients, kstDate, markdownToHtml, type BlogPost, type ReviewInfo } from './blog.ts';
 
 /**
@@ -183,10 +183,11 @@ function image(src: string | undefined, alt: string): string {
  * (원고 생성기는 원본만 쓰지만, 사람이 고친 원고도 검사할 수 있게 둔다)
  */
 export function blogQuantityIssues(recipe: RecipeInput, notes: ExpertNotes, markdown: string): string[] {
-  const allowed = new Set(extractQuantities([recipeText(recipe), ...Object.values(notes.answers)].join('\n')).map((q) => q.normalized));
-  // 브랜드 문구(예: "30초 실험실")는 조리 분량이 아니다
-  const body = markdown.split(BRAND.slogan).join('');
-  return [...new Set(extractQuantities(body).filter((q) => !allowed.has(q.normalized)).map((q) => q.raw))].map((raw) => `원본·연구자 답변에 없는 분량 "${raw}"`);
+  const answers = Object.values(notes.answers).filter((a): a is string => Boolean(a));
+  // 브랜드 문구(예: "30초 실험실")는 조리 분량이 아니다. 재료와 분량은 줄마다 짝지어 본다
+  const lines = markdown.split(BRAND.slogan).join('').split('\n');
+  const found = lines.flatMap((l) => quantityIssues(recipe, l, { extra: answers }));
+  return [...new Set(found.map((i) => (i.ingredient ? `"${i.ingredient}"의 분량이 원본과 다른 "${i.quantity.raw}"` : `원본·연구자 답변에 없는 분량 "${i.quantity.raw}"`)))];
 }
 
 /**

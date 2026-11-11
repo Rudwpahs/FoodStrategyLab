@@ -10,7 +10,7 @@ import {
   findSensory,
   formatIngredient,
   hookCandidate,
-  hookLineIssues,
+  quantityIssues,
   josa,
   suggestHooks,
   repetitionWarning,
@@ -100,10 +100,10 @@ describe('훅 후보 엔진', () => {
   it('모든 훅 문장에 원본에 없는 분량이 없다', () => {
     for (const recipe of [walnutFull, pasta]) {
       for (const h of suggestHooks(recipe).filter((x) => x.available)) {
-        expect(hookLineIssues(recipe, h.line), `${h.type}: ${h.line}`).toEqual([]);
+        expect(quantityIssues(recipe, h.line), `${h.type}: ${h.line}`).toEqual([]);
       }
     }
-    expect(hookLineIssues(walnut, '180도에서 튀기세요')).toHaveLength(1);
+    expect(quantityIssues(walnut, '180도에서 튀기세요')).toHaveLength(1);
   });
 });
 

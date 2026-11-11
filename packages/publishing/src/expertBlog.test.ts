@@ -51,6 +51,13 @@ describe('전문가 노트 블로그', () => {
     expect(blogQuantityIssues(walnut, { answers: {} }, post.markdown + '\n설탕 2컵')).toHaveLength(1);
     expect(blogQuantityIssues(walnut, { answers: { failure: '설탕 2컵이면 너무 달아요' } }, post.markdown + '\n설탕 2컵')).toEqual([]);
   });
+
+  it('재료끼리 분량을 바꿔 쓴 원고도 잡는다 (물 3컵·설탕 1컵 → 물 1컵·설탕 3컵)', () => {
+    const post = buildExpertBlog({ recipe: walnut, style: 'everyday', notes: { answers: {} }, review });
+    const issues = blogQuantityIssues(walnut, { answers: {} }, `${post.markdown}\n시럽은 물 1컵, 설탕 3컵으로 만듭니다.`);
+    expect(issues).toHaveLength(2);
+    expect(issues.join(' ')).toContain('설탕');
+  });
 });
 
 describe('영상·블로그·SNS 일관성 검사', () => {

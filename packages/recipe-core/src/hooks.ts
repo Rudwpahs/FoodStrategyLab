@@ -1,5 +1,5 @@
 import { BRAND } from './brand.ts';
-import { extractQuantities, recipeText } from './fidelity.ts';
+import { extractQuantities } from './fidelity.ts';
 import { firstSentence, splitSentences } from './format.ts';
 import { causeEffect, compactLength, findSensory, josa, spoken } from './korean.ts';
 import type { Category, Emotion, RecipeInput, Scene, SceneType, Visual } from './types.ts';
@@ -527,12 +527,4 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
 /** 레시피 자료로 만들 수 있는 훅 후보를 추천 순서로 돌려준다 (만들 수 없는 유형은 뒤에, 이유와 함께). */
 export function suggestHooks(recipe: RecipeInput, opts: HookOptions = {}): HookCandidate[] {
   return HOOK_TYPES.map((t) => hookCandidate(recipe, t, opts)).sort((a, b) => b.score - a.score || HOOK_TYPES.indexOf(a.type) - HOOK_TYPES.indexOf(b.type));
-}
-
-/** 훅 문장에 원본에 없는 분량·시간·온도가 들어가지 않았는지 (AI 후보 검증용) */
-export function hookLineIssues(recipe: RecipeInput, line: string): string[] {
-  const source = new Set(extractQuantities(recipeText(recipe)).map((q) => q.normalized));
-  return extractQuantities(line)
-    .filter((q) => !source.has(q.normalized))
-    .map((q) => `원본에 없는 분량·시간·온도 "${q.raw}"`);
 }
