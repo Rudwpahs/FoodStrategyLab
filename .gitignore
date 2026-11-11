@@ -13,3 +13,6 @@ apps/android/build/
 apps/android/app/build/
 apps/android/local.properties
 __pycache__/
+
+# 작업 도우미가 잠깐 쓰는 작업 폴더
+.claude/worktrees/
