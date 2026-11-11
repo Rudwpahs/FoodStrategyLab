@@ -102,52 +102,6 @@ export function totalFrames(timings: SceneTiming[]): number {
   return last ? last.from + last.durationInFrames : 1;
 }
 
-export interface CaptionChunk {
-  text: string;
-  /** 장면 시작 기준 프레임 */
-  from: number;
-  to: number;
-}
-
-const MAX_CHUNK_CHARS = 22;
-
-/**
- * 대사를 자막 단위로 나눈다.
- * 단어를 최대 글자 수까지 채우되, 문장이 끝나면(. ! ?) 적당한 길이에서 끊는다.
- */
-export function splitCaption(line: string, max = MAX_CHUNK_CHARS): string[] {
-  const chunks: string[] = [];
-  let current = '';
-  for (const word of line.trim().split(/\s+/).filter(Boolean)) {
-    if (current && (current + ' ' + word).length > max) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = current ? `${current} ${word}` : word;
-    }
-    if (/[.!?…]$/.test(current) && current.length >= 5) {
-      chunks.push(current);
-      current = '';
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-/** 자막 조각을 글자 수 비율로 대사 구간에 배치한다. */
-export function captionChunks(line: string, speechFrames: number): CaptionChunk[] {
-  const texts = splitCaption(line);
-  const weights = texts.map((t) => Math.max(1, t.replace(/\s/g, '').length));
-  const total = weights.reduce((a, b) => a + b, 0);
-  let cursor = 0;
-  return texts.map((text, i) => {
-    const len = Math.round((weights[i]! / total) * speechFrames);
-    const chunk = { text, from: cursor, to: i === texts.length - 1 ? speechFrames : cursor + len };
-    cursor += len;
-    return chunk;
-  });
-}
-
 export interface WordTiming {
   text: string;
   from: number;
@@ -203,4 +157,19 @@ export function captionGroups(line: string, speechFrames: number, measured?: [nu
   }
   flush();
   return groups;
+}
+
+export interface CaptionChunk {
+  text: string;
+  /** 장면 시작 기준 프레임 */
+  from: number;
+  to: number;
+}
+
+/**
+ * SRT(유튜브 자막 파일)용 조각: 영상에 굽는 자막과 같은 묶음·시간(captionGroups)을 글자로 바꾼 것.
+ * 잰 어절 시간(timing.words)을 넘기면 영상 자막처럼 그 시간을 따른다.
+ */
+export function captionChunks(line: string, speechFrames: number, measured?: [number, number][]): CaptionChunk[] {
+  return captionGroups(line, speechFrames, measured).map((g) => ({ text: g.words.map((w) => w.text).join(' '), from: g.from, to: g.to }));
 }

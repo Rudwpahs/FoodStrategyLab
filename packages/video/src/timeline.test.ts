@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
-import { buildTimeline, captionChunks, captionGroups, splitCaption, totalFrames, wordTimings } from './timeline.ts';
+import { buildTimeline, captionChunks, captionGroups, totalFrames, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
 
@@ -52,18 +52,16 @@ describe('카드 읽는 시간', () => {
   });
 });
 
-describe('자막', () => {
-  it('짧은 쉼표 조각으로 쪼개지 않는다', () => {
-    const chunks = splitCaption('준비물은 시금치, 굵은소금, 국간장, 다진 마늘, 참기름!');
-    expect(chunks.every((c) => c.length >= 6)).toBe(true);
-    expect(chunks.join(' ')).toBe('준비물은 시금치, 굵은소금, 국간장, 다진 마늘, 참기름!');
-  });
-
-  it('자막 조각이 대사 구간 전체를 덮는다', () => {
-    const chunks = captionChunks('이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문은 시금치예요.', 120);
+describe('SRT 자막 조각', () => {
+  it('영상 자막과 같은 규칙(captionGroups)으로 나누고, 잰 어절 시간도 같이 따른다', () => {
+    const line = '이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문은 시금치예요.';
+    const asText = (groups: ReturnType<typeof captionGroups>) => groups.map((g) => ({ text: g.words.map((w) => w.text).join(' '), from: g.from, to: g.to }));
+    expect(captionChunks(line, 120)).toEqual(asText(captionGroups(line, 120)));
+    const measured: [number, number][] = [[0, 10], [12, 20], [22, 40], [42, 55], [57, 62], [64, 80], [82, 100], [102, 118]];
+    expect(captionChunks(line, 120, measured)).toEqual(asText(captionGroups(line, 120, measured)));
+    const chunks = captionChunks(line, 120);
     expect(chunks[0]!.from).toBe(0);
     expect(chunks.at(-1)!.to).toBe(120);
-    chunks.forEach((c) => expect(c.text.length).toBeLessThanOrEqual(22));
   });
 });
 
