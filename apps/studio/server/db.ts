@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member'
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -148,5 +149,8 @@ export function openDb(file: string): Db {
   const renderCols = new Set((db.prepare('PRAGMA table_info(renders)').all() as { name: string }[]).map((c) => c.name));
   if (!renderCols.has('qa_json')) db.exec("ALTER TABLE renders ADD COLUMN qa_json TEXT NOT NULL DEFAULT ''");
   if (!cols.has('polish_json')) db.exec("ALTER TABLE projects ADD COLUMN polish_json TEXT NOT NULL DEFAULT '{}'");
+  // 계정 역할: 연구자(researcher) 계정이 하나라도 있으면 승인은 연구자 계정만 할 수 있다
+  const userCols = new Set((db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name));
+  if (!userCols.has('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");
   return db;
 }

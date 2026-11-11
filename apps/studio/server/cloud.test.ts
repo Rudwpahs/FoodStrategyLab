@@ -45,7 +45,7 @@ afterAll(() => {
 const proxied = { 'x-forwarded-for': '203.0.113.7', 'x-forwarded-proto': 'https', 'x-forwarded-host': 'lab--studio.modal.run' };
 const req = (p: string, init: RequestInit & { cookie?: string } = {}) =>
   fetch(base + p, { ...init, headers: { 'content-type': 'application/json', ...proxied, ...(init.cookie ? { cookie: init.cookie } : {}), ...(init.headers ?? {}) } });
-const setup = (body: Record<string, string>, headers: Record<string, string> = {}) => req('/api/auth/setup', { method: 'POST', headers, body: JSON.stringify(body) });
+const setup = (body: Record<string, unknown>, headers: Record<string, string> = {}) => req('/api/auth/setup', { method: 'POST', headers, body: JSON.stringify(body) });
 const goodSetup = { code: ENV.STUDIO_SETUP_CODE, username: 'heejae', displayName: '이희재', password: 'correct horse battery' };
 
 describe('클라우드: 화면에서 첫 계정 만들기', () => {
@@ -74,13 +74,16 @@ describe('클라우드: 화면에서 첫 계정 만들기', () => {
   it('맞는 코드면 계정을 만들고 바로 로그인된다. 두 번째부터는 만들 수 없다', async () => {
     const short = await setup({ ...goodSetup, password: 'short' });
     expect(short.status).toBe(400);
-    const ok = await setup(goodSetup);
+    const ok = await setup({ ...goodSetup, researcher: true });
     expect(ok.status).toBe(200);
     const set = ok.headers.get('set-cookie')!;
     expect(set).toContain('Secure');
     const cookie = set.split(';')[0]!;
     expect((await req('/api/projects', { cookie })).status).toBe(200);
-    expect((await (await req('/api/auth/me', { cookie })).json()).user.displayName).toBe('이희재');
+    const me = (await (await req('/api/auth/me', { cookie })).json()).user;
+    expect(me.displayName).toBe('이희재');
+    // 첫 계정을 만들 때 연구자 계정으로 정할 수 있다 (승인은 연구자 계정만)
+    expect(me.role).toBe('researcher');
     expect((await setup({ ...goodSetup, username: 'intruder' })).status).toBe(409);
     expect(auth.userCount()).toBe(1);
   });

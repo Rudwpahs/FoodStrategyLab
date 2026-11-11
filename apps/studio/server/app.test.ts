@@ -144,7 +144,12 @@ describe('스튜디오 API 흐름', () => {
     // 수정 요청은 막지 않는다
     expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'changes_requested', note: '잘림' })).status).toBe(200);
     // 직접 보고 확인했다면 승인할 수 있다
-    expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved', acceptQa: true })).status).toBe(200);
+    const accepted = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved', acceptQa: true, note: '직접 봄' });
+    expect(accepted.status).toBe(200);
+    // 검사 오류를 확인하고 승인했다는 사실이 검수 기록과 작업 기록에 남는다
+    expect(accepted.body.approval.note).toContain('직접 봄');
+    expect(accepted.body.approval.note).toContain('자동 검사 오류 1건');
+    expect(accepted.body.events.some((e: { message: string }) => e.message.includes('자동 검사 오류 1건'))).toBe(true);
   });
 
   it('AI 붙여넣기 오류는 400으로 알려준다', async () => {

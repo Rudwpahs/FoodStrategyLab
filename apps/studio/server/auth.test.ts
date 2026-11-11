@@ -1,4 +1,8 @@
 import './testDataDir.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -68,6 +72,30 @@ describe('계정이 없을 때 (이 컴퓨터 전용)', () => {
   it('너무 짧은 비밀번호로는 계정을 만들 수 없다', () => {
     expect(() => auth.addUser('heejae', '이희재', 'short')).toThrow(/10자/);
   });
+
+  it('계정은 기본이 일반 계정이고, 만들 때 연구자로 정할 수 있다', () => {
+    const repo = new Repo(openDb(':memory:'));
+    const a = new Auth(repo.db);
+    expect(a.addUser('helper', '도우미', 'a long password!').role).toBe('member');
+    expect(a.researcherCount()).toBe(0);
+    expect(a.addUser('heejae', '이희재', 'a long password!', 'researcher').role).toBe('researcher');
+    expect(a.researcherCount()).toBe(1);
+    expect(a.isResearcherName('이희재')).toBe(true);
+    expect(a.isResearcherName('도우미')).toBe(false);
+  });
+
+  it('예전 DB(역할 열 없음)도 열리고, 기존 계정은 일반 계정이 된다', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'old-db-')), 'studio.db');
+    const old = new DatabaseSync(file);
+    old.exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)');
+    old.prepare('INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)').run('heejae', '이희재', hashPassword('a long password!'), new Date().toISOString());
+    old.close();
+    const a = new Auth(openDb(file));
+    expect(a.researcherCount()).toBe(0);
+    expect(a.login('heejae', 'a long password!', '1.1.1.1').user.role).toBe('member');
+    a.setRole('heejae', 'researcher');
+    expect(a.researcherCount()).toBe(1);
+  });
 });
 
 describe('계정이 있을 때', () => {
@@ -107,6 +135,32 @@ describe('계정이 있을 때', () => {
     const checklist = { ingredients: true, safety: true, noFakeClaims: true, expression: true };
     const r = await (await req(`/api/projects/${pid}/reviews`, { method: 'POST', cookie: fam, body: JSON.stringify({ version: 1, reviewer: '이희재', checklist, decision: 'approved' }) })).json();
     expect(r.approval.reviewer).toBe('가족');
+    // 연구자 계정이 아직 없으면 누구나 승인할 수 있지만, 화면에 알릴 경고를 함께 준다
+    expect(r.warning).toContain('연구자 계정');
+  });
+
+  it('연구자 계정이 정해지면 연구자 계정만 승인할 수 있다 (수정 요청은 누구나)', async () => {
+    const loginAs = async (username: string, password: string) =>
+      (await req('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })).headers.get('set-cookie')!.split(';')[0]!;
+    expect(() => auth.setRole('nobody', 'researcher')).toThrow();
+    auth.setRole('heejae', 'researcher');
+    const fam = await loginAs('family', 'another long password');
+    const hee = await loginAs('heejae', 'correct horse battery');
+    expect((await (await req('/api/auth/me', { cookie: hee })).json()).user.role).toBe('researcher');
+    expect((await (await req('/api/auth/me', { cookie: fam })).json()).user.role).toBe('member');
+    const pid = (await (await req('/api/projects', { method: 'POST', cookie: fam, body: JSON.stringify({ recipe: SAMPLE_RECIPES[1] }) })).json()).id;
+    await req(`/api/projects/${pid}/script/template`, { method: 'POST', cookie: fam });
+    const checklist = { ingredients: true, safety: true, noFakeClaims: true, expression: true };
+    const review = (cookie: string, decision: string) => req(`/api/projects/${pid}/reviews`, { method: 'POST', cookie, body: JSON.stringify({ version: 1, reviewer: '이희재', checklist, decision, note: '확인' }) });
+    const denied = await review(fam, 'approved');
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).toContain('연구자 계정');
+    expect((await review(fam, 'changes_requested')).status).toBe(200);
+    const ok = await review(hee, 'approved');
+    expect(ok.status).toBe(200);
+    const body = await ok.json();
+    expect(body.approval.reviewer).toBe('이희재');
+    expect(body.warning).toBeUndefined();
   });
 
   it('영상 렌더러는 비밀 열쇠로만 미디어를 받을 수 있다 (로그인 없이)', async () => {

@@ -14,8 +14,8 @@ import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPacka
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
 import { DEFAULT_MODEL, MAX_FILES, RecipeReader, aiConfigured, monthSpentUsd, monthlyBudgetUsd, type UploadFile } from './recipeReader.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
-import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode } from './auth.ts';
-import { HttpError, type Publication, type Repo } from './repo.ts';
+import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
+import { HttpError, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -103,8 +103,15 @@ function carouselFiles(dir: string): string[] {
 }
 
 /** 올리기 전 점검 중 영상·표지에 관한 것 (설명 글 점검은 화면에서 instagramCaptionChecks로 바로 한다) */
-function reelChecks(render: { outputDir: string }): IgCheck[] {
-  const out: IgCheck[] = [{ level: 'ok', text: '이희재 연구자가 승인한 최신 대본의 영상이에요' }];
+function reelChecks(render: { outputDir: string }, approval: Review, researcherApproved: boolean): IgCheck[] {
+  // approvedRender를 거친 뒤에만 부른다: 승인된 최신 대본의 영상인 것은 확인됐다. 연구자 계정의 승인인지는 따로 본다
+  const out: IgCheck[] = [
+    researcherApproved
+      ? { level: 'ok', text: `연구자 계정(${approval.reviewer})이 승인한 최신 대본의 영상이에요` }
+      : { level: 'warn', text: `승인한 최신 대본의 영상이에요 (승인: ${approval.reviewer}). 연구자 계정이 정해지지 않아 연구자 본인의 승인인지는 확인하지 못했어요.` },
+  ];
+  const hasVideo = fs.existsSync(path.join(render.outputDir, 'video.mp4'));
+  if (!hasVideo) out.push({ level: 'error', text: '영상 파일이 없어요. 영상을 다시 만들어 주세요.' });
   try {
     const timings = JSON.parse(fs.readFileSync(path.join(render.outputDir, 'timeline.json'), 'utf8')) as SceneTiming[];
     const secs = timings.reduce((m, t) => Math.max(m, t.from + t.durationInFrames), 0) / FPS;
@@ -114,7 +121,8 @@ function reelChecks(render: { outputDir: string }): IgCheck[] {
   }
   const hasCover = fs.existsSync(path.join(render.outputDir, 'cover.png')) || fs.existsSync(path.join(render.outputDir, 'cover.jpg'));
   out.push(hasCover ? { level: 'ok', text: '표지 이미지를 함께 보내요 (프로필 3:4 안쪽에 제목)' } : { level: 'warn', text: '표지 이미지가 없어요. 인스타그램이 영상 첫 장면을 표지로 써요.' });
-  out.push({ level: 'ok', text: '1080×1920 · H.264 · 소리 48kHz (인스타그램 권장 규격)' });
+  // 파일을 직접 분석하지는 않는다: 스튜디오 렌더 설정(세로 1080×1920 화면, H.264)으로 만든 파일이 있을 때만 적는다
+  if (hasVideo) out.push({ level: 'ok', text: '1080×1920 · H.264 (스튜디오 렌더 설정으로 만든 영상)' });
   return out;
 }
 
@@ -212,9 +220,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json({ mode, allowed: local ? isDirectLocal(req) : Boolean(auth.sessionUser(readCookie(req))), user: local ? null : auth.sessionUser(readCookie(req)) });
   });
   app.post('/api/auth/setup', (req, res) => {
-    const { code, username, displayName, password } = req.body ?? {};
+    const { code, username, displayName, password, researcher } = req.body ?? {};
     const { token, user } = auth.setupFirstUser(
-      { code: String(code ?? ''), username: String(username ?? ''), displayName: String(displayName ?? ''), password: String(password ?? '') },
+      { code: String(code ?? ''), username: String(username ?? ''), displayName: String(displayName ?? ''), password: String(password ?? ''), researcher: researcher === true },
       clientIp(req),
     );
     res.setHeader('Set-Cookie', sessionCookie(req, token));
@@ -489,8 +497,16 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const body = req.body ?? {};
     // 로그인한 경우 검수자는 로그인한 사람 (다른 사람 이름으로 승인하지 못하게)
     const reviewer = res.locals.user ? String(res.locals.user.displayName) : String(body.reviewer ?? '');
-    // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
+    const notes = [String(body.note ?? '').trim()];
+    let warning: string | undefined;
     if (String(body.decision) === 'approved') {
+      // 연구자 계정이 정해져 있으면 연구자 계정만 승인한다. 아직 없으면 예전처럼 받되 화면에 알린다
+      if (auth.researcherCount() > 0) {
+        if ((res.locals.user as User | undefined)?.role !== 'researcher') throw new HttpError(403, '승인은 연구자 계정만 할 수 있어요. 연구자 계정으로 로그인해 주세요.');
+      } else {
+        warning = '연구자 계정이 아직 정해지지 않아 누구나 승인할 수 있어요. 연구자 계정을 정해 주세요 (npm run user:add -- 아이디 --researcher).';
+      }
+      // 이 대본으로 만든 최신 영상이 자동 검사에서 오류(대사 잘림·목소리 없음·검은 화면 등)를 냈으면, 확인 없이 승인하지 않는다
       const render = repo
         .getProject(pid)
         .renders.filter((r) => r.status === 'done' && r.scriptVersion === Number(body.version))
@@ -499,9 +515,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       if (errs.length && body.acceptQa !== true) {
         throw new HttpError(409, `영상 자동 검사에서 고쳐야 할 문제가 ${errs.length}건 있어요: ${errs[0]!.message} 영상을 다시 만들거나, 직접 보고 괜찮다면 확인 후 승인할 수 있어요.`);
       }
+      // 검사 오류를 직접 보고 넘긴 승인은 검수 기록·작업 기록에 남긴다
+      if (errs.length) notes.push(`자동 검사 오류 ${errs.length}건을 직접 확인하고 승인 (${errs.map((e) => e.message).join(' / ').slice(0, 300)})`);
     }
-    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: body.note });
-    res.json(repo.getProject(pid));
+    repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: notes.filter(Boolean).join(' — ') });
+    res.json({ ...repo.getProject(pid), ...(warning ? { warning } : {}) });
   });
 
   api.post('/projects/:id/voice', async (req, res) => {
@@ -734,8 +752,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json(job);
   });
   api.get('/renders/:id/instagram', (req, res) => {
-    const { render } = approvedRender(repo, id(req));
-    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render), cards: carouselFiles(render.outputDir).length });
+    const { render, approval } = approvedRender(repo, id(req));
+    const researcherApproved = auth.researcherCount() > 0 && auth.isResearcherName(approval.reviewer);
+    res.json({ caption: instagramText(repo, render.id), job: activeIgJob(render.projectId), checks: reelChecks(render, approval, researcherApproved), cards: carouselFiles(render.outputDir).length });
   });
   /**
    * 실제 게시. 연구자가 승인한 최신 대본의 영상만, 화면에서 '올리기'를 다시 확인했을 때만.
