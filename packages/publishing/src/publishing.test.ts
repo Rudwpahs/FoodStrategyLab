@@ -25,6 +25,13 @@ describe('블로그 원고', () => {
     expect(md).not.toContain('30초 실험실, 오늘의 질문은');
   });
 
+  it('검토 문구는 승인된 글에만, 연구소 연구자 이름으로 쓴다 (승인한 사람 이름에 연구자 직함을 붙이지 않는다)', () => {
+    const md = buildBlogPost({ recipe, review: { reviewer: '김민준', reviewedAt: review.reviewedAt } }).markdown;
+    expect(md).not.toContain('조리기능장 김민준');
+    expect(md).not.toContain('김민준가');
+    expect(md).toContain('조리기능장 이희재가 검토했습니다');
+  });
+
   it('검수 전이면 게시 금지 문구를 넣는다', () => {
     const post = buildBlogPost({ recipe, review: null });
     expect(post.markdown).toContain('검수 전 초안');

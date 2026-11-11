@@ -35,13 +35,21 @@ export function compactLength(text: string): number {
  * 예: "호두를 데친 뒤 헹구면 떫은맛이 줄어듭니다" → { cause: '호두를 데친 뒤 헹구면', effect: '떫은맛이 줄어듭니다' }
  */
 export function causeEffect(sentence: string): { cause: string; effect: string } | null {
-  const m = sentence.trim().match(/^(.+?[가-힣])면(?!서)\s+(.+)$/);
-  if (!m) return null;
-  const cause = `${m[1]!}면`;
-  const effect = m[2]!.replace(/[.!?。]+$/, '').trim();
-  if (compactLength(cause) < 4 || compactLength(effect) < 3) return null;
-  return { cause, effect };
+  const t = sentence.trim();
+  // '면'으로 끝나는 낱말마다 시도하되, 면 요리 이름(칼국수면·짜장면·냉면)은 원인 절의 끝이 아니다
+  for (const m of t.matchAll(/(\S*[가-힣])면(?!서)\s+/g)) {
+    if (NOODLE.test(`${m[1]!}면`)) continue;
+    const end = (m.index ?? 0) + m[1]!.length + 1;
+    const cause = t.slice(0, end);
+    const effect = t.slice(end).replace(/[.!?。]+$/, '').trim();
+    if (compactLength(cause) < 4 || compactLength(effect) < 3) continue;
+    return { cause, effect };
+  }
+  return null;
 }
+
+/** 면 요리·면 이름 (원인 절의 '~하면'과 구별) */
+const NOODLE = /^(?:\S*(?:국수|짜장|짬뽕|볶음|비빔|우동|메밀|파스타|중화|쌀)면|[냉쫄소당라생건]면)$/;
 
 /** 원본 문장 속 식감·맛 표현 → 꾸미는 말 */
 const SENSORY: { stem: string; modifier: string; kind: 'texture' | 'taste' }[] = [
@@ -87,6 +95,7 @@ const JONG_D = 7; // ㄷ
 const JONG_L = 8; // ㄹ
 const JONG_B = 17; // ㅂ
 const JONG_S = 19; // ㅅ
+const JONG_SS = 20; // ㅆ
 const JONG_H = 27; // ㅎ
 const CHO_IEUNG = 11; // ㅇ
 
@@ -110,8 +119,14 @@ const withLast = (stem: string, f: (s: Syl) => Syl) => stem.slice(0, -1) + join(
 /** 밝은 모음(ㅏ·ㅗ)이면 '아', 아니면 '어' */
 const bright = (jung: number) => jung === JUNG_A || jung === JUNG_O || jung === 2 /* ㅑ */ || jung === JUNG_WA;
 
-/** ㄹ이 빠진 줄기 되살리기: 만드(ㅂ니다/ㄴ다) → 만들, 줄어드 → 줄어들 */
-const L_DROPPED = new Set(['드', '느', '머']);
+/**
+ * ㄹ이 빠진 줄기 (만듭니다/만든다 → 만들). ㄴ다·ㅂ니다 앞에서는 ㄹ이 빠지므로 원형을 되살린다.
+ * - L_DROPPED: 받침 없는 원형이 없어 ㄹ 동사로만 읽히는 것 (썬다 → 썰다, 민다 → 밀다, 분다 → 불다, 연다 → 열다 …)
+ * - L_AMBIGUOUS: 두 가지로 읽히는 것 (간다 = 가다/갈다, 푼다 = 푸다/풀다, 깐다 = 까다/깔다, ~ㄹ 겁니다).
+ *   이때 해요체는 틀릴 수 있으니, 두 뜻 모두 맞는 합니다체(갑니다·풉니다)로 둔다.
+ */
+const L_DROPPED = new Set(['드', '느', '머', '써', '미', '부', '터', '여', '너', '조']);
+const L_AMBIGUOUS = new Set(['가', '까', '푸', '다', '사', '마', '아', '나', '파', '노', '도', '우', '어', '비', '거']);
 const restoreL = (stem: string) => (L_DROPPED.has(stem.slice(-1)) ? withLast(stem, (s) => ({ ...s, jong: JONG_L })) : stem);
 
 // 불규칙 활용: 목록에 있는 것만 바꾸고, 나머지 받침 ㅂ·ㄷ·ㅅ은 규칙 활용으로 본다
@@ -167,7 +182,8 @@ function haeyo(stem: string): string | null {
         return null;
     }
   }
-  const tail = bright(s.jung) ? '아요' : '어요';
+  // 과거형(녹았·좋았·끓었)은 늘 '어요': 녹았어요
+  const tail = s.jong === JONG_SS ? '어요' : bright(s.jung) ? '아요' : '어요';
   if (s.jong === JONG_B) {
     // 굽다는 요리에서 거의 '불에 굽다'(구워요)라서 불규칙으로 본다
     if (B_REGULAR.has(last)) return `${stem}${tail}`;
@@ -191,41 +207,66 @@ function hamnida(stem: string): string {
   return `${stem}습니다`;
 }
 
-/** 문장 끝의 글말 어미를 떼어 줄기를 찾는다. 못 찾으면 null */
-function stemOf(body: string): string | null {
-  if (body.endsWith('습니다')) return body.slice(0, -3);
+/** 끝이 '~다'일 때 명사+이다로 볼 수 있는 모음 (온도다·육수다): 이 모음으로 끝나는 형용사는 거의 없다 */
+const NOUN_VOWELS = new Set([JUNG_O, JUNG_U, 12 /* ㅛ */, 17 /* ㅠ */]);
+/** 'ㅣ·ㅡ'로 끝나는 형용사 (느리다·아프다). 목록에 없는 두 글자 이상 낱말은 명사로 본다 (커피다 → 커피예요, 포인트다 → 포인트예요) */
+const ADJ_I_EU = new Set(['느리', '흐리', '여리', '어리', '아프', '고프', '기쁘', '예쁘', '슬프', '바쁘', '나쁘']);
+
+type Stem = { kind: 'stem'; stem: string } | { kind: 'ambiguous'; stem: string } | { kind: 'noun'; noun: string };
+
+/**
+ * 문장 끝의 글말 어미를 떼어 줄기를 찾는다. 못 찾으면 null.
+ * ambiguous: ㄹ이 빠졌는지 알 수 없는 줄기 (해요체 대신 합니다체로 둔다)
+ * noun: 명사+다 (온도다)
+ */
+function stemOf(body: string): Stem | null {
+  const verb = (stem: string): Stem => (L_AMBIGUOUS.has(stem.slice(-1)) ? { kind: 'ambiguous', stem } : { kind: 'stem', stem: restoreL(stem) });
+  if (body.endsWith('습니다')) return { kind: 'stem', stem: body.slice(0, -3) };
   if (body.endsWith('니다')) {
     const syl = body.slice(-3, -2);
-    if (isHangul(syl) && split(syl).jong === JONG_B) return restoreL(body.slice(0, -3) + join({ ...split(syl), jong: 0 }));
+    if (isHangul(syl) && split(syl).jong === JONG_B) return verb(body.slice(0, -3) + join({ ...split(syl), jong: 0 }));
     return null;
   }
-  if (body.endsWith('는다')) return body.slice(0, -2);
+  if (body.endsWith('는다')) return { kind: 'stem', stem: body.slice(0, -2) };
   if (body.endsWith('다')) {
     const syl = body.slice(-2, -1);
     if (!isHangul(syl)) return null;
     const s = split(syl);
     // ~ㄴ다: 된다 → 되, 만든다 → 만들 (형용사 '~다'는 그대로 줄기)
-    if (s.jong === JONG_N) return restoreL(body.slice(0, -2) + join({ ...s, jong: 0 }));
-    return body.slice(0, -1);
+    if (s.jong === JONG_N) return verb(body.slice(0, -2) + join({ ...s, jong: 0 }));
+    const stem = body.slice(0, -1);
+    const word = stem.split(/\s+/).at(-1) ?? '';
+    if (s.jong === 0 && word.length >= 2 && s.cho !== CHO_IEUNG) {
+      if (NOUN_VOWELS.has(s.jung)) return { kind: 'noun', noun: stem };
+      if ((s.jung === JUNG_I || (s.jung === JUNG_EU && syl !== '르')) && !ADJ_I_EU.has(word.slice(-2))) return { kind: 'noun', noun: stem };
+    }
+    return { kind: 'stem', stem };
   }
   return null;
+}
+
+/** 문장을 몸통과 끝 문장부호로 나눈다 */
+function parts(sentence: string): { t: string; body: string; punct: string } {
+  const t = sentence.trim();
+  const m = t.match(/^([\s\S]*?)([.!?。]*)$/);
+  return { t, body: (m?.[1] ?? t).trim(), punct: (m?.[2] ?? '').replace('。', '.') };
 }
 
 /**
  * 원본의 글말 문장을 맛조수가 말하는 문장으로: 끝맺음만 바꾸고 내용은 그대로 둔다.
  * "청국장의 짠맛이 희석된다" → "청국장의 짠맛이 희석돼요."
  * "떫은맛이 줄어듭니다." → "떫은맛이 줄어들어요."
- * 이미 말투(~요)거나 끝맺음이 없는 문장(명사로 끝남 등)은 그대로 둔다.
+ * 이미 말투(~요)거나 끝맺음이 없는 문장(명사로 끝남 등)은 그대로 둔다. 확실하지 않으면 합니다체로 둔다.
  */
 export function spoken(sentence: string): string {
-  const t = sentence.trim();
-  const m = t.match(/^([\s\S]*?)([.!?。]*)$/);
-  const body = (m?.[1] ?? t).trim();
-  const punct = (m?.[2] ?? '').replace('。', '.');
+  const { t, body, punct } = parts(sentence);
   if (!body || body.endsWith('요')) return t;
-  const stem = stemOf(body);
-  if (!stem || stem.length === 0) return t;
-  const out = haeyo(stem) ?? hamnida(stem);
+  if (/아니다$|아닙니다$/.test(body)) return `${body.replace(/아니다$|아닙니다$/, '아니에요')}${punct || '.'}`;
+  const st = stemOf(body);
+  if (!st) return t;
+  if (st.kind === 'noun') return `${st.noun}예요${punct || '.'}`;
+  if (!st.stem) return t;
+  const out = st.kind === 'ambiguous' ? hamnida(st.stem) : (haeyo(st.stem) ?? hamnida(st.stem));
   return `${out}${punct || '.'}`;
 }
 
@@ -235,15 +276,14 @@ export function spoken(sentence: string): string {
  * "청국장의 짠맛이 희석된다" → "청국장의 짠맛이 희석됩니다."
  */
 export function formal(sentence: string): string {
-  const t = sentence.trim();
-  const m = t.match(/^([\s\S]*?)([.!?。]*)$/);
-  const body = (m?.[1] ?? t).trim();
-  const punct = (m?.[2] ?? '').replace('。', '.');
+  const { t, body, punct } = parts(sentence);
   if (!body) return t;
+  if (body.endsWith('아니다')) return `${body.slice(0, -3)}아닙니다${punct || '.'}`;
   if (body.endsWith('니다') || body.endsWith('요')) return `${body}${punct || '.'}`;
   if (!body.endsWith('다')) return t;
-  const stem = stemOf(body);
-  return stem ? `${hamnida(stem)}${punct || '.'}` : t;
+  const st = stemOf(body);
+  if (!st) return t;
+  return `${st.kind === 'noun' ? `${st.noun}입니다` : hamnida(st.stem)}${punct || '.'}`;
 }
 
 /** 문단 안의 문장마다 formal()을 적용한다 */

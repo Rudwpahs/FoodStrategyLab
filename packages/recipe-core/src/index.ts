@@ -13,3 +13,5 @@ export * from './hooks.ts';
 export * from './styles.ts';
 export * from './candidates.ts';
 export * from './instagramChecks.ts';
+export * from './text.ts';
+export * from './wordLists.ts';

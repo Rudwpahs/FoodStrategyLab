@@ -1,4 +1,4 @@
-import { extractQuantities } from '@mat-lab/recipe-core';
+import { CLICHE_PATTERNS, changeRate, extractQuantities } from '@mat-lab/recipe-core';
 import { findAiTells } from '../aiTells.ts';
 import { markdownToHtml } from '../blog.ts';
 
@@ -13,24 +13,8 @@ import { markdownToHtml } from '../blog.ts';
 export const CHANGE_RATE_WARN = 0.3;
 export const CHANGE_RATE_ABORT = 0.5;
 
-/**
- * 문자 단위 변경률 (0 = 같음, 1 = 전부 바뀜).
- * 원본은 Python difflib.SequenceMatcher의 1 - ratio를 쓴다. 여기서는 최장 공통 부분열(LCS)로 2·M/(a+b)를 계산한다 (거의 같은 값).
- */
-export function changeRate(before: string, after: string): number {
-  const a = [...before];
-  const b = [...after];
-  if (!a.length && !b.length) return 0;
-  if (!a.length || !b.length) return 1;
-  let prev = new Uint16Array(b.length + 1);
-  let cur = new Uint16Array(b.length + 1);
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1]! + 1 : Math.max(prev[j]!, cur[j - 1]!);
-    [prev, cur] = [cur, prev];
-  }
-  const lcs = prev[b.length]!;
-  return 1 - (2 * lcs) / (a.length + b.length);
-}
+/** 문자 단위 변경률 (0 = 같음, 1 = 전부 바뀜). recipe-core의 공용 함수를 그대로 쓴다 */
+export { changeRate };
 
 /** 여러 문장의 변경률을 길이로 가중해 합친다 */
 export function totalChangeRate(pairs: { before: string; after: string }[]): number {
@@ -44,22 +28,8 @@ const numbers = (t: string) => (t.match(NUM_TOKEN) ?? []).sort();
 const quantities = (t: string) => extractQuantities(t).map((q) => q.normalized).sort();
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** 윤문이 새로 넣으면 안 되는 상투구 (checks.py CLICHE_PATTERNS + 블로그 문체 점검 목록). 원문에 있던 만큼은 괜찮다 */
-const CLICHES: RegExp[] = [
-  /기록적인\s*성과/g,
-  /괄목할\s*만한/g,
-  /로\s*평가(?:된다|받|되)/g,
-  /주목받/g,
-  /크게\s*기여/g,
-  /중요한\s*역할을\s*(?:한다|했다|할)/g,
-  /시사하는\s*바가\s*크/g,
-  /의미가\s*크다/g,
-  /알아보겠습니다/g,
-  /황금\s*레시피/g,
-  /실패\s*없는/g,
-  /도움이\s*되셨길/g,
-  /소개해\s*드릴게요/g,
-];
+/** 윤문이 새로 넣으면 안 되는 상투구 (recipe-core 공용 목록). 원문에 있던 만큼은 괜찮다 */
+const CLICHES = CLICHE_PATTERNS.map((re) => new RegExp(re.source, 'g'));
 const count = (re: RegExp, t: string) => (t.match(re) ?? []).length;
 /** 직접 인용 (큰따옴표·겹낫표) */
 const QUOTE = /["“]([^"”\n]{2,})["”]|「([^」\n]{2,})」/g;
@@ -68,11 +38,24 @@ const quotes = (t: string) => [...t.matchAll(QUOTE)].map((m) => (m[1] ?? m[2] ??
 const endsColloquial = (t: string) => /요[.!?…~]*["”']?$/.test(t.trim());
 const endsFormal = (t: string) => /니다[.!?…]*["”']?$/.test(t.trim());
 
+// ── 뜻이 뒤집히는 윤문: 아라비아 숫자가 아닌 조리 정보 ──
+/** 부정 표지 (않·안·못·없·마세요·금지·아니): 개수가 달라지면 "넣지 않는다"가 "넣는다"로 바뀐 것일 수 있다 */
+const NEGATION = /않|(?<![가-힣])안(?=\s)|(?<![가-힣])못(?=\s|하)|없|마세요|말고|말아|맙시다|금지|아니|아닌|아닙|아님/g;
+/** 불 세기: 센 불 → 강, 중불 → 중, 약한 불 → 약 */
+const HEAT = /(센|강한|강|중간|중약|약중|중강|중|약한|약|은근한)\s*불(?=$|[^가-힣]|[에로을이은도])|(?<![가-힣])(강|중|약)(?=으로|에서)|(세게|강하게|약하게|은근하게)/g;
+const HEAT_LEVEL: Record<string, string> = { 센: '강', 강한: '강', 강: '강', 세게: '강', 강하게: '강', 중간: '중', 중: '중', 중약: '중약', 약중: '중약', 중강: '중강', 약한: '약', 약: '약', 은근한: '약', 약하게: '약', 은근하게: '약' };
+const heats = (t: string) => [...t.matchAll(HEAT)].map((m) => HEAT_LEVEL[m[1] ?? m[2] ?? m[3] ?? '']!).sort();
+/** 한글 수사 + 세는 말 (두 번, 세 가지, 한 차례). 단위가 붙은 분량(두 큰술)은 extractQuantities가 본다 */
+const COUNT = /(?<![가-힣])(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|두세|서너|여러)\s?(번째|번|가지|차례|군데|바퀴|겹)(?=$|[^가-힣]|[은는이가을를도만에씩의])/g;
+const counts = (t: string) => [...t.matchAll(COUNT)].map((m) => `${m[1]}${m[2]}`).sort();
+
 export interface GateOptions {
   /** 원문에 있으면 윤문에도 그대로 있어야 하는 말 (요리 이름, 연구자 이름 등) */
   keep?: string[];
   /** 대사처럼 길이가 시간이 되는 글: 원문보다 30% 넘게 길어지면 실패 */
   spoken?: boolean;
+  /** 재료 이름: 원문에 있던 재료가 윤문에서 빠지면 실패 */
+  ingredients?: string[];
 }
 
 /**
@@ -88,6 +71,10 @@ export function rewriteProblems(before: string, after: string, opts: GateOptions
   else if (!sameList(quantities(b), quantities(a))) out.push('분량·온도·시간 표기가 바뀌었어요 (number_injected)');
   for (const q of quotes(b)) if (!a.includes(q)) out.push(`인용 "${q.slice(0, 20)}"이(가) 바뀌었어요 (quote_altered)`);
   for (const k of opts.keep ?? []) if (k && b.includes(k) && !a.includes(k)) out.push(`"${k}"이(가) 빠졌어요`);
+  for (const k of opts.ingredients ?? []) if (k && b.includes(k) && !a.includes(k)) out.push(`재료 "${k}"이(가) 빠졌어요 (ingredient_dropped)`);
+  if (count(NEGATION, a) !== count(NEGATION, b)) out.push('부정 표현(않·못·없·마세요)이 생기거나 빠졌어요 (negation_flipped)');
+  if (!sameList(heats(b), heats(a))) out.push('불 세기(센 불·중불·약불)가 바뀌었어요 (heat_changed)');
+  if (!sameList(counts(b), counts(a))) out.push('횟수·가짓수(두 번, 세 가지)가 바뀌었어요 (count_changed)');
   if (count(/하였/g, a) > count(/하였/g, b)) out.push('"하였"으로 격식을 올렸어요 (hayeot_injection)');
   for (const re of CLICHES) if (count(re, a) > count(re, b)) out.push(`상투구를 새로 넣었어요 (cliche_injection: ${re.source.replace(/\\s\*/g, ' ')})`);
   if (endsColloquial(b) && !endsColloquial(a)) out.push('말투(~요)가 바뀌었어요 (colloquial_erased)');

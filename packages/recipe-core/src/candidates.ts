@@ -1,13 +1,13 @@
-import { BRAND } from './brand.ts';
-import { causeEffect, findSensory, spoken } from './korean.ts';
+import { AI_DISCLOSURE, BRAND } from './brand.ts';
+import { causeEffect, findSensory, josa, spoken } from './korean.ts';
 import { formatIngredient, splitSentences } from './format.ts';
 import { plainDishName, suggestHooks, type HookCandidate, type HookType, type RecentFormat } from './hooks.ts';
 import { STYLE_IDS, STYLE_INFO, buildStyledScript, type StyleId } from './styles.ts';
 import { estimateScriptSeconds } from './generator/template.ts';
-import { VISUAL_LABELS, type Category, type RecipeInput, type Script, type Visual } from './types.ts';
+import { FORMAT_LABELS, VISUAL_LABELS, type Category, type RecipeInput, type Script, type Visual } from './types.ts';
 
 /**
- * 콘텐츠 후보 3가지: 연출 유형·훅 유형·첫 화면이 모두 서로 다르다.
+ * 콘텐츠 후보 (기본 3개, count로 정한다): 연출 유형·훅 유형·첫 화면이 서로 다르다.
  * 비용 0원 규칙 엔진. (유료 AI 후보는 승인 후 같은 자리에 붙인다)
  */
 export interface ContentCandidate {
@@ -51,19 +51,23 @@ export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): R
   const hasCause = principle.some((s) => causeEffect(s));
   const sensory = findSensory([recipe.topic, recipe.principle, ...recipe.tips].join(' '));
   const out = {} as Record<StyleId, { score: number; reason: string; ready: boolean }>;
-  const base: Record<StyleId, [number, string]> = {
-    problem: recipe.commonMistake ? [2, '연구자가 입력한 흔한 실수가 있어요'] : [0.4, '흔한 실수가 입력되지 않았어요'],
-    comedy: [1.5, '맛조수 캐릭터를 보여 주기 좋아요'],
-    experiment: hasCause ? [1.5, '"~하면 ~한다" 원리를 비교로 보여 줄 수 있어요'] : [0.4, '비교할 원리 문장이 없어요'],
-    'before-after': [1.2, '완성 모습을 먼저 보여 줄 수 있어요'],
-    sensory: sensory.length ? [1, `원본에 "${sensory[0]!.stem}" 같은 식감 표현이 있어요`] : [0.2, '식감 표현이 없어요'],
-    story: recipe.story ? [2, '연구자가 입력한 음식 이야기가 있어요'] : [0.2, '음식 이야기가 입력되지 않았어요'],
+  // [점수, 이유, 준비됨]: 꼭 필요한 자료(실수·이야기·식감 표현·원리 문장)가 없으면 후보로 내지 않는다 (제목이 없는 내용을 약속하지 않게)
+  const base: Record<StyleId, [number, string, boolean]> = {
+    problem: recipe.commonMistake ? [2, '연구자가 입력한 흔한 실수가 있어요', true] : [0.4, '흔한 실수가 입력되지 않았어요', false],
+    comedy: [1.5, '맛조수 캐릭터를 보여 주기 좋아요', true],
+    experiment: hasCause ? [1.5, '"~하면 ~한다" 원리를 비교로 보여 줄 수 있어요', true] : [0.4, '비교할 원리 문장이 없어요', false],
+    'before-after': [1.2, '완성 모습을 먼저 보여 줄 수 있어요', true],
+    sensory: sensory.length ? [1, `원본에 "${sensory[0]!.stem}" 같은 식감 표현이 있어요`, true] : [0.2, '식감 표현이 없어요', false],
+    story: recipe.story ? [2, '연구자가 입력한 음식 이야기가 있어요', true] : [0.2, '음식 이야기가 입력되지 않았어요', false],
   };
   for (const id of STYLE_IDS) {
-    let [score, reason] = base[id];
-    // 꼭 필요한 자료(실수·이야기·식감 표현·원리 문장)가 없으면 후보로 내지 않는다 (제목이 없는 내용을 약속하지 않게)
-    const ready = base[id][0] >= 0.5;
+    let [score, reason, ready] = base[id];
     score += CATEGORY_STYLE[recipe.category][id] ?? 0;
+    // 레시피 입력 화면에서 고른 영상 포맷 (캐릭터 코미디형이면 코미디 연출을 앞에)
+    if (id === 'comedy' && recipe.format === 'comedy') {
+      score += 1;
+      reason += ` · 고른 영상 포맷(${FORMAT_LABELS.comedy})이에요`;
+    }
     const repeats = recent.slice(0, 3).filter((r) => r.style === id).length;
     if (repeats >= 2) {
       score -= 1;
@@ -165,7 +169,7 @@ export function contentCandidates(recipe: RecipeInput, opts: CandidateOptions = 
           firstScreen: hook.firstScreen,
           keyScenes: keyScenes(script),
           estimatedSeconds: Math.round(estimateScriptSeconds(script)),
-          reason: [...new Set(`${scores[style].reason} · ${hook.reason}`.replace('연구자가 입력한 실제 실수가 있어요', '연구자가 입력한 흔한 실수가 있어요').split(' · '))].join(' · '),
+          reason: [...new Set(`${scores[style].reason} · ${hook.reason}`.split(' · '))].join(' · '),
           needsReview: built.notes,
           script,
         });
@@ -221,11 +225,13 @@ export function instagramCaption(recipe: RecipeInput, script: Script | null, rev
   }
   const stepLines = recipe.steps.map((s, i) => `${i + 1}. ${s}`);
   const credit = [
-    reviewed ? `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 레시피예요.` : `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}의 레시피예요. (검수 전 초안)`,
-    `진행: ${BRAND.character} (AI 캐릭터 · AI 합성 음성)`,
+    reviewed ? `레시피: ${josa(`${BRAND.researcherTitle} ${BRAND.researcher}`, '이/가')} 검토한 레시피예요.` : `레시피: ${BRAND.researcherTitle} ${BRAND.researcher}의 레시피예요. (검수 전 초안)`,
+    `진행: ${BRAND.character} · ${AI_DISCLOSURE}`,
   ];
   const hashtags = instagramTags(recipe, tags).map((t) => `#${t}`).join(' ');
 
+  // 꼬리(역할·AI 표시·검수 상태·해시태그)는 어떤 경우에도 남긴다
+  const tail = ['', ...credit, '', hashtags].join('\n');
   const build = (withSteps: boolean, withIngredients: boolean) =>
     [
       hookLine,
@@ -241,17 +247,14 @@ export function instagramCaption(recipe: RecipeInput, script: Script | null, rev
       '📌 저장해 두면 만들 때 바로 꺼내 볼 수 있어요.',
       `📤 ${plainDishName(dish)} 좋아하는 사람에게 보내 주세요.`,
       '💬 다음에 실험해 볼 요리를 댓글로 알려 주세요!',
-      '',
-      ...credit,
-      '',
-      hashtags,
     ]
       .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
       .join('\n')
       .trim();
   for (const [steps, ingredients] of [[true, true], [false, true], [false, false]] as const) {
-    const text = build(steps, ingredients);
+    const text = `${build(steps, ingredients)}\n${tail}`.trim();
     if (text.length <= IG_MAX_CAPTION) return text;
   }
-  return build(false, false).slice(0, IG_MAX_CAPTION);
+  // 그래도 길면 앞부분(원리·팁)을 줄이고 꼬리는 그대로 둔다
+  return `${build(false, false).slice(0, IG_MAX_CAPTION - tail.length - 2).trimEnd()}…\n${tail}`.trim();
 }

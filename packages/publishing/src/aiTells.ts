@@ -30,6 +30,8 @@ interface Rule {
   min?: number;
   /** 문단 하나 안에서 센다 */
   perParagraph?: boolean;
+  /** 목록 줄("- ", "1. ")은 세지 않는다 */
+  skipListLines?: boolean;
   label: string;
   fix: string;
 }
@@ -51,7 +53,8 @@ const RULES: Rule[] = [
   { rule: 'C-5', severity: 'S1', pattern: /\p{Extended_Pictographic}/gu, min: 4, label: '이모지 많음', fix: '꼭 필요한 곳만 남겨 주세요.' },
   { rule: 'C-8', severity: 'S1', pattern: /(?:[가이] 아니라|것이 아니라|것은 아니다|것은 아닙니다|인가, )/g, min: 2, label: '"A가 아니라 B" 대구 반복', fix: '한 번만 살리고 나머지는 그냥 평서문으로 써 주세요.' },
   { rule: 'C-9', severity: 'S2', pattern: /(?:^|\s)\d\)\s/gm, min: 3, label: '"1) 2) 3)" 번호 나열', fix: '본문에 녹이거나 "우선~, 다음으로~"로 바꿔 보세요.' },
-  { rule: 'C-11', severity: 'S1', pattern: /[가-힣](?:고|며|지만|면서|아서|어서),/g, min: 4, label: '연결어미 뒤 쉼표 ("~하고,")', fix: '연결어미 바로 뒤 쉼표를 지워 주세요.' },
+  // 참고·창고·최고·광고 같은 명사는 연결어미가 아니고, 재료·순서 목록 줄은 문장이 아니다
+  { rule: 'C-11', severity: 'S1', pattern: /(?:(?![참창최광원경])[가-힣]고|[가-힣](?:며|지만|면서|아서|어서)),/g, min: 4, skipListLines: true, label: '연결어미 뒤 쉼표 ("~하고,")', fix: '연결어미 바로 뒤 쉼표를 지워 주세요.' },
   // D. AI 관용구
   { rule: 'D-1', severity: 'S1', pattern: /(?:결론적으로|요약하면|종합하면|정리하자면|따라서|이를 통해|그러므로)/g, min: 4, label: '정리하는 말 ("결론적으로/따라서/이를 통해") 많음', fix: '1~2개만 남기고 지워 주세요.' },
   { rule: 'D-1', severity: 'S1', pattern: /라고 (?:할|볼) 수 있(?:다|습니다|어요)/g, label: '"~라고 할 수 있다"', fix: '"~다"로 바로 말해 주세요.' },
@@ -106,7 +109,7 @@ export function findAiTells(text: string, protectedTexts: string[] = []): AiTell
       if (worst.length >= min) out.push({ rule: r.rule, severity: r.severity, found: `${r.label} (한 문단 ${worst.length}번)`, fix: r.fix });
       continue;
     }
-    const hits = count(r.pattern, body);
+    const hits = count(r.pattern, r.skipListLines ? body.split('\n').filter((l) => !/^\s*(?:- |\d+\. )/.test(l)).join('\n') : body);
     if (hits.length >= min) {
       const sample = [...new Set(hits)].slice(0, 2).map((h) => `"${h}"`).join(', ');
       out.push({ rule: r.rule, severity: r.severity, found: `${r.label} — ${sample}${hits.length > 1 ? ` 등 ${hits.length}번` : ''}`, fix: r.fix });

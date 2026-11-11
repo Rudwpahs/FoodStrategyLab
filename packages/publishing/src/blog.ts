@@ -1,4 +1,4 @@
-import { BRAND, CATEGORY_LABELS, formalParagraph, formatIngredient, type RecipeInput } from '@mat-lab/recipe-core';
+import { BRAND, CATEGORY_LABELS, formalParagraph, formatIngredient, josa, type RecipeInput } from '@mat-lab/recipe-core';
 
 export interface ReviewInfo {
   reviewer: string;
@@ -26,7 +26,11 @@ export function kstDate(iso: string): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
-const AI_NOTICE = '캐릭터 애니메이션과 일부 문장은 AI 도구로 만들었습니다.';
+/** 블로그 꼬리말의 AI 고지 (블로그 두 종류가 같이 쓴다) */
+export const BLOG_AI_NOTICE = '캐릭터 애니메이션과 일부 문장은 AI 도구로 만들었습니다.';
+
+/** 검토한 사람: 승인한 계정 이름이 아니라 연구소 연구자 (원칙 3: 검토 문구는 승인된 결과물에만) */
+export const REVIEWER_CREDIT = `${BRAND.researcherTitle} ${BRAND.researcher}`;
 
 /**
  * 네이버 블로그 원고. 재료·분량·순서는 원본 데이터를 그대로 쓴다 (AI 문장 사용 안 함).
@@ -35,9 +39,9 @@ const AI_NOTICE = '캐릭터 애니메이션과 일부 문장은 AI 도구로 �
 export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogPost {
   const dish = recipe.dishName || recipe.topic;
   const title = `${recipe.topic} | ${BRAND.researcherTitle} ${BRAND.researcher}의 ${dish} 노하우`;
-  const tags = uniqueTags(['이희재의맛연구소', '요리팁', dish, CATEGORY_LABELS[recipe.category], '맛조수', '요리과학']);
+  const tags = uniqueTags([BRAND.labName, '요리팁', dish, CATEGORY_LABELS[recipe.category], BRAND.character, '요리과학']);
   const reviewLine = review
-    ? `이 글의 조리 정보는 ${BRAND.researcherTitle} ${review.reviewer}가 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
+    ? `이 글의 조리 정보는 ${josa(REVIEWER_CREDIT, '이/가')} 검토했습니다. (검토일 ${kstDate(review.reviewedAt)})`
     : '⚠️ 검수 전 초안입니다. 게시하지 마세요.';
 
   const md: string[] = [];
@@ -63,7 +67,7 @@ export function buildBlogPost({ recipe, review, images = {} }: BlogInput): BlogP
     md.push(`## ${BRAND.tipPhrase}`, '', ...recipe.tips.map((t) => `- ${t}`), '');
   }
   md.push(`## 영상으로 보기`, '', '[여기에 릴스·쇼츠 링크를 붙여넣으세요]', '');
-  md.push('---', '', reviewLine, AI_NOTICE, `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
+  md.push('---', '', reviewLine, BLOG_AI_NOTICE, `출처: ${recipe.source}`, '', tags.map((t) => `#${t}`).join(' '));
 
   return { title, markdown: md.join('\n'), html: markdownToHtml(md.join('\n')), tags };
 }
@@ -78,11 +82,13 @@ export function groupIngredients<T extends { group?: string }>(items: T[]): [str
   return [...groups.entries()];
 }
 
-function image(src: string | undefined, alt: string): string {
+/** 사진 자리 (이미지가 없으면 자리표시) */
+export function image(src: string | undefined, alt: string): string {
   return src ? `![${alt}](${src})` : `[사진 첨부: ${alt}]`;
 }
 
-function uniqueTags(tags: string[]): string[] {
+/** 해시태그: 띄어쓰기·가운뎃점을 빼고 겹치지 않게 */
+export function uniqueTags(tags: string[]): string[] {
   return [...new Set(tags.map((t) => t.replace(/[\s·]/g, '')).filter(Boolean))];
 }
 

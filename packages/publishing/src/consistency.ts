@@ -22,8 +22,13 @@ export function checkConsistency(input: { recipe: RecipeInput; script: Script; b
     if (!blogMarkdown.includes(line)) issues.push({ level: 'error', where: '블로그', message: `재료 "${line}"이(가) 블로그에 없어요.` });
   }
   for (const m of blogQuantityIssues(recipe, notes, blogMarkdown)) issues.push({ level: 'error', where: '블로그', message: m });
+  // 단계마다 앞 단계 뒤에서 찾는다: 블로그에서 순서를 바꾸면 잡힌다 (같은 단계가 되풀이돼도 된다)
+  let from = 0;
   recipe.steps.forEach((s, k) => {
-    if (!blogMarkdown.includes(s)) issues.push({ level: 'error', where: '블로그', message: `조리 순서 ${k + 1}번이 블로그에 없거나 바뀌었어요.` });
+    const at = blogMarkdown.indexOf(s, from);
+    if (at >= 0) from = at + s.length;
+    else if (blogMarkdown.includes(s)) issues.push({ level: 'error', where: '블로그', message: `조리 순서 ${k + 1}번의 순서가 블로그에서 바뀌었어요.` });
+    else issues.push({ level: 'error', where: '블로그', message: `조리 순서 ${k + 1}번이 블로그에 없거나 바뀌었어요.` });
   });
 
   const videoTip = script.scenes.find((s) => s.type === 'tip')?.cardItems?.[0];

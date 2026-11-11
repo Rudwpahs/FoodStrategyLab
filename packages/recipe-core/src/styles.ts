@@ -1,7 +1,9 @@
 import { BRAND } from './brand.ts';
 import { formatIngredient, splitSentences } from './format.ts';
 import { HOOK_TYPES, hookCandidate, suggestHooks, type HookCandidate, type HookType } from './hooks.ts';
+import { MAX_STEPS_ON_CARD } from './generator/template.ts';
 import { causeEffect, spoken } from './korean.ts';
+import { normalizeText } from './text.ts';
 import type { RecipeInput, Scene, Script } from './types.ts';
 
 /**
@@ -118,15 +120,13 @@ export interface StyledResult {
 }
 
 type Draft = Omit<Scene, 'id'>;
-const MAX_STEPS = 5;
 
 /** 띄어쓰기·문장부호·끝맺음 차이를 빼고, 문장 앞부분이 이미 말한 글에 들어 있는지 */
 function alreadySaid(said: string, sentence: string): boolean {
-  const squash = (t: string) => t.replace(/[\s.,!?·~…"'“”‘’]/g, '');
-  const s = squash(sentence);
+  const s = normalizeText(sentence);
   if (s.length < 4) return false;
   const key = s.slice(0, Math.max(4, Math.min(12, s.length - 2)));
-  return squash(said).includes(key);
+  return normalizeText(said).includes(key);
 }
 
 /** 연출 유형에 맞는 훅을 고른다: 지정한 훅 → 연출 선호 훅 → 전체 추천 1순위 */
@@ -172,7 +172,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
   };
   const steps = (line: (n: number, rest: number) => string): Draft | null => {
     if (!recipe.steps.length) return null;
-    const shown = recipe.steps.slice(0, MAX_STEPS);
+    const shown = recipe.steps.slice(0, MAX_STEPS_ON_CARD);
     const rest = recipe.steps.length - shown.length;
     return { type: 'steps', emotion: 'confident', line: line(shown.length, rest), cardTitle: '조리 순서', cardItems: shown };
   };

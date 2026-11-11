@@ -1,5 +1,6 @@
 import { BRAND } from '../brand.ts';
 import { formatIngredient } from '../format.ts';
+import { MAX_STEPS_ON_CARD } from './template.ts';
 import { EMOTIONS, SCENE_TYPES, ScriptSchema, type RecipeInput, type Script, CATEGORY_LABELS, FORMAT_LABELS } from '../types.ts';
 
 /**
@@ -17,6 +18,8 @@ export function buildAiPrompt(recipe: RecipeInput): string {
     핵심원리: recipe.principle,
     전문가팁: recipe.tips,
     흔한실수: recipe.commonMistake || undefined,
+    흔한오해: recipe.misconception || undefined,
+    이야기: recipe.story || undefined,
   };
 
   return `너는 숏폼 요리 채널 "${BRAND.labName}"의 대본 작가야.
@@ -26,13 +29,13 @@ export function buildAiPrompt(recipe: RecipeInput): string {
 ## 반드시 지킬 규칙
 1. 아래 원본 자료에 없는 분량·시간·온도·사실을 새로 만들지 마. 숫자는 원본 그대로 써.
 2. 가상의 설명을 "실험 결과", "연구 결과", "증명됐다"처럼 사실로 표현하지 마.
-3. 첫 장면 대사는 정확히 "${BRAND.openingLine}"로 시작해.
-4. 원리 장면은 "${BRAND.noteLead}"로 시작하고 cardTitle을 "${BRAND.notePhrase}"로 해. 연구자 이름은 대사에서 엔딩에 한 번만 말해.
+3. 연구소 이름("${BRAND.labName}")은 대사에서 한 번만, 마지막 장면에서 말해. 마지막 장면 대사는 "${BRAND.signOff}"로 끝내. 중간에 연구자를 부를 때는 "${BRAND.callName}"이라고 해.
+4. 원리 장면은 "${BRAND.noteLead}"로 시작하고 cardTitle을 "${BRAND.notePhrase}"로 해.
 5. 팁 장면은 "${BRAND.tipLead}"로 시작하고 cardTitle을 "${BRAND.tipPhrase}"로 해.
-9. 대사는 소리 내어 읽는 말이야. "~한다", "~합니다" 대신 "~해요"로 끝내고, 원본 문장은 끝맺음만 말투로 바꿔. 화면 카드(cardItems)에는 원본 문장을 그대로 써.
-6. 전체 대사는 공백 제외 220자 안팎(약 30초). 한 장면 대사는 한두 문장.
-7. 캐릭터는 시청자 대신 질문하는 역할이야. 반말 대신 친근한 존댓말을 써.
-8. 포맷이 "캐릭터 코미디형"이면 캐릭터가 흔한 실수를 하는 장면(type "mistake")을 넣어.
+6. 대사는 소리 내어 읽는 말이야. "~한다", "~합니다" 대신 "~해요"로 끝내고, 원본 문장은 끝맺음만 말투로 바꿔. 화면 카드(cardItems)에는 원본 문장을 그대로 써.
+7. 전체 대사는 공백 제외 220자 안팎(약 30초). 한 장면 대사는 한두 문장.
+8. 캐릭터는 시청자 대신 질문하는 역할이야. 반말 대신 친근한 존댓말을 써.
+9. 포맷이 "캐릭터 코미디형"이면 캐릭터가 흔한 실수를 하는 장면(type "mistake")을 넣어. 흔한 실수·오해·이야기는 원본 자료에 있을 때만 써.
 
 ## 출력 형식
 설명 없이 JSON만 출력해.
@@ -83,11 +86,22 @@ export function parseAiScript(text: string, recipe: RecipeInput): ParseResult {
   return enforceSourceData(recipe, parsed.data);
 }
 
-/** 재료 카드는 항상 원본 재료 목록으로 고정한다 (AI가 분량을 바꾸는 것을 막는다). */
+/**
+ * 재료 카드는 원본 재료 목록으로, 조리 순서 카드는 원본 단계 문장으로 고정한다 (AI가 분량·순서를 바꾸는 것을 막는다).
+ * 순서 카드는 원본 단계 문장을 순서대로 골라 쓴 것이면 그대로 둔다.
+ */
 export function enforceSourceData(recipe: RecipeInput, script: Script): { ok: true; script: Script; notes: string[] } {
   const notes: string[] = [];
   const original = recipe.ingredients.map(formatIngredient);
+  const inOrder = (items: string[]) => {
+    let at = -1;
+    return items.length > 0 && items.every((it) => (at = recipe.steps.indexOf(it, at + 1)) >= 0);
+  };
   const scenes = script.scenes.map((s) => {
+    if (s.type === 'steps' && recipe.steps.length && !inOrder(s.cardItems ?? [])) {
+      notes.push(`${s.id} 장면의 조리 순서 카드를 원본 단계 문장으로 되돌렸습니다.`);
+      return { ...s, cardItems: recipe.steps.slice(0, MAX_STEPS_ON_CARD) };
+    }
     if (s.type !== 'ingredients') return s;
     const same = JSON.stringify(s.cardItems ?? []) === JSON.stringify(original);
     if (!same) notes.push(`${s.id} 장면의 재료 카드를 원본 재료 목록으로 되돌렸습니다.`);

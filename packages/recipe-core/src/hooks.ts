@@ -1,8 +1,9 @@
 import { BRAND } from './brand.ts';
-import { extractQuantities, recipeText } from './fidelity.ts';
+import { extractQuantities } from './fidelity.ts';
 import { firstSentence, splitSentences } from './format.ts';
 import { causeEffect, compactLength, findSensory, josa, spoken } from './korean.ts';
-import type { Category, Emotion, RecipeInput, Scene, SceneType, Visual } from './types.ts';
+import { CHARS_PER_SECOND } from './generator/template.ts';
+import { CATEGORY_LABELS, type Category, type Emotion, type RecipeInput, type Scene, type SceneType, type Visual } from './types.ts';
 
 /**
  * 훅(첫 장면) 유형 15종.
@@ -253,18 +254,22 @@ interface Facts {
   timeTip: string;
 }
 
-/** 요리 이름 앞의 꾸미는 말(바삭한, 부드러운, 잘 익은)을 뺀다. 다 빼면 원래 이름 */
+/** 꾸미는 말처럼 끝나지만 수량·명사인 낱말 ("한 그릇", "양은 냄비") */
+const NOT_MODIFIER = new Set(['한', '양은']);
+
+/** 요리 이름 앞의 꾸미는 말(바삭한, 부드러운, 맛있는)을 뺀다. 다 빼면 원래 이름 */
 export function plainDishName(dish: string): string {
   const words = dish.trim().split(/\s+/);
   let i = 0;
-  while (i < words.length - 1 && /(?:한|운|은|던)$/.test(words[i]!)) i++;
+  while (i < words.length - 1 && /(?:한|운|은|던|는)$/.test(words[i]!) && !NOT_MODIFIER.has(words[i]!)) i++;
   return words.slice(i).join(' ') || dish;
 }
 
 function facts(recipe: RecipeInput): Facts {
   const principle = splitSentences(recipe.principle);
   const ce = principle.map(causeEffect).find(Boolean) ?? null;
-  const timeTip = recipe.tips.find((t) => /보관|미리|한 번에|나눠|냉동|냉장|간단|빠르/.test(t)) ?? '';
+  // 시간·보관 팁만 ('나눠 치댄다', '빠르게 볶는다' 같은 기술 팁을 시간 절약으로 바꿔 말하지 않게)
+  const timeTip = recipe.tips.find((t) => /보관|미리|냉동|냉장/.test(t)) ?? '';
   return {
     dish: recipe.dishName || recipe.topic,
     plainDish: plainDishName(recipe.dishName || recipe.topic),
@@ -449,8 +454,6 @@ export function repetitionWarning(recent: RecentFormat[], style: string): string
   return null;
 }
 
-const CATEGORY_NAME: Record<Category, string> = { science: '요리 과학', fix: '실패 해결', compare: '재료 비교', tradition: '전통조리' };
-
 /** 한 가지 훅 후보를 만든다. */
 export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOptions = {}): HookCandidate {
   const f = facts(recipe);
@@ -464,7 +467,7 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
   const cat = CATEGORY_AFFINITY[recipe.category][type] ?? 0;
   if (cat) {
     score += cat;
-    reasons.push(`'${CATEGORY_NAME[recipe.category]}' 주제와 잘 맞아요`);
+    reasons.push(`'${CATEGORY_LABELS[recipe.category]}' 주제와 잘 맞아요`);
   }
   const pi = opts.preferred?.indexOf(type) ?? -1;
   if (pi >= 0) {
@@ -479,15 +482,20 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
     score += 1;
     reasons.push('원리 문장에 숫자(온도·시간)가 있어 눈에 띄어요');
   }
-  if ((type === 'mistake' || type === 'problem-solve') && f.mistake) {
+  // 아래 자료(실수·오해·이야기·시간 팁)는 없으면 훅을 만들 수 없으므로(missing), 여기까지 왔으면 늘 있다
+  if (type === 'mistake' || type === 'problem-solve') {
     score += 1;
-    reasons.push('연구자가 입력한 실제 실수가 있어요');
+    reasons.push('연구자가 입력한 흔한 실수가 있어요');
   }
-  if ((type === 'myth' || type === 'twist') && f.misconception) {
+  if (type === 'myth' || type === 'twist') {
     score += 2;
     reasons.push('연구자가 입력한 흔한 오해가 있어요');
+    if (type === 'myth') {
+      score += 1;
+      reasons.push('"정말 그럴까?" 형 질문이 사례에서 꾸준히 강했어요(관찰)');
+    }
   }
-  if (type === 'story' && f.story) {
+  if (type === 'story') {
     score += 2;
     reasons.push('연구자가 입력한 이야기가 있어요');
   }
@@ -500,13 +508,9 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
     score -= 0.5;
     reasons.push('직함을 앞세운 첫 문장은 사례에서 약했어요 — 이름은 팁 카드·서명으로 보여 주는 편을 추천');
   }
-  if (type === 'myth' && f.misconception) {
-    score += 1;
-    reasons.push('"정말 그럴까?" 형 질문이 사례에서 꾸준히 강했어요(관찰)');
-  }
-  // Instagram 공식 권고: 첫 3초 안에 관심을 끈다 (한국어 음성 약 7자/초 기준)
+  // Instagram 공식 권고: 첫 3초 안에 관심을 끈다. 음성 길이 추정(CHARS_PER_SECOND)이 대략이라 20% 여유를 두어 3.6초까지는 감점하지 않는다
   const len = compactLength(built.line);
-  const secs = len / 7;
+  const secs = len / CHARS_PER_SECOND;
   if (secs > 6) {
     score -= 2;
     reasons.push(`첫 문장이 길어요(약 ${secs.toFixed(1)}초) — 첫 3초 안에 끝나도록 줄이면 좋아요`);
@@ -527,12 +531,4 @@ export function hookCandidate(recipe: RecipeInput, type: HookType, opts: HookOpt
 /** 레시피 자료로 만들 수 있는 훅 후보를 추천 순서로 돌려준다 (만들 수 없는 유형은 뒤에, 이유와 함께). */
 export function suggestHooks(recipe: RecipeInput, opts: HookOptions = {}): HookCandidate[] {
   return HOOK_TYPES.map((t) => hookCandidate(recipe, t, opts)).sort((a, b) => b.score - a.score || HOOK_TYPES.indexOf(a.type) - HOOK_TYPES.indexOf(b.type));
-}
-
-/** 훅 문장에 원본에 없는 분량·시간·온도가 들어가지 않았는지 (AI 후보 검증용) */
-export function hookLineIssues(recipe: RecipeInput, line: string): string[] {
-  const source = new Set(extractQuantities(recipeText(recipe)).map((q) => q.normalized));
-  return extractQuantities(line)
-    .filter((q) => !source.has(q.normalized))
-    .map((q) => `원본에 없는 분량·시간·온도 "${q.raw}"`);
 }

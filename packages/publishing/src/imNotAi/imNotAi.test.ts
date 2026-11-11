@@ -29,6 +29,15 @@ describe('im-not-ai 게이트 (프로그램 검사)', () => {
     ['반죽을 섞었다.', '반죽을 섞하였다.', 'hayeot_injection'],
     ['반죽을 섞어요.', '반죽을 섞는 것은 황금레시피예요.', 'cliche_injection'],
     ['반죽을 섞어요.', '', 'empty_output'],
+    ['반죽을 섞어요.', '반죽을 섞는 것은 황금 레시피예요.', 'cliche_injection'],
+    // 뜻이 뒤집히는 윤문 (아라비아 숫자가 없어도 잡는다)
+    ['두 번 뒤집어요.', '세 번 뒤집어요.', 'count_changed'],
+    ['한 번에 식히세요.', '두 번에 나눠 식히세요.', 'count_changed'],
+    ['센 불에서 빠르게 볶아요.', '약한 불에서 빠르게 볶아요.', 'heat_changed'],
+    ['중불로 줄여요.', '강불로 줄여요.', 'heat_changed'],
+    ['소금은 마지막까지 넣지 않습니다.', '소금은 마지막까지 넣습니다.', 'negation_flipped'],
+    ['소금을 넣어요.', '소금을 넣지 마세요.', 'negation_flipped'],
+    ['뚜껑을 열지 못하게 해요.', '뚜껑을 열게 해요.', 'negation_flipped'],
   ])('실패: %s → %s (%s)', (before, after, code) => {
     expect(rewriteProblems(before, after).join(' ')).toContain(code);
   });
@@ -37,6 +46,11 @@ describe('im-not-ai 게이트 (프로그램 검사)', () => {
     expect(rewriteProblems('바삭한 김치전은 찬물로 반죽해요.', '전은 찬물로 반죽해요.', { keep: ['바삭한 김치전'] }).join()).toContain('바삭한 김치전');
     expect(rewriteProblems('반죽은 찬물로 해요.', '오늘은 날씨가 맑고 기분이 좋아요.').join()).toContain('변경률');
     expect(rewriteProblems('찬물로 해요.', '반드시 아주 차가운 찬물로 반죽을 해야 해요.', { spoken: true }).join()).toContain('길어졌어요');
+  });
+
+  it('재료 이름이 빠지면 실패, 불 세기·부정·횟수를 지키면 통과', () => {
+    expect(rewriteProblems('간장과 설탕을 함께 섞어 주세요.', '설탕을 함께 섞어 주세요.', { ingredients: ['간장', '설탕'] }).join()).toContain('ingredient_dropped');
+    expect(rewriteProblems('센 불에서 두 번 볶는 것이 매우 중요하고 소금은 넣지 않아요.', '센 불에서 두 번 볶고 소금은 넣지 않아요.')).toEqual([]);
   });
 });
 
@@ -59,13 +73,18 @@ describe('블로그: 다듬을 문단만 고르고, 저장한 윤문을 적용',
 
   it('원문 문단이 그대로일 때만 바꾸고, 원고가 바뀌면 원래 문장으로 돌아간다', () => {
     const post = buildBlogPost({ recipe, review });
-    const [first] = polishableBlogLines(post.markdown);
-    const polished = polishPost(post, { [first!]: '다듬은 문장입니다.' });
+    // 원리 문단 줄을 직접 고른다 (원리가 바뀌면 이 줄이 원고에서 사라진다)
+    const principleLine = polishableBlogLines(post.markdown).find((l) => l.includes(recipe.principle.slice(0, 10)))!;
+    expect(principleLine).toBeTruthy();
+    const polished = polishPost(post, { [principleLine]: '다듬은 문장입니다.' });
     expect(polished.polished).toBe(1);
     expect(polished.markdown).toContain('다듬은 문장입니다.');
     expect(polished.html).toContain('다듬은 문장입니다.');
     const changed = buildBlogPost({ recipe: { ...recipe, principle: '완전히 다른 원리 문장입니다.' }, review });
-    expect(applyPolish(changed.markdown, { [first!]: '다듬은 문장입니다.' }).applied).toBe(first!.includes('원리') ? 0 : 1);
+    const reverted = applyPolish(changed.markdown, { [principleLine]: '다듬은 문장입니다.' });
+    expect(reverted.applied).toBe(0);
+    expect(reverted.markdown).not.toContain('다듬은 문장입니다.');
+    expect(reverted.markdown).toContain('완전히 다른 원리 문장입니다.');
     expect(applyPolish(changed.markdown, { '없는 문장입니다만 길게': 'x' }).applied).toBe(0);
   });
 });

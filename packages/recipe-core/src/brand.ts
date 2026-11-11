@@ -1,3 +1,5 @@
+import { josa } from './korean.ts';
+
 /** 브랜드 고정 문구. 콘텐츠 안에 연구자 이름이 자연스럽게 들어가도록 한다. */
 export const BRAND = {
   labName: '이희재의 맛 연구소',
@@ -14,8 +16,6 @@ export const BRAND = {
   openingLine: '이희재의 맛 연구소에서 오늘도 실험!',
   notePhrase: '이희재 연구자의 조리 노트',
   tipPhrase: '조리기능장 이희재의 한 줄 팁',
-  /** 훅이 먼저 나오는 대본에서 두 번째 장면에 쓰는 짧은 브랜드 문구 */
-  shortOpening: '이희재의 맛 연구소, 오늘의 실험!',
   /** 맛조수가 연구자를 부르는 말. 대사에서 이름은 엔딩 서명에 한 번만 말하고, 중간에는 이렇게 부른다 (이름·직함은 화면 카드에 보인다) */
   callName: '희재 선생님',
   /** 원리 장면 첫머리 (카드 제목은 notePhrase) */
@@ -24,12 +24,15 @@ export const BRAND = {
   tipLead: '선생님 한 줄 팁!',
 } as const;
 
+/** 영상·SNS 설명에 넣는 AI 표시 (블로그 꼬리말은 publishing의 BLOG_AI_NOTICE) */
+export const AI_DISCLOSURE = 'AI 캐릭터 애니메이션이며, 음성은 AI 합성(TTS)입니다.';
+
 /**
  * SNS 게시물 설명 문구.
  * '검토한'이라는 표현은 실제 검수(승인)가 끝난 콘텐츠에만 쓴다.
  */
 export function brandDescription(reviewed: boolean): string {
   return reviewed
-    ? `${BRAND.researcherTitle} ${BRAND.researcher}가 검토한 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다.`
+    ? `${josa(`${BRAND.researcherTitle} ${BRAND.researcher}`, '이/가')} 검토한 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다.`
     : `${BRAND.researcherTitle} ${BRAND.researcher}의 요리 지식을 캐릭터 애니메이션으로 쉽게 풀어드립니다. (검수 전 초안)`;
 }
