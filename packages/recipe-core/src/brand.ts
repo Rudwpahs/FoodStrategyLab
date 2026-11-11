@@ -16,8 +16,6 @@ export const BRAND = {
   openingLine: '이희재의 맛 연구소에서 오늘도 실험!',
   notePhrase: '이희재 연구자의 조리 노트',
   tipPhrase: '조리기능장 이희재의 한 줄 팁',
-  /** 훅이 먼저 나오는 대본에서 두 번째 장면에 쓰는 짧은 브랜드 문구 */
-  shortOpening: '이희재의 맛 연구소, 오늘의 실험!',
   /** 맛조수가 연구자를 부르는 말. 대사에서 이름은 엔딩 서명에 한 번만 말하고, 중간에는 이렇게 부른다 (이름·직함은 화면 카드에 보인다) */
   callName: '희재 선생님',
   /** 원리 장면 첫머리 (카드 제목은 notePhrase) */
@@ -25,6 +23,9 @@ export const BRAND = {
   /** 팁 장면 첫머리 (카드 제목은 tipPhrase) */
   tipLead: '선생님 한 줄 팁!',
 } as const;
+
+/** 영상·SNS 설명에 넣는 AI 표시 (블로그 꼬리말은 publishing의 BLOG_AI_NOTICE) */
+export const AI_DISCLOSURE = 'AI 캐릭터 애니메이션이며, 음성은 AI 합성(TTS)입니다.';
 
 /**
  * SNS 게시물 설명 문구.

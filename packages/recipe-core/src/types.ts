@@ -128,5 +128,4 @@ export const ChecklistSchema = z.object({
   expression: z.boolean(),
 });
 
-export const ScriptSourceSchema = z.enum(['template', 'ai-paste', 'edit']);
-export type ScriptSource = z.infer<typeof ScriptSourceSchema>;
+export type ScriptSource = 'template' | 'ai-paste' | 'edit';

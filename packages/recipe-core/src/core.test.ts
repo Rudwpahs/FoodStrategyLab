@@ -48,9 +48,11 @@ describe('분량 추출', () => {
 });
 
 describe('템플릿 대본 생성', () => {
-  it('브랜드 문구가 오프닝·중간·팁에 들어간다', () => {
+  it('브랜드 문구가 중간·팁·엔딩에 들어가고, 연구소 이름은 엔딩에서 한 번만 말한다 (연출 엔진과 같은 규칙)', () => {
     const script = generateTemplateScript(spinach);
-    expect(script.scenes[0]?.line).toBe(BRAND.openingLine);
+    const lines = script.scenes.map((s) => s.line).join('\n');
+    expect(lines.split(BRAND.labName).length - 1).toBe(1);
+    expect(script.scenes.at(-1)!.line.endsWith(BRAND.signOff)).toBe(true);
     expect(script.scenes.some((s) => s.type === 'explain' && s.cardTitle === BRAND.notePhrase && s.line.startsWith(BRAND.noteLead))).toBe(true);
     expect(script.scenes.some((s) => s.type === 'tip' && s.cardTitle === BRAND.tipPhrase && s.line.startsWith(BRAND.tipLead))).toBe(true);
     expect(checkScript(spinach, script).filter((i) => i.code === 'branding')).toEqual([]);
@@ -138,7 +140,32 @@ describe('AI 붙여넣기 모드', () => {
   it('프롬프트에 원본과 규칙이 들어간다', () => {
     const prompt = buildAiPrompt(kimchi);
     expect(prompt).toContain('잘 익은 김치 200g');
-    expect(prompt).toContain(BRAND.openingLine);
+    expect(prompt).toContain(BRAND.signOff);
+    // 연구소 이름을 첫 대사에 넣으라는 규칙과 "이름은 엔딩에 한 번만" 규칙이 부딪히지 않는다
+    expect(prompt).not.toContain(BRAND.openingLine);
+    // 규칙 번호가 1부터 차례대로
+    const numbers = [...prompt.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
+    expect(numbers).toEqual(numbers.map((_, i) => i + 1));
+    // 흔한 오해·이야기도 원본 자료로 넘긴다
+    const full = buildAiPrompt({ ...kimchi, misconception: '반죽은 미리 만들어 둬야 한다', story: '명절마다 부치던 전이에요.' });
+    expect(full).toContain('반죽은 미리 만들어 둬야 한다');
+    expect(full).toContain('명절마다 부치던 전이에요.');
+  });
+
+  it('AI가 바꿔 쓴 조리 순서 카드는 원본 순서 문장으로 되돌린다', () => {
+    const answer = JSON.stringify({
+      title: '김치전',
+      scenes: [
+        { type: 'intro', emotion: 'joy', line: '시작!' },
+        { type: 'steps', emotion: 'confident', line: '순서!', cardItems: ['김치를 썬다', '반죽을 부친다'] },
+        { type: 'outro', emotion: 'joy', line: BRAND.signOff },
+      ],
+    });
+    const res = parseAiScript(answer, kimchi);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.script.scenes[1]!.cardItems).toEqual(kimchi.steps.slice(0, 5));
+    expect(res.notes.join(' ')).toContain('조리 순서');
   });
 
   it('코드블록 응답을 파싱하고 재료 카드를 원본으로 고정한다', () => {
@@ -146,7 +173,7 @@ describe('AI 붙여넣기 모드', () => {
       JSON.stringify({
         title: '김치전',
         scenes: [
-          { type: 'intro', emotion: 'joy', line: BRAND.openingLine },
+          { type: 'intro', emotion: 'joy', line: '시작해요!' },
           { type: 'ingredients', emotion: 'joy', line: '준비물!', cardItems: ['김치 1포기'] },
           { type: 'outro', emotion: 'joy', line: '또 만나요!' },
         ],

@@ -107,6 +107,24 @@ describe('훅 후보 엔진', () => {
   });
 });
 
+describe('시간 절약 훅은 시간·보관 팁에만', () => {
+  it.each(['반죽을 두 번에 나눠 치댄다.', '센 불에서 빠르게 볶는다.', '간단하게 소금만 뿌린다.'])('기술 팁 "%s"을 "바쁜 날엔 이렇게!"로 포장하지 않는다', (tip) => {
+    expect(hookCandidate({ ...walnut, tips: [tip] }, 'time-saver').available).toBe(false);
+  });
+
+  it('보관·미리 준비 팁은 그대로 쓴다', () => {
+    expect(hookCandidate(pasta, 'time-saver').available).toBe(true);
+    expect(hookCandidate({ ...walnut, tips: ['양념은 미리 만들어 냉장 보관한다.'] }, 'time-saver').available).toBe(true);
+  });
+});
+
+describe('추천 이유 문구', () => {
+  it('실수 훅의 이유는 후보 이유와 같은 말("흔한 실수")을 쓴다', () => {
+    expect(hookCandidate(walnutFull, 'mistake').reason).toContain('연구자가 입력한 흔한 실수가 있어요');
+    expect(hookCandidate(walnutFull, 'mistake').reason).not.toContain('실제 실수');
+  });
+});
+
 describe('반복 방지와 첫 3초', () => {
   it('최근에 같은 훅을 여러 번 썼으면 순위를 낮추고 이유를 말한다', () => {
     const fresh = hookCandidate(walnut, 'result-first');

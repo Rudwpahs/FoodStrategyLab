@@ -3,7 +3,8 @@ import { formatIngredient, splitSentences } from '../format.ts';
 import { spoken } from '../korean.ts';
 import type { RecipeInput, Scene, Script } from '../types.ts';
 
-const MAX_STEPS_ON_CARD = 5;
+/** 영상 조리 순서 카드에 보여 주는 단계 수 (연출 엔진과 같이 쓴다) */
+export const MAX_STEPS_ON_CARD = 5;
 const MAX_EXPLAIN_SCENES = 2;
 
 type Draft = Omit<Scene, 'id'>;
@@ -11,12 +12,14 @@ type Draft = Omit<Scene, 'id'>;
 /**
  * 비용 0원 기본 생성기: LLM 없이 입력 데이터만으로 대본을 조립한다.
  * 분량·재료·단계는 원본을 그대로 옮기고, 캐릭터 대사만 템플릿으로 만든다.
+ * 브랜드 규칙은 연출 엔진(styles.ts)과 같다: 연구소 이름(연구자 이름)은 엔딩 인사(signOff)에서 한 번만 말한다.
+ * 영상 포맷이 캐릭터 코미디형이고 흔한 실수가 있으면 실수 장면을 넣는다.
  */
 export function generateTemplateScript(recipe: RecipeInput): Script {
   const drafts: Draft[] = [];
   const comedy = recipe.format === 'comedy' && recipe.commonMistake.length > 0;
 
-  drafts.push({ type: 'intro', emotion: 'joy', line: BRAND.openingLine, cardTitle: recipe.topic });
+  drafts.push({ type: 'intro', emotion: 'joy', line: '맛 연구소에서 오늘도 실험!', cardTitle: recipe.topic });
 
   if (comedy) {
     drafts.push({ type: 'mistake', emotion: 'embarrassed', line: `으악, 망했어요! ${recipe.commonMistake}` });
@@ -69,7 +72,7 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
   drafts.push({
     type: 'outro',
     emotion: 'joy',
-    line: comedy ? '대성공! 저장하고 다음 실험에서 만나요!' : '저장하고 다음 실험에서 만나요!',
+    line: `${comedy ? '대성공! ' : ''}저장해 두세요! ${BRAND.signOff}`,
   });
 
   return {
