@@ -17,3 +17,6 @@ export const COLORS = {
 export const FONT_FAMILY = 'Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
 export const VIDEO = { width: 1080, height: 1920, fps: 30 } as const;
+
+/** 자막 아랫변의 기본 y: 인스타·쇼츠 앱 UI가 가리는 아래 420px(1500 아래)를 피한다 */
+export const CAPTION_SAFE_BOTTOM = 1480;

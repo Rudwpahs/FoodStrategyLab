@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { BRAND, clipGroups, foodProfile, ingredientProps, type FoodProfile, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
-import { Captions, SAFE_BOTTOM } from '../components/Captions.tsx';
+import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
@@ -9,9 +9,9 @@ import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
 import { ensureFonts } from '../fonts.ts';
-import { COLORS, FONT_FAMILY } from '../theme.ts';
+import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene } from '../three/KitchenScene.tsx';
-import { propPositions } from '../three/layout.ts';
+import { CHEF_FACE, propPositions } from '../three/layout.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import type { SceneTiming, VideoProps } from '../timeline.ts';
 
@@ -37,7 +37,7 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
-  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : SAFE_BOTTOM;
+  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
   const half = Math.round(height / 2);
 
   return (
@@ -424,7 +424,7 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
 };
 
 function coverState(emotion: Scene['emotion'], square: boolean): import('../three/KitchenScene.tsx').StageState {
-  const face: [number, number, number] = [-0.62, 0.84, -0.5];
+  const face = CHEF_FACE;
   return {
     camera: square
       ? { pos: [face[0] + 0.3, face[1] + 0.3, face[2] + 1.8], target: [face[0] + 0.05, face[1] + 0.12, face[2]], fov: 46 }

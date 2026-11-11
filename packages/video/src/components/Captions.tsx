@@ -1,13 +1,12 @@
 import React from 'react';
 import { interpolate } from 'remotion';
 import { captionGroups } from '../timeline.ts';
-import { COLORS, FONT_FAMILY } from '../theme.ts';
+import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY, VIDEO } from '../theme.ts';
 
 /**
  * 숏폼 자막: 1~3어절씩 튀어나오고, 지금 말하는 단어는 노란색.
- * 인스타·쇼츠 앱 UI가 가리는 위 220px·아래 420px을 피해 1500px 위에 놓는다.
+ * 인스타·쇼츠 앱 UI가 가리는 위 220px·아래 420px을 피해 CAPTION_SAFE_BOTTOM 위에 놓는다.
  */
-export const SAFE_BOTTOM = 1480; // three/captionPlacement.ts와 같은 값
 
 /**
  * 화자별 색 (PDF 규칙: 주인공은 흰 글자+노란 강조, 두 번째 화자는 주황 글자+흰 강조).
@@ -31,7 +30,7 @@ export interface CaptionProps {
   bottomY?: number;
 }
 
-export const Captions: React.FC<CaptionProps> = ({ line, frame, speechFrames, punch, words, voice = 'character', bottomY = SAFE_BOTTOM }) => {
+export const Captions: React.FC<CaptionProps> = ({ line, frame, speechFrames, punch, words, voice = 'character', bottomY = CAPTION_SAFE_BOTTOM }) => {
   const groups = captionGroups(line, speechFrames, words);
   const colors = PALETTE[voice];
   const active = groups.find((g) => frame >= g.from && frame < g.to) ?? (frame >= speechFrames ? groups.at(-1) : groups[0]);
@@ -43,7 +42,7 @@ export const Captions: React.FC<CaptionProps> = ({ line, frame, speechFrames, pu
   const scale = interpolate(local, [0, 3, 7], [0.82, big ? 1.16 : 1.07, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const wobble = big ? Math.sin(local / 2.2) * Math.max(0, 1 - local / 14) * 4 : 0;
   return (
-    <div style={{ position: 'absolute', left: 40, right: 40, bottom: 1920 - Math.min(SAFE_BOTTOM, bottomY), display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'absolute', left: 40, right: 40, bottom: VIDEO.height - Math.min(CAPTION_SAFE_BOTTOM, bottomY), display: 'flex', justifyContent: 'center' }}>
       <div
         style={{
           transform: `scale(${scale}) rotate(${wobble}deg)`,

@@ -319,7 +319,8 @@ const Arm: React.FC<{ side: -1 | 1; raise: number; forward: number; spatula?: bo
   </group>
 );
 
-const EYE_Y = 0.41;
+/** 눈 높이(발바닥 기준). 자막이 피할 얼굴 범위(captionPlacement.ts FACE_SPAN)의 기준 */
+export const EYE_Y = 0.41;
 const EYE_X = 0.09;
 
 /** 반짝이는 큰 눈 (검은 눈동자 + 아래쪽 갈색 + 큰·작은 반짝임) */
@@ -446,7 +447,8 @@ const Brows: React.FC<{ emotion: Emotion }> = ({ emotion }) => {
   );
 };
 
-const MOUTH_Y = 0.335;
+/** 입 높이(발바닥 기준) */
+export const MOUTH_Y = 0.335;
 
 const Mouth: React.FC<{ emotion: Emotion; open: number }> = ({ emotion, open }) => {
   const f = onFace(0, MOUTH_Y, 0.008);

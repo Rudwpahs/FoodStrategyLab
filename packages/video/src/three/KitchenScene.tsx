@@ -6,7 +6,7 @@ import type { Emotion, FoodProfile, IngredientProp } from '@mat-lab/recipe-core'
 import { Chef3D } from './Chef3D.tsx';
 import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
 import { KitchenSet } from './Kitchen.tsx';
-import { BURNER, CHEF_POS, PLATE, handPlate, propPositions, type Vec3 } from './layout.ts';
+import { BURNER, CHEF_POS, PLATE, chefFacing, handPlate, propPositions, type Vec3 } from './layout.ts';
 import type { ChefAction, Mood, Shot } from './shots.ts';
 
 /** 한 프레임의 3D 장면 상태 */
@@ -87,10 +87,6 @@ const CameraRig: React.FC<{ pos: Vec3; target: Vec3; fov: number }> = ({ pos, ta
   return null;
 };
 
-function faceAngle(from: Vec3, to: Vec3): number {
-  return Math.atan2(to[0] - from[0], to[2] - from[2]);
-}
-
 export const KitchenScene: React.FC<{
   width: number;
   height: number;
@@ -99,7 +95,7 @@ export const KitchenScene: React.FC<{
   food: FoodProfile;
   props: IngredientProp[];
 }> = ({ width, height, frame, state, food, props }) => {
-  const facing = state.face === 'stove' ? faceAngle(CHEF_POS, BURNER) : faceAngle(CHEF_POS, state.camera.pos) * 0.85;
+  const facing = chefFacing(state);
   const positions = propPositions(props.length);
   return (
     // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다

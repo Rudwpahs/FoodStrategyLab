@@ -1,5 +1,5 @@
 import type { Scene, SceneType, Visual } from '@mat-lab/recipe-core';
-import { BURNER, CHEF_POS, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
+import { BURNER, CHEF_FACE, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
 
 /**
  * 장면 종류별 카메라·캐릭터 행동·음식 상태.
@@ -28,7 +28,6 @@ export interface Shot {
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
-const CHEF_FACE: Vec3 = add(CHEF_POS, [0, 0.42, 0]);
 const PROPS_CENTER: Vec3 = [PROP_CENTER[0], 1.0, PROP_CENTER[2]];
 
 const WIDE = {
@@ -54,10 +53,11 @@ const PLATE_CLOSE = {
   from: { pos: add(PLATE, [0.4, 0.72, 1.0]), target: add(PLATE, [0, 0.16, 0]) },
   to: { pos: add(PLATE, [-0.2, 0.68, 1.0]), target: add(PLATE, [0, 0.16, 0]) },
 };
-// 접시를 든 캐릭터 정면
+// 접시를 든 캐릭터 정면. 얼굴(아래)과 접시(그 밑)가 함께 보이고, 자막은 얼굴 위(모자 앞)에 들어가도록
+// 조금 떨어져서 찍는다 (가까우면 얼굴+접시가 화면 가운데를 다 차지해 자막이 얼굴이나 접시를 가렸다)
 const PRESENT = {
-  from: { pos: add(CHEF_FACE, [0.35, 0.25, 2.3]), target: add(CHEF_FACE, [0.05, 0.12, 0]) },
-  to: { pos: add(CHEF_FACE, [0.25, 0.2, 2.0]), target: add(CHEF_FACE, [0.05, 0.12, 0]) },
+  from: { pos: add(CHEF_FACE, [0.45, 0.32, 3.0]), target: add(CHEF_FACE, [0.05, 0.23, 0]) },
+  to: { pos: add(CHEF_FACE, [0.33, 0.26, 2.6]), target: add(CHEF_FACE, [0.05, 0.23, 0]) },
 };
 
 export function shotFor(type: SceneType, indexOfType: number): Shot {
