@@ -1,4 +1,5 @@
 import './testDataDir.ts';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
@@ -42,6 +43,26 @@ describe('계정이 없을 때 (이 컴퓨터 전용)', () => {
     expect((await req('/media/x.png', { headers: { 'x-forwarded-for': '1.2.3.4' } })).status).toBe(403);
     const me = await (await req('/api/auth/me')).json();
     expect(me.mode).toBe('local');
+  });
+
+  it('다른 웹페이지가 보낸 요청은 막는다: Origin null(샌드박스 iframe 등), 다른 이름으로 접속(DNS 리바인딩)', async () => {
+    const raw = (path: string, method: string, headers: Record<string, string>) =>
+      new Promise<number>((resolve, reject) => {
+        const r = http.request(`${base}${path}`, { method, headers: { 'content-type': 'application/json', ...headers } }, (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        });
+        r.on('error', reject);
+        r.end(method === 'GET' ? undefined : '{}');
+      });
+    const port = new URL(base).port;
+    expect(await raw('/api/instagram/disconnect', 'POST', { origin: 'null' })).toBe(403);
+    expect(await raw('/api/projects', 'GET', { host: `evil.example:${port}` })).toBe(403);
+    expect(await raw('/media/studio.db', 'GET', { host: `evil.example:${port}` })).toBe(403);
+    expect(await raw('/api/projects', 'POST', { host: `evil.example:${port}`, origin: `http://evil.example:${port}` })).toBe(403);
+    // 이 PC의 주소로 연 요청은 그대로 된다
+    expect(await raw('/api/projects', 'GET', { host: `localhost:${port}` })).toBe(200);
+    expect(await raw('/api/projects', 'GET', { host: `127.0.0.1:${port}` })).toBe(200);
   });
 
   it('너무 짧은 비밀번호로는 계정을 만들 수 없다', () => {

@@ -227,10 +227,32 @@ export function readCookie(req: Request, name = COOKIE): string | undefined {
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const PROXY_HEADERS = ['x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'forwarded', 'x-forwarded-host'];
 
-/** 이 PC에서 직접 연 요청인지 (터널·프록시를 거친 요청은 아님) */
-export function isDirectLocal(req: Request): boolean {
-  return LOOPBACK.has(req.socket.remoteAddress ?? '') && !PROXY_HEADERS.some((h) => req.headers[h]);
+/**
+ * 주소창의 이름(Host)이 이 PC(localhost·127.0.0.1·::1) 또는 정해 둔 공개 주소인지.
+ * 악성 웹페이지가 자기 도메인을 127.0.0.1로 바꿔 부르는 경우(DNS 리바인딩)를 막는다.
+ */
+function localHostName(req: Request): boolean {
+  const host = req.headers.host ?? '';
+  try {
+    if (['localhost', '127.0.0.1', '[::1]'].includes(new URL(`http://${host}`).hostname)) return true;
+    return Boolean(process.env.PUBLIC_URL) && new URL(process.env.PUBLIC_URL!).host === host;
+  } catch {
+    return false;
+  }
 }
+
+/** 이 PC에서 직접 연 요청인지 (터널·프록시를 거친 요청, 다른 이름으로 들어온 요청은 아님) */
+export function isDirectLocal(req: Request): boolean {
+  return LOOPBACK.has(req.socket.remoteAddress ?? '') && !PROXY_HEADERS.some((h) => req.headers[h]) && localHostName(req);
+}
+
+const foreignOrigin = (req: Request, origin: string) => {
+  try {
+    return !ownHosts(req).has(new URL(origin).host);
+  } catch {
+    return true;
+  }
+};
 
 const isHttps = (req: Request) => req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.COOKIE_SECURE === '1';
 
@@ -243,7 +265,9 @@ export function authGuard(auth: Auth) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const origin = req.headers.origin;
-      if (origin && origin !== 'null' && !ownHosts(req).has(new URL(origin).host)) {
+      // Origin 'null'(샌드박스 iframe·data: 페이지)은 어느 사이트인지 알 수 없다: 계정 없는 모드에서는 막는다
+      // (계정이 있으면 SameSite 로그인 쿠키가 붙지 않아 어차피 막힌다)
+      if (origin === 'null' ? auth.userCount() === 0 : origin && foreignOrigin(req, origin)) {
         return next(new HttpError(403, '다른 사이트에서 보낸 요청은 받지 않아요.'));
       }
     }
