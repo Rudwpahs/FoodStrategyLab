@@ -1,5 +1,6 @@
 import type { Emotion } from '@mat-lab/recipe-core';
 import React from 'react';
+import { ARM_POSES, mouthOpen } from '../characterMotion.ts';
 import { COLORS } from '../theme.ts';
 
 /**
@@ -28,13 +29,14 @@ interface Pose {
   squash?: number;
 }
 
+const pose = (e: Emotion, extra: Omit<Pose, 'leftArm' | 'rightArm'> = {}): Pose => ({ leftArm: ARM_POSES[e][0], rightArm: ARM_POSES[e][1], ...extra });
 const POSES: Record<Emotion, Pose> = {
-  joy: { leftArm: 35, rightArm: -150, wave: true },
-  embarrassed: { leftArm: 160, rightArm: -25 },
-  curious: { leftArm: 25, rightArm: -125 },
-  confident: { leftArm: 60, rightArm: -165 },
-  surprised: { leftArm: 140, rightArm: -140 },
-  disappointed: { leftArm: 8, rightArm: -8, squash: 0.96 },
+  joy: pose('joy', { wave: true }),
+  embarrassed: pose('embarrassed'),
+  curious: pose('curious'),
+  confident: pose('confident'),
+  surprised: pose('surprised'),
+  disappointed: pose('disappointed', { squash: 0.96 }),
 };
 
 export const Character: React.FC<CharacterProps> = ({ emotion, frame, talking = false, size = 480, still = false }) => {
@@ -106,12 +108,6 @@ export const Character: React.FC<CharacterProps> = ({ emotion, frame, talking = 
 };
 
 const BODY_PATH = 'M 66 320 C 58 205 128 152 200 152 C 272 152 342 205 334 320 C 330 398 276 432 200 432 C 124 432 70 398 66 320 Z';
-
-/** 말할 때 입 벌림 정도 (0~1). 음절처럼 불규칙하게 보이도록 두 파형을 섞는다. */
-function mouthOpen(t: number): number {
-  const v = (0.55 + 0.45 * Math.sin(t * 1.25)) * (0.65 + 0.35 * Math.sin(t * 0.41 + 1));
-  return Math.max(0, Math.min(1, v));
-}
 
 const Arm: React.FC<{ x: number; y: number; angle: number; thumb?: boolean }> = ({ x, y, angle, thumb }) => (
   <g transform={`translate(${x} ${y}) rotate(${angle})`}>

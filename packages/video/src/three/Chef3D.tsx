@@ -1,6 +1,7 @@
 import React from 'react';
 import { SphereGeometry, type BufferGeometry } from 'three';
 import type { Emotion } from '@mat-lab/recipe-core';
+import { ARM_POSES, mouthOpen } from '../characterMotion.ts';
 import { COLORS } from '../theme.ts';
 import { deform } from './foodShapes.ts';
 import type { ChefAction } from './shots.ts';
@@ -83,16 +84,6 @@ interface Props {
   pop?: number;
 }
 
-/** 2D 캐릭터와 같은 팔 자세 (도 단위, 2D 기준) */
-const ARM_POSES: Record<Emotion, [number, number]> = {
-  joy: [35, -150],
-  embarrassed: [160, -25],
-  curious: [25, -125],
-  confident: [60, -165],
-  surprised: [140, -140],
-  disappointed: [8, -8],
-};
-
 /** 고정 난수 (프레임마다 같은 값) */
 function hash(n: number): number {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -113,7 +104,7 @@ export function eyeOpenness(frame: number): number {
 }
 
 export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facing, position, pop = 1 }) => {
-  const open = talking ? Math.max(0, (0.55 + 0.45 * Math.sin(frame * 1.25)) * (0.65 + 0.35 * Math.sin(frame * 0.41 + 1))) : 0;
+  const open = talking ? mouthOpen(frame) : 0;
   const lids = emotion === 'joy' || emotion === 'embarrassed' ? 1 : eyeOpenness(frame);
   const rad = (d: number) => (d * Math.PI) / 180;
 

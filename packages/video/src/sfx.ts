@@ -1,4 +1,5 @@
 import type { Scene, Script } from '@mat-lab/recipe-core';
+import { seeded } from './random.ts';
 
 /**
  * 효과음: 코드로 직접 합성한다 (외부 음원을 쓰지 않으므로 저작권·라이선스 문제가 없다).
@@ -30,13 +31,10 @@ function wav(samples: Float32Array): Uint8Array {
   return new Uint8Array(buf);
 }
 
-/** 매번 같은 소리가 나도록 고정 씨앗 난수 */
+/** 매번 같은 소리가 나도록 고정 씨앗 난수 (-0.5~0.5) */
 function noise(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0xffffffff - 0.5;
-  };
+  const rnd = seeded(seed);
+  return () => rnd() - 0.5;
 }
 
 export function synthSfx(name: SfxName): Float32Array {
