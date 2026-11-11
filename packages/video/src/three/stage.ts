@@ -70,7 +70,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     burnerOn: shot.burnerOn,
     showFoodInVessel: scene.type === 'steps' || scene.visual === 'sizzle' || (scene.type === 'explain' && !scene.visual),
     cook,
-    flip: flip >= 1 ? 0 : flip,
+    flip,
     plated: shot.plated,
     propPop,
     chefPop: index === 0 ? popIn(local / 10) : 1,

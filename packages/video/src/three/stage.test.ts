@@ -33,6 +33,18 @@ describe('3D 장면 상태', () => {
     expect(stageAt(script, timings, frameOf('steps', 0.55), 'greens', props)!.flip).toBe(0);
   });
 
+  it('전 뒤집기: 끝난 뒤 한 프레임 만에 원래 면으로 튀어 돌아가지 않는다', async () => {
+    const { pancakeTurn } = await import('./Food3D.tsx');
+    const i = script.scenes.findIndex((s) => s.type === 'steps');
+    const t = timings[i]!;
+    const turns = Array.from({ length: t.durationInFrames }, (_, k) => pancakeTurn(stageAt(script, timings, t.from + k, 'pancake', props)!.flip));
+    expect(Math.max(...turns)).toBeGreaterThan(Math.PI / 2);
+    // 프레임 사이 회전 변화가 작다 (예전: 뒤집힌 180°에서 다음 프레임 0°로)
+    for (let k = 1; k < turns.length; k++) expect(Math.abs(turns[k]! - turns[k - 1]!), `frame ${k}`).toBeLessThan(0.6);
+    // 끝나면 윗면(건더기·노릇한 자국)이 다시 위로 온다
+    expect(Math.cos(turns.at(-1)!)).toBeCloseTo(1);
+  });
+
   it('실수 장면은 실패한 음식, 팁·엔딩은 완성 음식을 보여준다', () => {
     expect(stageAt(script, timings, frameOf('mistake', 0.5), 'pancake', props)!.plated).toBe('failed');
     expect(stageAt(script, timings, frameOf('tip', 0.5), 'pancake', props)!.plated).toBe('done');

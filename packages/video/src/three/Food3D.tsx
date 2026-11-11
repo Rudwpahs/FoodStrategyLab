@@ -292,6 +292,12 @@ export const Bowl: React.FC<{ children?: React.ReactNode; liquid?: string; posit
 
 // ---------- 음식 ----------
 
+/**
+ * 전 뒤집기 회전(라디안): 공중에서 한 바퀴 돌아 윗면(건더기·노릇한 자국)이 다시 위로 오게 착지한다.
+ * (반 바퀴만 돌리면 뒤집힌 면을 따로 그려야 하고, 끝난 뒤 원래 면으로 되돌리면 한 프레임에 튀어 보였다)
+ */
+export const pancakeTurn = (flip: number) => flip * Math.PI * 2;
+
 /** 전·부침개: 들쭉날쭉한 원판 + 건더기 + 노릇한 자국. flip(0~1)이면 뒤집는다. */
 const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?: boolean }> = ({ food, cook, flip = 0, soggy }) => {
   const spots = useBits(9, 0.11, 21);
@@ -300,7 +306,7 @@ const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?
   const groups = useMemo(() => layoutPieces(piecesOf(food).filter((p) => p.shape !== 'seed'), { radius: 0.13, mound: 0, cook: cookStep, amount: 0.7, size: 0.8, seed: 9 }), [food, cookStep]);
   const lift = Math.sin(flip * Math.PI) * 0.16;
   return (
-    <group position={[0, 0.012 + lift, 0]} rotation={[flip * Math.PI, 0, 0]} scale={[1, soggy ? 0.55 : 1, 1]}>
+    <group position={[0, 0.012 + lift, 0]} rotation={[pancakeTurn(flip), 0, 0]} scale={[1, soggy ? 0.55 : 1, 1]}>
       <mesh geometry={pancakeGeometry(3)} scale={[0.15, 0.022, 0.15]} castShadow receiveShadow>
         <Glossy color={color} gloss={soggy ? 0.9 : 0.25 + cook * 0.4} rough={soggy ? 0.3 : 0.75} />
       </mesh>
