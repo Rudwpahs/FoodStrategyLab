@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, clipGroups, ingredientProps, type RecipeInput, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, clipGroups, ingredientProps, type Scene } from '@mat-lab/recipe-core';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
