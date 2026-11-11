@@ -6,7 +6,7 @@ import { QUICK_RULES } from '@mat-lab/publishing';
 import { createApp } from './app.ts';
 import { openDb } from './db.ts';
 import { Humanizer, rewriteCostUsd, type RewriteFn } from './humanize.ts';
-import { monthSpentUsd } from './recipeReader.ts';
+import { monthSpentUsd } from './claudeUsage.ts';
 import { Repo } from './repo.ts';
 
 /**

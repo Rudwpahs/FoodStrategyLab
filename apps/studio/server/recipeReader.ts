@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { CATEGORIES, RecipeInputSchema, type RecipeInput } from '@mat-lab/recipe-core';
 import { findAiTells } from '@mat-lab/publishing';
+import { DEFAULT_MODEL, aiConfigured, assertBudget, claudeError, costUsd, recordUsage } from './claudeUsage.ts';
 import type { Db } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -13,24 +14,10 @@ import { HttpError } from './repo.ts';
  *   제안은 3개를 받고, 레시피의 어느 순서·팁에서 나왔는지 인용하게 한다. 인용이 원문에 없거나 원문에 없는 숫자·건강 주장이 있으면
  *   그 제안은 뒤로 미루고 화면에 알린다 (groundSuggestions).
  * - 기본 모델은 손글씨를 가장 잘 읽는 Claude Opus 5.5, 생각 정도 high (사진 한 장 약 $0.1~0.2 추정). CLAUDE_MODEL·CLAUDE_EFFORT로 바꿀 수 있다.
- *   달마다 쓸 수 있는 금액 한도가 있다 (CLAUDE_MONTHLY_BUDGET_USD, 기본 $100).
+ *   달마다 쓸 수 있는 금액 한도가 있다 (claudeUsage.ts, 다른 Claude 기능과 함께 센다).
  */
 
-export const DEFAULT_MODEL = 'claude-opus-5-5';
 export const MAX_FILES = 4;
-
-/** 1백만 토큰당 달러 (입력, 출력). 2026-11 기준, 모르는 모델은 가장 비싼 값으로 계산해 한도를 넘지 않게 한다 */
-const PRICES: Record<string, [number, number]> = {
-  'claude-haiku-5-5': [0.1, 0.5],
-  'claude-sonnet-5-5': [2, 10],
-  'claude-opus-5-5': [4, 20],
-};
-const priceOf = (model: string): [number, number] => PRICES[model] ?? [10, 50];
-
-export function costUsd(model: string, inputTokens: number, outputTokens: number): number {
-  const [i, o] = priceOf(model);
-  return (inputTokens * i + outputTokens * o) / 1_000_000;
-}
 
 /** Claude가 돌려줄 형태 (구조화 출력) */
 /**
@@ -366,19 +353,6 @@ export const claudeParse: ParseFn = async ({ model, effort, system, content }) =
   return { parsed: res.parsed_output ?? null, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens, stopReason: res.stop_reason };
 };
 
-export function aiConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
-}
-
-/** 이번 달(한국 시간) 쓴 금액 */
-export function monthSpentUsd(db: Db, now = new Date()): number {
-  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
-  const r = db.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_usage WHERE month = ?').get(month) as { s: number };
-  return Number(r.s);
-}
-
-export const monthlyBudgetUsd = () => Number(process.env.CLAUDE_MONTHLY_BUDGET_USD || '100');
-
 // ── 다른 주제 더 보기: 이미 읽은 레시피(글)로 주제 후보만 새로 받는다 (사진을 다시 보내지 않아 싸다) ──
 
 const MoreTopicsSchema = z.object({ suggestions: z.array(SuggestionSchema).describe('새 주제 후보 5개. 꼴(angle)을 되도록 모두 다르게') });
@@ -438,8 +412,7 @@ export class RecipeReader {
   async moreTopics(source: RecipeInput, opts: { exclude: string[]; direction?: string; aiMistake?: boolean }): Promise<{ suggestions: CheckedSuggestion[]; costUsd: number }> {
     const recipe = opts.aiMistake ? { ...source, commonMistake: '' } : source;
     if (this.topicsFn === claudeTopics && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
-    const budget = monthlyBudgetUsd();
-    if (monthSpentUsd(this.db) >= budget) throw new HttpError(429, `이번 달 Claude 사용 한도($${budget})를 다 썼어요. 다음 달에 다시 쓸 수 있어요.`);
+    assertBudget(this.db);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const direction = (opts.direction ?? '').trim().slice(0, 300);
     const user = [
@@ -454,16 +427,10 @@ export class RecipeReader {
     try {
       out = await this.topicsFn({ model, system: TOPICS_SYSTEM, user });
     } catch (e) {
-      if (e instanceof Anthropic.AuthenticationError) throw new HttpError(502, 'Claude API 열쇠가 맞지 않아요. 서버의 ANTHROPIC_API_KEY를 확인해 주세요.');
-      if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'Claude API가 잠시 바빠요. 1분 뒤 다시 시도해 주세요.');
-      if (e instanceof Anthropic.APIError) throw new HttpError(502, `Claude API 오류 (${e.status ?? '?'}). 잠시 뒤 다시 시도해 주세요.`);
-      throw e;
+      throw claudeError(e);
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
-    const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(new Date());
-    this.db
-      .prepare('INSERT INTO ai_usage (created_at, month, purpose, model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(new Date().toISOString(), month, 'topics', model, out.inputTokens, out.outputTokens, cost);
+    recordUsage(this.db, 'topics', model, out.inputTokens, out.outputTokens, cost);
     if (out.stopReason === 'refusal') throw new HttpError(422, '주제를 만들 수 없다는 답을 받았어요.');
     if (!out.parsed) throw new HttpError(502, '주제를 받지 못했어요. 다시 시도해 주세요.');
     const seen = new Set(opts.exclude.map((t) => squash(t)));
@@ -488,26 +455,17 @@ export class RecipeReader {
     if (this.parse === claudeParse && !aiConfigured()) {
       throw new HttpError(409, '레시피 읽기(Claude API)가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요. 그 전에는 "직접 입력"을 써 주세요.');
     }
-    const budget = monthlyBudgetUsd();
-    const spent = monthSpentUsd(this.db);
-    if (spent >= budget) throw new HttpError(429, `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`);
+    assertBudget(this.db, (budget) => `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const content = toContentBlocks(files, memo);
     let out;
     try {
       out = await this.parse({ model, effort: effortSetting(), system: SYSTEM, content });
     } catch (e) {
-      if (e instanceof Anthropic.AuthenticationError) throw new HttpError(502, 'Claude API 열쇠가 맞지 않아요. 서버의 ANTHROPIC_API_KEY를 확인해 주세요.');
-      if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'Claude API가 잠시 바빠요. 1분 뒤 다시 시도해 주세요.');
-      if (e instanceof Anthropic.BadRequestError) throw new HttpError(400, `자료를 보내지 못했어요 (파일이 너무 크거나 형식이 맞지 않을 수 있어요): ${e.message.slice(0, 200)}`);
-      if (e instanceof Anthropic.APIError) throw new HttpError(502, `Claude API 오류 (${e.status ?? '?'}). 잠시 뒤 다시 시도해 주세요.`);
-      throw e;
+      throw claudeError(e, (err) => `자료를 보내지 못했어요 (파일이 너무 크거나 형식이 맞지 않을 수 있어요): ${err.message.slice(0, 200)}`);
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
-    const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(new Date());
-    this.db
-      .prepare('INSERT INTO ai_usage (created_at, month, purpose, model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(new Date().toISOString(), month, 'recipe-read', model, out.inputTokens, out.outputTokens, cost);
+    recordUsage(this.db, 'recipe-read', model, out.inputTokens, out.outputTokens, cost);
     if (out.stopReason === 'refusal') throw new HttpError(422, '이 자료는 읽을 수 없다는 답을 받았어요. 다른 사진으로 다시 시도해 주세요.');
     if (out.stopReason === 'max_tokens') throw new HttpError(502, '자료가 너무 길어서 끝까지 정리하지 못했어요. 사진 수를 줄여서 다시 시도해 주세요.');
     if (!out.parsed) throw new HttpError(502, '레시피를 정리하지 못했어요. 다시 시도해 주세요.');
