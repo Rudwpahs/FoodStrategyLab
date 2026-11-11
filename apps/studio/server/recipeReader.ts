@@ -433,8 +433,10 @@ export class RecipeReader {
   /**
    * 주제 후보를 새로 받는다 (이미 나온 주제는 빼고, 연구자가 원하는 방향이 있으면 그쪽으로).
    * 근거 확인·뻔한 주제 걸러내기는 처음 읽을 때와 같다.
+   * aiMistake: 레시피의 흔한 실수를 AI가 지어 넣었으면(자료·연구자 글이 아님) 근거로도, 기획 자료로도 쓰지 않는다.
    */
-  async moreTopics(recipe: RecipeInput, opts: { exclude: string[]; direction?: string }): Promise<{ suggestions: CheckedSuggestion[]; costUsd: number }> {
+  async moreTopics(source: RecipeInput, opts: { exclude: string[]; direction?: string; aiMistake?: boolean }): Promise<{ suggestions: CheckedSuggestion[]; costUsd: number }> {
+    const recipe = opts.aiMistake ? { ...source, commonMistake: '' } : source;
     if (this.topicsFn === claudeTopics && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
     const budget = monthlyBudgetUsd();
     if (monthSpentUsd(this.db) >= budget) throw new HttpError(429, `이번 달 Claude 사용 한도($${budget})를 다 썼어요. 다음 달에 다시 쓸 수 있어요.`);

@@ -851,8 +851,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/projects/:id/topics/more', async (req, res) => {
     const pid = id(req);
     const recipe = repo.getRecipe(pid);
-    const existing = (repo.getSource(pid)?.suggestions ?? []).map((s) => s.topic);
-    const { suggestions, costUsd } = await reader.moreTopics(recipe, { exclude: [...existing, recipe.topic], direction: String(req.body?.direction ?? '') });
+    const source = repo.getSource(pid);
+    const existing = (source?.suggestions ?? []).map((s) => s.topic);
+    // AI가 지어 넣은 흔한 실수는 근거로 치지 않는다 (자료·연구자가 쓴 글만)
+    const aiMistake = Boolean(source?.aiFields.includes('commonMistake'));
+    const { suggestions, costUsd } = await reader.moreTopics(recipe, { exclude: [...existing, recipe.topic], direction: String(req.body?.direction ?? ''), aiMistake });
     if (!suggestions.length) throw new HttpError(502, '새 주제를 받지 못했어요. 다시 눌러 주세요.');
     repo.addSuggestions(pid, suggestions, `AI 주제 후보 ${suggestions.length}개 더 받음 (약 ${costUsd.toFixed(3)}달러)`);
     res.json(repo.getProject(pid));
