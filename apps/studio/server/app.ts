@@ -99,9 +99,10 @@ function carouselFiles(dir: string): string[] {
     .readdirSync(dir)
     .filter((f) => /^carousel-\d+\.jpg$/.test(f))
     .sort()
-    .slice(0, 10)
     .map((f) => path.join(dir, f));
 }
+/** 인스타그램 캐러셀은 10장까지. 넘으면 말없이 자르지 않고 올리지 않는다 (마지막 단계·팁이 빠지므로) */
+const MAX_CAROUSEL_CARDS = 10;
 
 /** 올리기 전 점검 중 영상·표지에 관한 것 (설명 글 점검은 화면에서 instagramCaptionChecks로 바로 한다) */
 function reelChecks(render: { outputDir: string }, approval: Review): IgCheck[] {
@@ -188,6 +189,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   };
   /** 윤문해도 빠지면 안 되는 말 */
   const keepWords = (r: { dishName: string; topic: string }) => [r.dishName, BRAND.researcher, BRAND.labName, BRAND.character].filter(Boolean);
+  // 윤문에서 원문에 있던 재료 이름이 빠지면 채택하지 않는다 (원칙 1)
+  const ingredientNames = (r: { ingredients: { name: string }[] }) => r.ingredients.map((i) => i.name.trim()).filter(Boolean);
 
   // 살아 있는지 확인 (로그인 없이). 클라우드에서 제작 중 서버가 잠들지 않게 스스로 부를 때도 쓴다.
   app.get('/api/health', (_req, res) => {
@@ -681,13 +684,13 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       const project = repo.getProject(pid);
       if (!project.latest) throw new HttpError(400, '대본이 아직 없어요.');
       const items = project.latest.script.scenes.map((s) => ({ id: s.id, text: s.line }));
-      const result = await humanizer.run('script', items, { keep: keepWords(project.recipe), force });
+      const result = await humanizer.run('script', items, { keep: keepWords(project.recipe), ingredients: ingredientNames(project.recipe), force });
       if (result.costUsd) repo.logEvent(pid, 'script', `대사 AI 티 다듬기 (im-not-ai, 약 ${result.costUsd.toFixed(3)}달러)`);
       return res.json({ ...result, version: project.latest.version });
     }
     const { project, notes, post } = rawBlog(pid, req.body?.style);
     const lines = polishableBlogLines(post.markdown, answerTexts(notes));
-    const result = await humanizer.run('blog', lines.map((t, i) => ({ id: `p${i + 1}`, text: t })), { keep: keepWords(project.recipe), force });
+    const result = await humanizer.run('blog', lines.map((t, i) => ({ id: `p${i + 1}`, text: t })), { keep: keepWords(project.recipe), ingredients: ingredientNames(project.recipe), force });
     if (result.costUsd) repo.logEvent(pid, 'blog', `블로그 AI 티 다듬기 (im-not-ai, 약 ${result.costUsd.toFixed(3)}달러)`);
     res.json(result);
   });
@@ -702,7 +705,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     if (!pairs.length) throw new HttpError(400, '적용할 문장이 없어요.');
     const project = repo.getProject(pid);
     // 화면에서 받은 결과도 게이트를 다시 통과해야 저장한다
-    const checked = verifyRewrites(target, pairs, keepWords(project.recipe));
+    const checked = verifyRewrites(target, pairs, keepWords(project.recipe), ingredientNames(project.recipe));
     const ok = checked.filter((c) => !c.reasons.length);
     const rejected = checked.filter((c) => c.reasons.length).map((c) => ({ id: c.id, reasons: c.reasons }));
     if (!ok.length) throw new HttpError(400, `적용할 수 있는 문장이 없어요: ${rejected[0]?.reasons.join(' / ') ?? ''}`);
@@ -816,6 +819,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const carousel = body.kind === 'carousel';
     const imageFiles = carousel ? carouselFiles(render.outputDir) : undefined;
     if (carousel && (imageFiles?.length ?? 0) < 2) throw new HttpError(409, '레시피 카드 묶음이 없어요. 영상을 다시 만들면 함께 만들어져요.');
+    if (carousel && imageFiles!.length > MAX_CAROUSEL_CARDS) {
+      throw new HttpError(409, `레시피 카드가 ${imageFiles!.length}장이라 인스타그램 캐러셀(10장까지)로 올릴 수 없어요. 카드를 잘라 내면 뒤쪽 단계·팁이 빠져서 막았어요.`);
+    }
     const dup = repo.listPublications(pid).find((p) => p.platform === 'instagram' && p.status === 'published' && p.scriptVersion === render.scriptVersion && p.note.includes(CAROUSEL_NOTE) === carousel);
     if (dup && !body.confirmDuplicate) throw new HttpError(409, `이 콘텐츠는 이미 인스타그램에 ${carousel ? '레시피 카드로 ' : ''}올렸어요 (${dup.url || '주소 없음'}). 다시 올리려면 확인이 필요해요.`, 'duplicate');
     const caption = String(body.caption ?? '').trim();

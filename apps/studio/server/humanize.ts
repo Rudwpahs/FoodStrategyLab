@@ -85,8 +85,8 @@ export interface HumanizeResult {
 }
 
 /** 게이트를 다시 검사한다 (적용할 때 화면에서 받은 결과를 그대로 믿지 않는다) */
-export function verifyRewrites(kind: HumanizeKind, pairs: { id: string; before: string; after: string }[], keep: string[]) {
-  const opts: GateOptions = { keep, spoken: kind === 'script' };
+export function verifyRewrites(kind: HumanizeKind, pairs: { id: string; before: string; after: string }[], keep: string[], ingredients: string[] = []) {
+  const opts: GateOptions = { keep, ingredients, spoken: kind === 'script' };
   return pairs.map((p) => ({ ...p, reasons: p.before === p.after ? [] : rewriteProblems(p.before, p.after, opts) }));
 }
 
@@ -96,7 +96,7 @@ export class Humanizer {
     private call: RewriteFn = claudeRewrite,
   ) {}
 
-  async run(kind: HumanizeKind, items: HumanizeItem[], opts: { keep: string[]; force?: boolean }): Promise<HumanizeResult> {
+  async run(kind: HumanizeKind, items: HumanizeItem[], opts: { keep: string[]; ingredients?: string[]; force?: boolean }): Promise<HumanizeResult> {
     const list = items.filter((i) => i.text.trim());
     if (!list.length) throw new HttpError(400, '다듬을 문장이 없어요.');
     const joined = list.map((i) => i.text).join('\n\n');
@@ -125,6 +125,7 @@ export class Humanizer {
       kind,
       list.map((i) => ({ id: i.id, before: i.text, after: byId.get(i.id) ?? i.text })),
       opts.keep,
+      opts.ingredients,
     );
     const result: HumanizedItem[] = checked.map((c) => {
       const missing = !byId.has(c.id);

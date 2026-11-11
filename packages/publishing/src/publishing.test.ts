@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { SAMPLE_RECIPES, formatIngredient, generateTemplateScript } from '@mat-lab/recipe-core';
-import { buildTimeline } from '@mat-lab/video/timeline';
+import { buildTimeline, captionChunks } from '@mat-lab/video/timeline';
 import { buildBlogPost, buildSocialCopy, buildSrt, buildZip, markdownToHtml } from './index.ts';
 
 const recipe = SAMPLE_RECIPES[0]!;
@@ -64,6 +64,20 @@ describe('자막·묶음', () => {
     expect(stamps.length).toBeGreaterThan(script.scenes.length);
     stamps.forEach(([a, b]) => expect(a! < b!).toBe(true));
     expect(srt.startsWith('1\n00:00:00,000')).toBe(true);
+  });
+
+  it('SRT는 영상 자막과 같은 실측 어절 시간으로 나뉜다', () => {
+    const script = generateTemplateScript(recipe);
+    const timings = buildTimeline(script, script.scenes.map(() => null));
+    const t = timings[0]!;
+    const n = script.scenes[0]!.line.trim().split(/\s+/).length;
+    // 앞쪽 어절은 빨리, 마지막 어절은 늦게 말한 실측 시간
+    t.words = Array.from({ length: n }, (_, i) => [i * 2, i === n - 1 ? t.speechFrames - 1 : i * 2 + 2] as [number, number]);
+    const first = buildSrt({ ...script, scenes: [script.scenes[0]!] }, [t]).split('\n\n')[0]!;
+    const chunk = captionChunks(script.scenes[0]!.line, t.speechFrames, t.words)[0]!;
+    expect(first).toContain(chunk.text);
+    const end = Math.round(((t.from + chunk.to) / 30) * 1000);
+    expect(first).toContain(`,${String(end % 1000).padStart(3, '0')}`);
   });
 
   it('ZIP에 파일이 그대로 들어간다', () => {

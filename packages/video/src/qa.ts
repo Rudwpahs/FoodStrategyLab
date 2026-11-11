@@ -1,4 +1,4 @@
-import type { Script } from '@mat-lab/recipe-core';
+import { lcsLength, type Script } from '@mat-lab/recipe-core';
 import { speechPlayback } from './speechPlayback.ts';
 import type { SceneTiming } from './timeline.ts';
 
@@ -162,19 +162,6 @@ export function auditFrames(brightness: number[], step: number): QaIssue[] {
 
 const norm = (t: string) => t.replace(/[^0-9A-Za-z가-힣]/g, '');
 
-/** 최장 공통 부분열 길이 (글자 단위) */
-function lcs(a: string, b: string): number {
-  const x = [...a];
-  const y = [...b];
-  let prev = new Uint16Array(y.length + 1);
-  let cur = new Uint16Array(y.length + 1);
-  for (let i = 1; i <= x.length; i++) {
-    for (let j = 1; j <= y.length; j++) cur[j] = x[i - 1] === y[j - 1] ? prev[j - 1]! + 1 : Math.max(prev[j]!, cur[j - 1]!);
-    [prev, cur] = [cur, prev];
-  }
-  return prev[y.length]!;
-}
-
 /**
  * 한 글자만 달라도 뜻이 반대가 되는 조리 핵심어 (불 세기). 받아쓰기가 조금 틀려도 넘어가는 어절 비교(60% 일치)와 달리
  * 이 말은 대사와 똑같이 들려야 한다. 긴 말(중약불)을 먼저 찾아 '약불'과 헷갈리지 않게 한다.
@@ -193,10 +180,10 @@ export function lineMatch(expected: string, heard: string): { ratio: number; tru
   const e = norm(expected);
   const h = norm(heard);
   if (!e) return { ratio: 1, truncated: false, missing: [], critical: [] };
-  const common = lcs(e, h);
+  const common = lcsLength(e, h);
   const ratio = common / e.length;
   const tail = norm(expected.trim().split(/\s+/).slice(-2).join(''));
-  const truncated = h.length < e.length * 0.85 && tail.length > 0 && lcs(tail, h.slice(-tail.length - 4)) < tail.length * 0.5;
+  const truncated = h.length < e.length * 0.85 && tail.length > 0 && lcsLength(tail, h.slice(-tail.length - 4)) < tail.length * 0.5;
   const heardTerms = keyTerms(heard);
   const unheard = (term: string) => !heardTerms.includes(term);
   const missing = expected
@@ -204,7 +191,7 @@ export function lineMatch(expected: string, heard: string): { ratio: number; tru
     .split(/\s+/)
     .filter((w) => {
       const n = norm(w);
-      return (n.length >= 2 && lcs(n, h) < n.length * 0.6) || keyTerms(w).some(unheard);
+      return (n.length >= 2 && lcsLength(n, h) < n.length * 0.6) || keyTerms(w).some(unheard);
     });
   const critical = [...new Set(keyTerms(expected).filter(unheard))];
   return { ratio, truncated, missing, critical };

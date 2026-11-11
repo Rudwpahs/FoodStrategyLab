@@ -5,7 +5,7 @@ import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt,
 import { FPS, buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
 import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
-import { recipeCardPages } from '@mat-lab/video/cards';
+import { recipeCardPlan } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
 import { HttpError, creditedReviewer, type RenderQa, type RenderQaIssue, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
@@ -336,8 +336,15 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     await renderer.renderStillImage('RecipeCard', { recipe, reviewed: Boolean(approval), reviewer: creditedReviewer(approval), cleanDraft: !approval }, path.join(outDir, 'recipe-card.png'));
     // 넘겨 보는 레시피 카드 (인스타그램 캐러셀용, JPEG). 실패해도 영상 제작은 끝낸다
     set('레시피 카드 묶음', 0.9);
+    const plan = recipeCardPlan(recipe);
+    if (plan.overflow) {
+      // 10장을 넘으면 캐러셀로 올릴 수 없다 (서버가 게시를 막는다). 검사 결과에 남겨 화면에 보인다
+      qa.issues.push({ level: 'warning', code: 'skipped', message: plan.overflow });
+      repo.setRenderQa(renderId, qa);
+      fs.writeFileSync(path.join(outDir, 'qa.json'), JSON.stringify(qa, null, 2));
+    }
     try {
-      const pages = recipeCardPages(recipe);
+      const pages = plan.pages;
       for (let i = 0; i < pages.length; i++) {
         const png = path.join(outDir, `carousel-${String(i + 1).padStart(2, '0')}.png`);
         await renderer.renderStillImage('CarouselCard', { recipe, reviewed: Boolean(approval), reviewer: creditedReviewer(approval), cleanDraft: !approval, page: i }, png);
@@ -398,7 +405,7 @@ export async function auditVideo(video: string, timings: SceneTiming[], script: 
     issues.push({ level: 'warning', code: 'skipped', message: '소리 검사(대사 끝 잘림·목소리 없는 장면·긴 무음)를 하지 못했어요. 영상을 직접 들어 보고 확인해 주세요.' });
   }
   try {
-    issues.push(...auditFrames(await frameBrightness(video, 0.5), 0.5));
+    issues.push(...auditFrames(await frameBrightness(video, BLACK_FRAME_STEP), BLACK_FRAME_STEP));
     checked.push('검은 화면');
   } catch (e) {
     console.warn('[자동 검사] 화면 검사 실패:', (e as Error).message);
@@ -411,6 +418,8 @@ export async function auditVideo(video: string, timings: SceneTiming[], script: 
  * 받아쓰기와 대사의 글자 일치 비율 문턱 (실험으로 정한 값, 근거 데이터는 없다).
  * MATCH_REDO 미만이면 음성을 다시 만들고, MATCH_CLOSE 미만이면서 빠진 어절이 있으면 들어 보라고 알린다.
  */
+/** 검은 화면을 찾는 간격(초). 0.5초면 짧게 깜빡이는 검은 화면을 놓쳐서 줄였다 (30초 영상에 약 120장) */
+const BLACK_FRAME_STEP = 0.25;
 const MATCH_REDO = 0.6;
 const MATCH_CLOSE = 0.92;
 
@@ -451,6 +460,7 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
       m = m2;
       text = heard2.text;
     }
+    if (m.critical.length) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 불 세기 "${m.critical.join('", "')}"이(가) 다르게 들려요 (받아쓰기: "${text.trim().slice(0, 40)}"). 꼭 들어 보고 확인해 주세요.` });
     if (m.truncated) qa.issues.push({ level: 'error', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사 중간에서 끊겨요 (들린 말: "${text.trim().slice(0, 40)}").` });
     else if (m.ratio < MATCH_REDO) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사와 많이 다르게 들려요 (들린 말: "${text.trim().slice(0, 40)}").` });
     else if (m.missing.length && m.ratio < MATCH_CLOSE) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });

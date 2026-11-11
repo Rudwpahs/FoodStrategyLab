@@ -5,7 +5,7 @@ import { SAMPLE_RECIPES, buildStyledScript } from '@mat-lab/recipe-core';
 import { QUICK_RULES } from '@mat-lab/publishing';
 import { createApp } from './app.ts';
 import { openDb } from './db.ts';
-import { Humanizer, rewriteCostUsd, type RewriteFn } from './humanize.ts';
+import { Humanizer, rewriteCostUsd, verifyRewrites, type RewriteFn } from './humanize.ts';
 import { monthSpentUsd } from './claudeUsage.ts';
 import { Repo } from './repo.ts';
 
@@ -147,5 +147,13 @@ describe('im-not-ai 윤문 (가짜 Claude)', () => {
   it('비용 계산: 캐시 쓰기 1.25배, 캐시 읽기 0.1배', () => {
     expect(rewriteCostUsd('claude-opus-5-5', { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 })).toBeCloseTo(4);
     expect(rewriteCostUsd('claude-opus-5-5', { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 1_000_000, cacheReadTokens: 1_000_000 })).toBeCloseTo(5.4);
+  });
+});
+
+describe('윤문 다시 검사: 재료 이름', () => {
+  it('원문에 있던 재료 이름이 빠진 윤문은 채택하지 않는다', () => {
+    const pairs = [{ id: 'a', before: '호두는 끓는 물에 데쳐요.', after: '견과는 끓는 물에 데쳐요.' }];
+    expect(verifyRewrites('script', pairs, [], ['호두'])[0]!.reasons.join()).toContain('재료 "호두"');
+    expect(verifyRewrites('script', pairs, [])[0]!.reasons).toEqual([]);
   });
 });

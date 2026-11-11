@@ -18,7 +18,7 @@ export function buildSrt(script: Script, timings: SceneTiming[], fps = 30): stri
   for (const scene of script.scenes) {
     const t = byId.get(scene.id);
     if (!t) continue;
-    for (const c of captionChunks(scene.line, Math.max(1, t.speechFrames))) {
+    for (const c of captionChunks(scene.line, Math.max(1, t.speechFrames), t.words)) {
       entries.push(`${entries.length + 1}\n${stamp(t.from + c.from, fps)} --> ${stamp(t.from + c.to, fps)}\n${c.text}\n`);
     }
   }
