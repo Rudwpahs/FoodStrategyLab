@@ -67,7 +67,8 @@ const Scatter: React.FC<{ geometry: BufferGeometry; items: Inst[]; gloss?: numbe
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     m.computeBoundingSphere();
-  });
+    // 조각이 바뀔 때만 다시 쓴다 (밥알은 1500개라 매 프레임 쓰면 휴대폰 미리보기가 끊긴다)
+  }, [items, geometry]);
   if (!items.length) return null;
   return (
     <instancedMesh key={`${geometry.uuid}:${items.length}`} ref={ref} args={[geometry, undefined, items.length]} castShadow={shadows} receiveShadow={shadows}>
@@ -165,8 +166,10 @@ const Medley: React.FC<{ food: FoodProfile; cook: number; jiggle?: number; radiu
   size = 1,
   amount = 1,
 }) => {
-  const pieces = piecesOf(food);
-  const groups = useMemo(() => layoutPieces(pieces, { radius, mound, cook: Math.round(cook * 20) / 20, garnish, size, amount }), [pieces, radius, mound, cook, garnish, size, amount]);
+  const pieces = useMemo(() => piecesOf(food), [food]);
+  // 익힘은 20단계로만 반영한다: 조리 장면에서 매 프레임 조각을 다시 배치하지 않게
+  const cookStep = Math.round(cook * 20) / 20;
+  const groups = useMemo(() => layoutPieces(pieces, { radius, mound, cook: cookStep, garnish, size, amount }), [pieces, radius, mound, cookStep, garnish, size, amount]);
   const sauceColor = mix(food.rawColor, food.cookedColor, cook);
   const nutty = pieces[0]?.shape === 'nut';
   return (
@@ -293,7 +296,8 @@ export const Bowl: React.FC<{ children?: React.ReactNode; liquid?: string; posit
 const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?: boolean }> = ({ food, cook, flip = 0, soggy }) => {
   const spots = useBits(9, 0.11, 21);
   const color = soggy ? mix(food.rawColor, '#B8A27A', 0.4) : mix(food.rawColor, food.cookedColor, cook);
-  const groups = useMemo(() => layoutPieces(piecesOf(food).filter((p) => p.shape !== 'seed'), { radius: 0.13, mound: 0, cook: Math.round(cook * 10) / 10, amount: 0.7, size: 0.8, seed: 9 }), [food, cook]);
+  const cookStep = Math.round(cook * 10) / 10;
+  const groups = useMemo(() => layoutPieces(piecesOf(food).filter((p) => p.shape !== 'seed'), { radius: 0.13, mound: 0, cook: cookStep, amount: 0.7, size: 0.8, seed: 9 }), [food, cookStep]);
   const lift = Math.sin(flip * Math.PI) * 0.16;
   return (
     <group position={[0, 0.012 + lift, 0]} rotation={[flip * Math.PI, 0, 0]} scale={[1, soggy ? 0.55 : 1, 1]}>
@@ -320,11 +324,18 @@ const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?
 
 /** 나물·잎채소: 구겨진 잎 조각 더미 */
 const Leaves: React.FC<{ color: string; count?: number; radius?: number; mound?: number; seed?: number; gloss?: number }> = ({ color, count = 12, radius = 0.11, mound = 0.05, seed = 5, gloss = 0.3 }) => {
-  const groups = useMemo(() => layoutPieces([{ shape: 'leaf', color }], { radius, mound, cook: 0, amount: count / 11, size: 1.1, seed }), [color, count, radius, mound, seed]);
+  const groups = useMemo(
+    () =>
+      layoutPieces([{ shape: 'leaf', color }], { radius, mound, cook: 0, amount: count / 11, size: 1.1, seed }).map((g) => ({
+        ...g,
+        items: g.items.map((it) => ({ ...it, c: mix(it.c, '#2F6E2A', (it.p[0] * 31 + it.p[2] * 17) % 1 > 0.5 ? 0.25 : 0) })),
+      })),
+    [color, count, radius, mound, seed],
+  );
   return (
     <group>
       {groups.map((g) => (
-        <Scatter key={g.variant} geometry={pieceGeometry('leaf', g.variant)} items={g.items.map((it) => ({ ...it, c: mix(it.c, '#2F6E2A', (it.p[0] * 31 + it.p[2] * 17) % 1 > 0.5 ? 0.25 : 0) }))} gloss={gloss} side={2} />
+        <Scatter key={g.variant} geometry={pieceGeometry('leaf', g.variant)} items={g.items} gloss={gloss} side={2} />
       ))}
     </group>
   );
@@ -502,6 +513,7 @@ export const PlatedFood: React.FC<{ food: FoodProfile | null; failed?: boolean; 
 
 const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: number }> = ({ food, failed, frame }) => {
   const top = [0, 0.022, 0] as [number, number, number];
+  const seeds = useMemo(() => ({ ...food, pieces: food.pieces.filter((p) => p.shape === 'seed') }), [food]);
   // 깨 고명은 원본 재료에 깨가 있을 때만 (없는 재료를 그리지 않는다)
   const garnish = !failed;
   const content = (() => {
@@ -523,7 +535,7 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
           <group position={top}>
             <Leaves color={failed ? '#7C8A4A' : food.cookedColor} count={18} radius={0.1} mound={failed ? 0.015 : 0.05} gloss={failed ? 0.9 : 0.45} />
             <group position={[0, failed ? 0.015 : 0.05, 0]}>
-              <Medley food={{ ...food, pieces: food.pieces.filter((p) => p.shape === 'seed') }} cook={0} radius={0.05} mound={0.01} sauce={false} garnish={garnish} />
+              <Medley food={seeds} cook={0} radius={0.05} mound={0.01} sauce={false} garnish={garnish} />
             </group>
           </group>
         );
