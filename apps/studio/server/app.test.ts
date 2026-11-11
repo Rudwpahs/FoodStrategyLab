@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '@mat-lab/recipe-core';
@@ -379,6 +380,12 @@ describe('장면별 AI 클립', () => {
     expect((await fetch(`${base}/projects/${pid}/scenes/..%2Fx/media`, { method: 'PUT', headers: { 'content-type': 'image/png' }, body: png })).status).toBe(400);
     const removed = await call('DELETE', `/projects/${pid}/scenes/s3/media`);
     expect(removed.body.sceneMedia).toEqual({});
+  });
+});
+
+describe('테스트 격리', () => {
+  it('테스트 파일마다 따로 만든 데이터 폴더를 쓴다 (동시에 돌 때 settings.json 등이 겹치지 않게)', () => {
+    expect(path.basename(DATA_DIR)).toMatch(/^matlab-test-/);
   });
 });
 

@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, buildStyledScript } from '@mat-lab/recipe-core';

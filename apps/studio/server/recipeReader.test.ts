@@ -1,3 +1,4 @@
+import './testDataDir.ts';
 import fs from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
