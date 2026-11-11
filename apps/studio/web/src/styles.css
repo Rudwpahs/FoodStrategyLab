@@ -119,16 +119,14 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .swatch i { width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--ink); display: inline-block; }
 .empty { text-align: center; padding: 48px; color: var(--muted); }
 
+/* ── 좁은 화면 ── */
 @media (max-width: 900px) {
-  .grid2, .compare { grid-template-columns: 1fr; }
+  /* 화면 코드에 직접 적힌 두 칸 배치(영상 화면)도 한 칸으로 */
+  .grid2 { grid-template-columns: 1fr !important; }
+  .compare { grid-template-columns: 1fr; }
   .chars { grid-template-columns: repeat(2, 1fr); }
 }
-
 /* ── 휴대폰 화면 ── */
-@media (max-width: 900px) {
-  /* 화면 코드에 직접 적힌 두 칸 배치도 한 칸으로 */
-  .grid2 { grid-template-columns: 1fr !important; }
-}
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
   .topbar .brand small { display: none; }
@@ -145,6 +143,11 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
   .btn { min-height: 40px; }
   video { max-width: 100%; }
   .blog-preview img { max-width: 100%; }
+}
+
+/* 아이폰 사파리는 16px보다 작은 입력칸을 누르면 화면을 확대한다 (가로 화면·아이패드 포함) */
+@media (max-width: 640px), (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
 }
 
 /* 후보 영상 5개 */
@@ -181,8 +184,12 @@ pre.copy { white-space: pre-wrap; background: #fffaf3; border: 1.5px solid var(-
 .diff .after { color: #1f5f3f; }
 .diff .rejected { color: #a05a2c; font-style: italic; }
 
-/* 인스타그램 올리기 전 점검 */
-.ig-checks { gap: 4px; padding: 8px 10px; border: 1px solid #eadfcd; border-radius: 10px; background: #fffdf8; }
-.ig-check.ok { color: #2f7d55; }
-.ig-check.warn { color: #a05a2c; }
-.ig-check.error { color: #b3261e; font-weight: 600; }
+/* 점검 목록 (인스타그램 올리기 전 점검, 영상 자동 품질 검사) */
+.check-list { gap: 4px; padding: 8px 10px; border: 1px solid #eadfcd; border-radius: 10px; background: #fffdf8; }
+.check-item.ok { color: #2f7d55; }
+.check-item.warn { color: #a05a2c; }
+.check-item.error { color: #b3261e; font-weight: 600; }
+
+/* 고를 수 있는 상자 (후보 영상·연출·훅·블로그 원고) */
+.pick { border: 1px solid #ddd; background: var(--white); }
+.pick.on { border: 3px solid var(--red); background: #fff3ef; }

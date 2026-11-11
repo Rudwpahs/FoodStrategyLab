@@ -16,12 +16,13 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
   const [confirm, setConfirm] = useState(false);
 
   useEffect(() => {
-    api.expertNotes(projectId).then((r) => {
+    void run(() => api.expertNotes(projectId)).then((r) => {
+      if (!r) return;
       setQuestions(r.questions);
       setNotes(r.notes);
       setDraft(r.notes.answers);
     });
-  }, [projectId]);
+  }, [projectId, run]);
 
   const required = questions.filter((q) => q.required.includes(style));
   const optional = questions.filter((q) => q.optional.includes(style) && !q.required.includes(style));
@@ -40,7 +41,7 @@ export const ExpertNotesPanel: React.FC<{ projectId: number; style: BlogStyle; o
   const field = (q: ExpertQuestion, must: boolean) => (
     <label key={q.id} className="field">
       <span>
-        {must && <b style={{ color: '#e2533a' }}>필수 </b>}
+        {must && <b style={{ color: 'var(--red)' }}>필수 </b>}
         {q.question}
       </span>
       <span className="hint">{q.hint}</span>

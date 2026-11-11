@@ -4,23 +4,29 @@ import { api, copyHtml, copyText } from '../api.ts';
 import { ExpertNotesPanel } from '../components/ExpertNotesPanel.tsx';
 import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { PublicationsPanel } from '../components/PublicationsPanel.tsx';
+import { Fold } from '../components/Fold.tsx';
 import { useApp } from '../App.tsx';
 import type { StepProps } from '../pages/ProjectPage.tsx';
 
 type Blog = Awaited<ReturnType<typeof api.blog>>;
 
-export const PublishStep: React.FC<StepProps> = ({ project, go, reload }) => {
+export const PublishStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
   const { run } = useApp();
   const [blog, setBlog] = useState<Blog | null>(null);
-  // [영상·블로그]에서 고른 문체를 기본으로 보여 준다
-  const [style, setStyle] = useState<BlogStyle | ''>((project.blogStyle as BlogStyle) || '');
+  // 글 유형은 서버에 저장된 값 하나만 쓴다 (복사하는 원고·ZIP 안 원고·검수 화면이 같은 원고를 말하도록)
+  const style = (project.blogStyle as BlogStyle) || '';
+  const [savingStyle, setSavingStyle] = useState(false);
   const [tick, setTick] = useState(0);
   const done = project.renders.find((r) => r.status === 'done' && r.scriptVersion === project.latest?.version);
   const approvedLatest = project.latest !== null && project.versionState.approvedScriptVersion === project.latest.version;
   const reviewed = project.approval !== null;
 
   useEffect(() => {
-    run(() => api.blog(project.id, style || undefined)).then((b) => b && setBlog(b));
+    let alive = true;
+    void run(() => api.blog(project.id, style || undefined)).then((b) => alive && b && setBlog(b));
+    return () => {
+      alive = false;
+    };
   }, [project.updatedAt, project.status, style, tick]);
 
   if (!blog) return <div className="empty">불러오는 중…</div>;
@@ -39,7 +45,17 @@ export const PublishStep: React.FC<StepProps> = ({ project, go, reload }) => {
           <div className="muted small">네이버 블로그 글쓰기 API가 종료되어, 본문을 복사해 에디터에 붙여넣고 사진(썸네일·레시피 카드)을 직접 올립니다.</div>
           <label className="field">
             글 유형
-            <select value={style} onChange={(e) => setStyle(e.target.value as BlogStyle | '')}>
+            <select
+              value={style}
+              disabled={savingStyle}
+              onChange={async (e) => {
+                const next = e.target.value as BlogStyle | '';
+                setSavingStyle(true);
+                const p = await run(() => api.setBlogStyle(project.id, next), '글 유형을 바꿨어요 (내보내기 원고도 같이 바뀌어요)');
+                setSavingStyle(false);
+                if (p) setProject(p);
+              }}
+            >
               <option value="">기본 자동 원고 (레시피만)</option>
               {Object.entries(blog.styles).map(([k, v]) => (
                 <option key={k} value={k}>{v.label} — {v.summary}</option>
@@ -105,13 +121,15 @@ export const PublishStep: React.FC<StepProps> = ({ project, go, reload }) => {
             ) : (
               <div className="row">
                 <span className="muted">{done ? '승인 후 내려받을 수 있어요.' : '최신 대본으로 만든 영상이 없습니다.'}</span>
-                <button className="btn small" onClick={() => go('video')}>영상 제작으로 →</button>
+                <button className="btn small" onClick={() => go('video')}>영상·블로그로 →</button>
               </div>
             )}
             <div className="muted small">묶음에는 영상·커버·썸네일·레시피 카드·고른 블로그 원고·자막·게시 문구가 들어가요.</div>
           </div>
           <PublicationsPanel project={project} reload={reload} />
-          <ReelPrompts projectId={project.id} approved={reviewed} />
+          <Fold title="AI 영상 프롬프트 팩 (선택)">
+            <ReelPrompts projectId={project.id} approved={reviewed} />
+          </Fold>
         </div>
       </div>
     </div>
@@ -125,16 +143,15 @@ const ReelPrompts: React.FC<{ projectId: number; approved: boolean }> = ({ proje
   const { run } = useApp();
   const [pack, setPack] = useState<Pack | null>(null);
   return (
-    <div className="card stack">
+    <div className="stack">
       <div className="row">
-        <h2 style={{ margin: 0 }}>AI 영상 프롬프트 팩 (선택)</h2>
         <div className="spacer" />
         <button className="btn small" disabled={!approved} onClick={async () => setPack((await run(() => api.reelPrompts(projectId))) ?? null)}>
           {pack ? '다시 만들기' : '만들기'}
         </button>
       </div>
       <div className="muted small">
-        ChatGPT(이미지)·Gemini(영상)로 장면을 직접 만들 때 쓰는 프롬프트입니다. 캐릭터 시트 → 주방 배경 → 클립별(약 8초) 첫 프레임 → 영상 순서로, 같은 채팅에서 이어서 쓰세요. 만든 클립은 [영상 제작]에서 같은 번호에 올리세요.
+        ChatGPT(이미지)·Gemini(영상)로 장면을 직접 만들 때 쓰는 프롬프트입니다. 캐릭터 시트 → 주방 배경 → 클립별(약 8초) 첫 프레임 → 영상 순서로, 같은 채팅에서 이어서 쓰세요. 만든 클립은 [영상·블로그]의 "생성 AI 클립 올리기"에서 같은 번호에 올리세요.
         서비스별로 무료 사용량이 다르고 유료일 수 있으며, 생성 영상이 대사·분량을 바꾸면 쓰지 마세요. {approved ? '' : '(승인된 대본만)'}
       </div>
       {pack && (

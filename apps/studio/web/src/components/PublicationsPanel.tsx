@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api, type ProjectDetail, type Publication } from '../api.ts';
+import { api, isDuplicateError, renderFile, type ProjectDetail, type Publication } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { InstagramPublish } from './InstagramPublish.tsx';
 
@@ -19,7 +19,7 @@ const METRICS: [string, string][] = [
  * 인스타그램은 공식 API로 바로 올리거나(연결했을 때), 앱에서 직접 올리고 주소를 기록한다.
  */
 export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () => Promise<void> }> = ({ project, reload }) => {
-  const { run } = useApp();
+  const { run, notify } = useApp();
   const approved = project.latest !== null && project.versionState.approvedScriptVersion === project.latest.version;
   const render = project.renders.find((r) => r.status === 'done' && r.scriptVersion === project.latest?.version);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -27,17 +27,22 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
   const record = async (platform: Publication['platform'], status: 'published' | 'scheduled') => {
     const body = status === 'published' ? { platform, status, url: urls[platform] ?? '' } : { platform, status, scheduledAt: when };
-    let r = await run(() => api.addPublication(project.id, body), status === 'published' ? '게시 기록을 남겼어요' : '예약을 기록했어요');
-    if (r === undefined && status === 'published' && confirm('이미 게시 기록이 있어요. 그래도 새로 기록할까요?')) {
-      r = await run(() => api.addPublication(project.id, { ...body, confirmDuplicate: true }), '게시 기록을 남겼어요');
+    let r: Publication | undefined;
+    try {
+      r = await api.addPublication(project.id, body);
+    } catch (e) {
+      // 이미 같은 곳에 게시 기록이 있을 때만 한 번 더 묻는다. 다른 실패(승인 전, 주소 형식, 연결 끊김 등)는 그 이유를 보여 준다.
+      if (!isDuplicateError(e)) notify((e as Error).message, true);
+      else if (confirm(`${e.message}\n\n그래도 새로 기록할까요?`)) r = await run(() => api.addPublication(project.id, { ...body, confirmDuplicate: true }));
     }
     if (r) {
+      notify(status === 'published' ? '게시 기록을 남겼어요' : '예약을 기록했어요');
       setUrls((u) => ({ ...u, [platform]: '' }));
       await reload();
     }
   };
 
-  const img = (f: string) => (render ? `/media/renders/${render.id}/${f}` : '');
+  const img = (f: string) => (render ? renderFile(render.id, f) : '');
 
   return (
     <div className="stack">
@@ -95,7 +100,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>게시 이력과 성과</h2>
-        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 같은 연출을 3편 이상 모으면 [후보 고르기]에 방향이 보여요. 조회수는 참고만 해요.</div>
+        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 같은 연출을 3편 이상 모으면 [주제·영상 고르기]의 후보 영상에 방향이 보여요. 조회수는 참고만 해요.</div>
         {project.publications.length === 0 && <div className="muted">아직 기록이 없어요.</div>}
         {project.publications.map((p) => (
           <PublicationRow key={p.id} pub={p} onSaved={reload} />

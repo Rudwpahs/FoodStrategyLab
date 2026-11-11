@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
-import { api } from '../api.ts';
+import { api, renderFile } from '../api.ts';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
 import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { QaPanel } from '../components/QaPanel.tsx';
@@ -20,19 +20,25 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   // 대사별 AI 티 (im-not-ai 규칙 검사, 0원)
   const [tells, setTells] = useState<Record<string, string[]>>({});
 
+  // 레시피는 서버에서 받을 때마다 새 객체라 내용으로 비교한다
+  const recipeKey = JSON.stringify(project.recipe);
   useEffect(() => {
     setChecklist({});
     if (!latest) return;
+    let alive = true;
     api
       .aiTells(project.id)
-      .then((r) => setTells(Object.fromEntries(r.scenes.map((s) => [s.id, s.tells.map((t) => `[${t.rule}] ${t.found}`)]))))
-      .catch(() => setTells({}));
-    run(() => api.check(project.id)).then((r) => {
-      if (!r) return;
+      .then((r) => alive && setTells(Object.fromEntries(r.scenes.map((s) => [s.id, s.tells.map((t) => `[${t.rule}] ${t.found}`)]))))
+      .catch(() => alive && setTells({}));
+    void run(() => api.check(project.id)).then((r) => {
+      if (!alive || !r) return;
       setIssues(r.issues);
       setSeconds(r.estimatedSeconds);
     });
-  }, [latest?.version, project.recipe]);
+    return () => {
+      alive = false;
+    };
+  }, [latest?.version, recipeKey]);
 
   if (!latest) return <div className="card empty">검수할 대본이 없습니다. 먼저 대본을 만드세요.</div>;
 
@@ -67,7 +73,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
         <QaPanel render={render} onRemake={() => go('video')} />
         <div className="row" style={{ alignItems: 'flex-start' }}>
           {render ? (
-            <video src={`/media/renders/${render.id}/video.mp4`} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />
+            <video src={renderFile(render.id, 'video.mp4')} controls style={{ width: 240, borderRadius: 12, border: '2px solid var(--ink)' }} />
           ) : (
             <div className="issue warning" style={{ maxWidth: 320 }}>
               이 대본(v{latest.version})으로 만든 영상이 아직 없어요. 영상을 보고 승인하려면 먼저 검수용 영상을 만드세요.
@@ -171,7 +177,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
                 승인
               </button>
             </div>
-            {errors > 0 && <div className="issue error">원본 레시피와 다른 분량·재료·순서 {errors}건을 고쳐야 승인할 수 있어요. [후보 고르기]에서 대본을 고치세요.</div>}
+            {errors > 0 && <div className="issue error">원본 레시피와 다른 분량·재료·순서 {errors}건을 고쳐야 승인할 수 있어요. [주제·영상 고르기] 아래 "대본 직접 고치기"에서 고치세요.</div>}
           </>
         )}
       </div>

@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, type VideoProps } from '@mat-lab/video';
 import { api, photoColor, type RenderStatus } from '../api.ts';
 import { QaPanel } from '../components/QaPanel.tsx';
+import { ConnectionNote } from '../components/ConnectionNote.tsx';
+import { Fold } from '../components/Fold.tsx';
+import { poll } from '../poll.ts';
 import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
 import { BlogChoice } from '../components/BlogChoice.tsx';
@@ -14,35 +17,49 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
   const [preview, setPreview] = useState<{ props: VideoProps; voiced: boolean } | null>(null);
   const [voicing, setVoicing] = useState(false);
   const latestRender = project.renders[0];
-  const [render, setRender] = useState<RenderStatus | null>(null);
+  const [polled, setPolled] = useState<RenderStatus | null>(null);
+  const [failures, setFailures] = useState(0);
+  const [starting, setStarting] = useState(false);
+  // 늦게 온 미리보기 응답이 새 응답을 덮지 않게
+  const previewReq = useRef(0);
 
-  const loadPreview = () => run(() => api.preview(project.id)).then((r) => r && setPreview({ props: r.props, voiced: r.voiced }));
+  const loadPreview = async () => {
+    const my = ++previewReq.current;
+    const r = await run(() => api.preview(project.id));
+    if (r && my === previewReq.current) setPreview({ props: r.props, voiced: r.voiced });
+  };
 
+  // 레시피·클립은 서버에서 받을 때마다 새 객체라 내용으로 비교한다
+  const recipeKey = JSON.stringify(project.recipe);
+  const mediaKey = JSON.stringify(project.sceneMedia);
   useEffect(() => {
-    if (project.latest) loadPreview();
-  }, [project.latest?.version, project.status, project.photo?.url, project.recipe, project.sceneMedia]);
+    if (project.latest) void loadPreview();
+  }, [project.latest?.version, project.status, project.photo?.url, recipeKey, mediaKey]);
 
-  // 진행 중인 제작 작업 상태를 주기적으로 확인
+  // 제작 작업 상태를 주기적으로 확인 (요청이 실패해도 멈추지 않고 다시 확인)
   useEffect(() => {
     if (!latestRender) return;
-    let stop = false;
-    const tick = async () => {
-      const r = await api.render(latestRender.id).catch(() => null);
-      if (stop || !r) return;
-      setRender(r);
-      if (r.status === 'queued' || r.status === 'running') setTimeout(tick, 1500);
-      else if (latestRender.status !== r.status) reload();
-    };
-    tick();
-    return () => {
-      stop = true;
-    };
+    const startStatus = latestRender.status;
+    return poll(() => api.render(latestRender.id), 1500, {
+      onData: (r) => {
+        setPolled(r);
+        const active = r.status === 'queued' || r.status === 'running';
+        if (!active && startStatus !== r.status) void reload();
+        return active;
+      },
+      onFailures: setFailures,
+    }, { immediate: true });
   }, [latestRender?.id]);
 
   if (!project.latest) return <div className="card empty">먼저 대본을 만드세요.</div>;
   const approved = project.versionState.approvedScriptVersion === project.latest.version;
-  const busy = render?.status === 'queued' || render?.status === 'running';
-  const ttsOn = meta?.tts.provider === 'edge' || meta?.tts.provider === 'voicestudio';
+  // 지금 작업의 최신 상태 (아직 확인 전이면 서버가 준 목록의 상태로 판단)
+  const render = polled && polled.id === latestRender?.id ? polled : null;
+  const status = render?.status ?? latestRender?.status;
+  const busy = status === 'queued' || status === 'running';
+  // 목소리 엔진 상태를 아직 모르면(불러오기 실패 포함) '없음'으로 단정하지 않는다
+  const ttsOff = meta?.tts.provider === 'none';
+  const clips = Object.keys(project.sceneMedia).length;
 
   return (
     <div className="grid2" style={{ gridTemplateColumns: '400px 1fr' }}>
@@ -58,7 +75,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             compositionHeight={1920}
             fps={30}
             controls
-            style={{ width: 340, height: 604, borderRadius: 14, overflow: 'hidden', border: '2px solid var(--ink)' }}
+            style={{ width: '100%', maxWidth: 340, aspectRatio: '9 / 16', borderRadius: 14, overflow: 'hidden', border: '2px solid var(--ink)' }}
           />
         ) : (
           <div className="empty">불러오는 중…</div>
@@ -68,8 +85,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
         </div>
         <button
           className="btn"
-          disabled={!ttsOn || voicing}
-          title={ttsOn ? '' : 'VoiceStudio 앱을 켜거나 pip install edge-tts 후 서버를 다시 시작하세요'}
+          disabled={ttsOff || voicing}
           onClick={async () => {
             setVoicing(true);
             const r = await run(() => api.voice(project.id), '음성을 만들었습니다');
@@ -77,7 +93,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             if (r) loadPreview();
           }}
         >
-          {voicing ? '음성 만드는 중…' : ttsOn ? `음성 생성 (${meta?.tts.voice})` : '음성 없음 — [캐릭터·목소리]에서 VoiceStudio 연결'}
+          {voicing ? '음성 만드는 중…' : ttsOff ? '목소리 엔진 연결 안 됨 — [캐릭터·목소리]에서 확인' : `음성 생성${meta ? ` (${meta.tts.voice})` : ''}`}
         </button>
       </div>
 
@@ -118,7 +134,9 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             )}
           </div>
         </div>
-        <ClipUploads project={project} setProject={setProject} />
+        <Fold title={`생성 AI 클립 올리기 (선택${clips ? ` · ${clips}개 사용 중` : ''})`}>
+          <ClipUploads project={project} setProject={setProject} />
+        </Fold>
         <div className="card stack">
           <h2>영상 만들기</h2>
           {!approved ? (
@@ -129,19 +147,22 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
           ) : (
             <div className="muted">승인된 대본 v{project.latest.version}으로 세로 영상(1080×1920 MP4), 커버·썸네일, 레시피 카드를 만듭니다.</div>
           )}
-          <div className="muted small">내 PC에서 음성과 3D 영상을 만들어요. 그래픽카드가 없으면 20~30분 걸릴 수 있어요. 비용은 들지 않아요.</div>
+          <div className="muted small">클라우드 서버에서 목소리(GPU)와 3D 영상을 만들어요. 10~30분쯤 걸리고, 쓴 만큼 사용료가 나가요 (한 편 약 $0.5~1, 추정). 화면을 닫아도 서버에서 계속 만들어요.</div>
           <div className="row">
             <button
               className="btn primary"
-              disabled={busy}
+              disabled={busy || starting}
               onClick={async () => {
+                setStarting(true);
                 const r = await run(() => api.startRender(project.id), approved ? '제작을 시작했습니다' : '검수용 영상 제작을 시작했습니다');
-                if (r) reload();
+                setStarting(false);
+                if (r) await reload();
               }}
             >
-              {busy ? '만드는 중… (20분~1시간)' : approved ? '영상 만들기' : '검수용 영상 만들기'}
+              {busy ? '만드는 중… (10~30분)' : approved ? '영상 만들기' : '검수용 영상 만들기'}
             </button>
           </div>
+          <ConnectionNote failures={busy ? failures : 0} />
           {render && (
             <div className="stack">
               <div className="row small">

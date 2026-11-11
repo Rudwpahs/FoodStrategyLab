@@ -25,19 +25,69 @@ export interface UploadFile {
   data: string;
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${url}`, {
+/** 서버 오류. status로 어떤 실패인지 구분한다 (예: 409 = 이미 있음·이미 진행 중, 0 = 연결 안 됨) */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    /** 서버가 실패 종류를 따로 알려 줄 때 (예: 'duplicate') */
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * '이미 게시(기록)했어요 — 다시 하려면 확인' 오류인지.
+ * 서버는 승인 안 됨·영상 없음 같은 다른 실패에도 409를 쓰므로 상태 코드만으로는 구분할 수 없다.
+ */
+export function isDuplicateError(e: unknown): e is ApiError {
+  if (!(e instanceof ApiError) || e.status !== 409) return false;
+  return e.code === 'duplicate' || /다시 (기록하|올리)려면 확인이 필요해요/.test(e.message);
+}
+
+export const OFFLINE_MESSAGE = '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 뒤 다시 눌러 주세요.';
+export const NOT_JSON_MESSAGE = '서버가 잠에서 깨는 중이거나 잠시 불안정해요. 30초쯤 뒤에 다시 눌러 주세요.';
+
+/** 응답 읽기. JSON이 아니면(서버가 깨어나는 중, 게이트웨이 오류 등) 영어 오류 대신 쉬운 말로 알린다 */
+export async function readResponse<T>(res: Response, url: string): Promise<T> {
+  const text = await res.text();
+  let data: { error?: string; code?: string } | null | undefined;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = undefined;
+  }
+  // 로그인이 풀렸으면 로그인 화면으로
+  if (res.status === 401 && !url.startsWith('/auth/') && typeof window !== 'undefined') window.dispatchEvent(new Event('matlab:logged-out'));
+  if (data === undefined) throw new ApiError(res.ok ? NOT_JSON_MESSAGE : `${NOT_JSON_MESSAGE} (응답 ${res.status})`, res.status);
+  if (!res.ok) throw new ApiError(data?.error ?? `요청 실패 (${res.status})`, res.status, data?.code);
+  return data as T;
+}
+
+async function send<T>(url: string, init: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${url}`, init);
+  } catch {
+    throw new ApiError(OFFLINE_MESSAGE, 0);
+  }
+  return readResponse<T>(res, url);
+}
+
+function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  return send<T>(url, {
     method,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  // 로그인이 풀렸으면 로그인 화면으로
-  if (res.status === 401 && !url.startsWith('/auth/')) window.dispatchEvent(new Event('matlab:logged-out'));
-  if (!res.ok) throw new Error(data?.error ?? `요청 실패 (${res.status})`);
-  return data as T;
 }
+
+/** 파일을 그대로 올린다 (사진·클립) */
+const upload = <T>(url: string, file: File) => send<T>(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
+
+/** 완성 영상 폴더의 파일 주소 */
+export const renderFile = (renderId: number, file: string) => `/media/renders/${renderId}/${file}`;
 
 export interface Meta {
   tts: { provider: 'voicestudio' | 'edge' | 'none'; voice: string };
@@ -118,8 +168,6 @@ export const api = {
   setup: (input: { code: string; username: string; displayName: string; password: string }) => request<{ user: AuthState['user'] }>('POST', '/auth/setup', input),
   voiceSettings: () => request<VoiceInfo>('GET', '/voice'),
   setVoice: (voice: string) => request<{ selected: string }>('PUT', '/voice', { voice }),
-  designVoice: () => request<{ profile: { name: string }; created: boolean }>('POST', '/voice/design', { name: '맛조수' }),
-  voiceSample: (text?: string) => request<{ url: string; seconds: number }>('POST', '/voice/sample', { text }),
   setVoicePreset: (id: string) => request<{ selected: string; selectedPreset: string }>('PUT', '/voice/preset', { id }),
   setVoiceTempo: (tempo: number) => request<{ tempo: number }>('PUT', '/voice/tempo', { tempo }),
   startVoiceSamples: (text: string) => request<VoiceSamples>('POST', '/voice/samples', { text }),
@@ -148,7 +196,6 @@ export const api = {
   chooseTopic: (id: number, body: { topic: string; principle: string; category?: string }) => request<ProjectDetail>('PUT', `/projects/${id}/topic`, body),
   confirmAi: (id: number) => request<unknown>('POST', `/projects/${id}/source/confirm`, {}),
   createFromFiles: (files: UploadFile[], memo: string) => request<{ id: number; aiFields: string[]; problems: string[] }>('POST', '/projects/from-files', { files, memo }),
-  selectCandidate: (id: number, style: StyleId, hookType: HookType) => request<{ project: ProjectDetail; notes: string[] }>('POST', `/projects/${id}/candidates/select`, { style, hookType }),
   blogCompare: (id: number) =>
     request<{ options: { style: BlogStyle; info: BlogStyleInfo; post: { title: string; markdown: string; html: string }; pending: ExpertQuestion[]; lint: LintIssue[] }[]; selected: string }>('GET', `/projects/${id}/blog/compare`),
   setBlogStyle: (id: number, style: BlogStyle | '') => request<ProjectDetail>('PUT', `/projects/${id}/blog-style`, { style }),
@@ -185,18 +232,8 @@ export const api = {
   aiTells: (id: number) => request<{ scenes: { id: string; tells: { rule: string; severity: string; found: string; fix: string }[] }[]; source: string }>('GET', `/projects/${id}/ai-tells`),
   expertNotes: (id: number) => request<{ notes: ExpertNotes; questions: ExpertQuestion[]; styles: Record<BlogStyle, BlogStyleInfo> }>('GET', `/projects/${id}/expert-notes`),
   saveExpertNotes: (id: number, answers: ExpertNotes['answers'], confirmBy?: string) => request<{ notes: ExpertNotes }>('PUT', `/projects/${id}/expert-notes`, { answers, confirmBy }),
-  uploadPhoto: async (id: number, file: File, color: string) => {
-    const res = await fetch(`/api/projects/${id}/photo?color=${encodeURIComponent(color)}`, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error ?? '사진 업로드 실패');
-    return data as ProjectDetail;
-  },
-  uploadSceneMedia: async (id: number, sceneId: string, file: File) => {
-    const res = await fetch(`/api/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error ?? '업로드 실패');
-    return data as ProjectDetail;
-  },
+  uploadPhoto: (id: number, file: File, color: string) => upload<ProjectDetail>(`/projects/${id}/photo?color=${encodeURIComponent(color)}`, file),
+  uploadSceneMedia: (id: number, sceneId: string, file: File) => upload<ProjectDetail>(`/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`, file),
   deleteSceneMedia: (id: number, sceneId: string) => request<ProjectDetail>('DELETE', `/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`),
   deletePhoto: (id: number) => request<ProjectDetail>('DELETE', `/projects/${id}/photo`),
   reelPrompts: (id: number) =>
@@ -229,6 +266,7 @@ export async function photoColor(file: File): Promise<string> {
   const ctx = canvas.getContext('2d')!;
   const s = Math.min(bitmap.width, bitmap.height) * 0.5;
   ctx.drawImage(bitmap, (bitmap.width - s) / 2, (bitmap.height - s) / 2, s, s, 0, 0, 40, 40);
+  bitmap.close();
   const { data } = ctx.getImageData(0, 0, 40, 40);
   let r = 0, g = 0, b = 0;
   for (let i = 0; i < data.length; i += 4) {

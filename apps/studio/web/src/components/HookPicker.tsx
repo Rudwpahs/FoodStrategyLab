@@ -20,10 +20,12 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
   /** 대표 훅을 이미 골라 준 연출 */
   const defaultedFor = useRef<StyleId | null>(null);
 
+  // 레시피는 서버에서 받을 때마다 새 객체라 내용으로 비교한다
+  const recipeKey = JSON.stringify(project.recipe);
   useEffect(() => {
     let alive = true;
-    api.hooks(project.id, style).then((r) => {
-      if (!alive) return;
+    void run(() => api.hooks(project.id, style)).then((r) => {
+      if (!alive || !r) return;
       setStyles(r.styles);
       setHooks(r.hooks);
       setRepetition(r.repetition);
@@ -36,7 +38,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
     return () => {
       alive = false;
     };
-  }, [project.id, style, project.recipe]);
+  }, [project.id, style, recipeKey, run]);
   const pickStyle = (id: StyleId) => setStyle(id);
 
   const available = hooks.filter((h) => h.available);
@@ -74,7 +76,8 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
                 key={id}
                 type="button"
                 onClick={() => pickStyle(id)}
-                style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: on ? '3px solid #e2533a' : '1px solid #ddd', background: on ? '#fff3ef' : '#fff', cursor: 'pointer' }}
+                className={`pick${on ? ' on' : ''}`}
+                style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, cursor: 'pointer' }}
               >
                 <div style={{ fontWeight: 800 }}>{s?.label ?? id}</div>
                 <div className="small muted">{s?.summary}</div>
@@ -96,7 +99,7 @@ export const HookPicker: React.FC<{ project: ProjectDetail; setProject: (p: Proj
           {available.map((h) => {
             const on = h.type === chosen;
             return (
-              <label key={h.type} style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, border: on ? '3px solid #e2533a' : '1px solid #ddd', background: on ? '#fff3ef' : '#fff', cursor: 'pointer' }}>
+              <label key={h.type} className={`pick${on ? ' on' : ''}`} style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, cursor: 'pointer' }}>
                 <input type="radio" name="hook" checked={on} onChange={() => setChosen(h.type)} />
                 <div className="stack" style={{ gap: 4 }}>
                   <div>

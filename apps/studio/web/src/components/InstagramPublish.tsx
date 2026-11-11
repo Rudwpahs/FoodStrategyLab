@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { instagramCaptionChecks, type IgCheck } from '@mat-lab/recipe-core';
-import { api, type InstagramJob, type InstagramStatus } from '../api.ts';
+import { api, isDuplicateError, type InstagramJob, type InstagramStatus } from '../api.ts';
+import { poll } from '../poll.ts';
+import { ConnectionNote } from './ConnectionNote.tsx';
 import { useApp } from '../App.tsx';
 
 const STEP: Record<InstagramJob['status'], string> = {
@@ -27,6 +29,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
   const [trial, setTrial] = useState(false);
   // 레시피 카드(캐러셀) 장수: 영상과 따로 '넘겨 보는 레시피' 게시물로 올릴 수 있다
   const [cards, setCards] = useState(0);
+  const [failures, setFailures] = useState(0);
 
   const load = useCallback(() => api.instagram().then(setSt).catch(() => setSt(null)), []);
   useEffect(() => {
@@ -44,23 +47,25 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
         setCards(d.cards ?? 0);
         if (d.job) setJob(d.job);
       })
-      .catch(() => undefined);
+      .catch((e: Error) => notify(`설명 글 초안을 불러오지 못했어요: ${e.message}`, true));
   }, [renderId, approved, st?.connected]);
 
-  // 게시 작업 진행 상황 (3초마다)
+  // 게시 작업 진행 상황 (3초마다, 요청이 실패해도 멈추지 않고 다시 확인)
+  const jobId = job && job.status !== 'published' && job.status !== 'failed' ? job.id : null;
   useEffect(() => {
-    if (!job || job.status === 'published' || job.status === 'failed') return;
-    const t = setTimeout(async () => {
-      const next = await api.instagramJob(job.id).catch(() => null);
-      if (!next) return;
-      setJob(next);
-      if (next.status === 'published') {
-        notify('인스타그램에 올렸어요');
-        await onPublished();
-      }
-    }, 3000);
-    return () => clearTimeout(t);
-  }, [job, notify, onPublished]);
+    if (!jobId) return;
+    return poll(() => api.instagramJob(jobId), 3000, {
+      onData: (next) => {
+        setJob(next);
+        if (next.status === 'published') {
+          notify('인스타그램에 올렸어요');
+          void onPublished();
+        }
+        return next.status !== 'published' && next.status !== 'failed';
+      },
+      onFailures: setFailures,
+    });
+  }, [jobId, notify, onPublished]);
 
   if (!st) return null;
 
@@ -68,10 +73,11 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
     return (
       <div className="issue info stack" style={{ gap: 8 }}>
         <div>
-          공식 자동 게시: <b>설정 전</b> — Meta 개발자 앱 정보를 서버에 넣으면 여기서 바로 올릴 수 있어요 (안내: <code>docs/INSTAGRAM_SETUP.md</code>). 그 전에는 인스타그램 앱에서 올린 뒤 아래에 주소를 기록해 주세요.
+          인스타그램 자동 게시는 아직 준비 전이에요. 지금은 인스타그램 앱에서 올린 뒤 아래에 게시물 주소를 기록해 주세요.
         </div>
-        <div className="small">
-          Meta 앱의 <b>OAuth redirect URI</b>에 이 주소를 그대로 넣으세요:
+        <details className="small">
+          <summary>관리자용: 자동 게시 설정에 필요한 주소</summary>
+          Meta 개발자 앱의 OAuth redirect URI에 이 주소를 넣어요 (안내 문서: INSTAGRAM_SETUP.md):
           <div className="row" style={{ marginTop: 4 }}>
             <code style={{ overflowWrap: 'anywhere', userSelect: 'all' }}>{st.redirectUri}</code>
             <button
@@ -86,7 +92,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
               복사
             </button>
           </div>
-        </div>
+        </details>
       </div>
     );
   }
@@ -110,7 +116,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
           </button>
         </div>
         <div className="muted small">
-          인스타그램 로그인 화면이 열려요. 어머니 계정(프로페셔널 계정)으로 로그인하고 <b>콘텐츠 게시</b>를 허용한 뒤, 연결 완료 화면이 나오면 이 화면으로 돌아와 <b>연결 확인</b>을 누르세요.
+          인스타그램 로그인 화면이 열려요. 올릴 인스타그램 계정(프로페셔널 계정)으로 로그인하고 <b>콘텐츠 게시</b>를 허용한 뒤, 연결 완료 화면이 나오면 이 화면으로 돌아와 <b>연결 확인</b>을 누르세요.
         </div>
       </div>
     );
@@ -126,7 +132,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
       setJob(await api.instagramPublish(renderId, caption, confirmDuplicate, kind === 'reel' && trial, kind));
     } catch (e) {
       const msg = (e as Error).message;
-      if (!confirmDuplicate && msg.includes('이미 인스타그램에') && confirm(`${msg}\n\n그래도 한 번 더 올릴까요?`)) {
+      if (!confirmDuplicate && isDuplicateError(e) && confirm(`${msg}\n\n그래도 한 번 더 올릴까요?`)) {
         setBusy(false);
         return publish(true, kind);
       }
@@ -160,10 +166,10 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
             설명 글 ({caption.length}/2200자)
             <textarea rows={6} value={caption} onChange={(e) => setCaption(e.target.value)} disabled={Boolean(running)} />
           </label>
-          <div className="stack ig-checks">
+          <div className="stack check-list">
             <b className="small">올리기 전 점검</b>
             {[...checks, ...instagramCaptionChecks(caption)].map((c, i) => (
-              <div key={i} className={`small ig-check ${c.level}`}>
+              <div key={i} className={`small check-item ${c.level}`}>
                 {c.level === 'ok' ? '✓' : c.level === 'warn' ? '!' : '✕'} {c.text}
               </div>
             ))}
@@ -196,6 +202,7 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
             </a>
           )}
           {running && <div className="muted small">{job.message}. 화면을 닫아도 서버에서 계속 진행돼요.</div>}
+          {running && <ConnectionNote failures={failures} />}
         </>
       )}
     </div>

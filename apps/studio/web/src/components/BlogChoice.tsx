@@ -31,7 +31,7 @@ export const BlogChoice: React.FC<{ project: ProjectDetail; setProject: (p: Proj
           const on = project.blogStyle === o.style;
           const errors = o.lint.filter((l) => l.level === 'error').length;
           return (
-            <div key={o.style} className="stack" style={{ border: on ? '3px solid #e2533a' : '1px solid #ddd', borderRadius: 14, padding: 12, background: on ? '#fff3ef' : '#fff' }}>
+            <div key={o.style} className={`stack pick${on ? ' on' : ''}`} style={{ borderRadius: 14, padding: 12 }}>
               <div className="row">
                 <b>{o.info.label}</b>
                 {on && <span className="badge review">선택됨</span>}
