@@ -214,7 +214,7 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         <TitleChip text={scene.cardTitle ?? '준비물'} frame={frame} fps={fps} />
       ) : (
         <div style={{ position: 'absolute', inset: 0, transform: 'translateY(40px) scale(0.8)', transformOrigin: '50% 8%' }}>
-          <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} />
+          <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
         </div>
       )}
       {showPhoto && <PhotoInset url={photoUrl} frame={frame} fps={fps} />}

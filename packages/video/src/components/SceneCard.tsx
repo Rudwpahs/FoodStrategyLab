@@ -1,6 +1,7 @@
 import React from 'react';
 import { interpolate, spring } from 'remotion';
 import { BRAND, type Scene } from '@mat-lab/recipe-core';
+import { reviewNote } from '../brandText.ts';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 import { LogoMark } from './Stage.tsx';
 
@@ -10,6 +11,8 @@ interface CardProps {
   frame: number;
   fps: number;
   reviewed: boolean;
+  /** 승인한 사람 (연구자 본인인지 판정에만 쓰고 화면에는 쓰지 않는다) */
+  reviewer?: string;
 }
 
 /**
@@ -61,7 +64,7 @@ const Label: React.FC<{ children: React.ReactNode; color?: string; textColor?: s
   </div>
 );
 
-export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, reviewed }) => {
+export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, reviewed, reviewer }) => {
   const enter = spring({ frame, fps, config: { damping: 14, stiffness: 140 } });
   const style: React.CSSProperties = {
     ...cardBase,
@@ -197,7 +200,7 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
           <div style={{ fontSize: 40, fontWeight: 600, marginTop: 14, opacity: 0.95 }}>{BRAND.slogan}</div>
           {reviewed && (
             <div style={{ marginTop: 30, fontSize: 36, fontWeight: 700, background: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '14px 20px' }}>
-              {BRAND.researcherTitle} {BRAND.researcher} 검토 완료
+              {reviewNote(true, reviewer)}
             </div>
           )}
         </div>
