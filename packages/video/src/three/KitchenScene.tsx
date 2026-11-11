@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useMemo } from 'react';
-import { useThree } from '@react-three/fiber';
+import React, { useEffect, useLayoutEffect, useMemo } from 'react';
+import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
-import { Object3D, type PerspectiveCamera } from 'three';
+import { Object3D, PerspectiveCamera, Scene } from 'three';
 import type { Emotion, FoodProfile, IngredientProp } from '@mat-lab/recipe-core';
 import { Chef3D } from './Chef3D.tsx';
 import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
@@ -87,20 +87,12 @@ const CameraRig: React.FC<{ pos: Vec3; target: Vec3; fov: number }> = ({ pos, ta
   return null;
 };
 
-export const KitchenScene: React.FC<{
-  width: number;
-  height: number;
-  frame: number;
-  state: StageState;
-  food: FoodProfile;
-  props: IngredientProp[];
-}> = ({ width, height, frame, state, food, props }) => {
+/** 한 상태의 3D 장면 내용 (조명·주방·음식·소품·맛조수) */
+const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProfile; props: IngredientProp[] }> = ({ frame, state, food, props }) => {
   const facing = chefFacing(state);
   const positions = propPositions(props.length);
   return (
-    // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다
-    <ThreeCanvas width={width} height={height} dpr={1} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
-      <CameraRig {...state.camera} />
+    <>
       <MoodLights mood={state.mood} camera={state.camera} />
       <KitchenSet />
       <Flame frame={frame} on={state.burnerOn} />
@@ -115,6 +107,68 @@ export const KitchenScene: React.FC<{
         <IngredientModel key={i} prop={p} position={positions[i]!} pop={state.propPop[i] ?? 0} />
       ))}
       <Chef3D emotion={state.emotion} frame={frame} talking={state.talking} action={state.action} facing={facing} position={CHEF_POS} pop={state.chefPop} />
-    </ThreeCanvas>
+    </>
   );
 };
+
+/**
+ * 비교 장면: 같은 캔버스의 위쪽 절반에 다른 상태(건너뛴 쪽)를, 아래쪽 절반에 기본 장면을 그린다.
+ * 캔버스(WebGL)를 하나 더 만들지 않는다 — 휴대폰 사파리는 캔버스가 여럿이거나 자주 새로 만들어지면 멈춘다.
+ */
+const SplitTop: React.FC<{ frame: number; state: StageState; food: FoodProfile }> = ({ frame, state, food }) => {
+  const scene = useMemo(() => new Scene(), []);
+  const cam = useMemo(() => new PerspectiveCamera(), []);
+  const main = useThree((s) => s.camera) as PerspectiveCamera;
+  const size = useThree((s) => s.size);
+  const { pos, target, fov } = state.camera;
+  useLayoutEffect(() => {
+    cam.position.set(...pos);
+    cam.fov = fov;
+    cam.near = 0.05;
+    cam.far = 30;
+    cam.lookAt(...target);
+  }, [cam, pos, target, fov]);
+  // 비교 장면이 끝나면 기본 카메라 화면비를 캔버스 전체로 되돌린다
+  useEffect(
+    () => () => {
+      main.aspect = size.width / size.height;
+      main.updateProjectionMatrix();
+    },
+    [main, size],
+  );
+  // 우선순위 1: R3F 기본 그리기 대신 위·아래를 나눠 그린다
+  useFrame(({ gl, scene: mainScene, camera, size }) => {
+    const top = Math.round(size.height / 2);
+    const draw = (s: Scene, c: PerspectiveCamera, y: number, h: number) => {
+      gl.setViewport(0, y, size.width, h);
+      gl.setScissor(0, y, size.width, h);
+      c.aspect = size.width / h;
+      c.updateProjectionMatrix();
+      gl.render(s, c);
+    };
+    gl.setScissorTest(true);
+    draw(scene, cam, size.height - top, top);
+    draw(mainScene, camera as PerspectiveCamera, 0, size.height - top);
+    gl.setScissorTest(false);
+    gl.setViewport(0, 0, size.width, size.height);
+  }, 1);
+  return createPortal(<SceneContents frame={frame} state={state} food={food} props={[]} />, scene);
+};
+
+export const KitchenScene: React.FC<{
+  width: number;
+  height: number;
+  frame: number;
+  state: StageState;
+  food: FoodProfile;
+  props: IngredientProp[];
+  /** 비교 장면: 위쪽 절반에 그릴 상태 (같은 캔버스 안에 그린다) */
+  split?: StageState | null;
+}> = ({ width, height, frame, state, food, props, split }) => (
+  // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다
+  <ThreeCanvas width={width} height={height} dpr={1} shadows gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
+    <CameraRig {...state.camera} />
+    <SceneContents frame={frame} state={state} food={food} props={props} />
+    {split && <SplitTop frame={frame} state={split} food={food} />}
+  </ThreeCanvas>
+);

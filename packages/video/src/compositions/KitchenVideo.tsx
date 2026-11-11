@@ -38,24 +38,13 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
   const sfx = useMemo(() => sfxCues(script), [script]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
   const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
-  const half = Math.round(height / 2);
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
       {/* 색 보정: 대비·채도를 살짝 올려 영화 같은 느낌 */}
       <AbsoluteFill style={{ filter: 'contrast(1.07) saturate(1.1)' }}>
-        {state && compare && failState ? (
-          <>
-            <div style={{ position: 'absolute', left: 0, top: 0, width, height: half, overflow: 'hidden' }}>
-              <KitchenScene width={width} height={half} frame={frame} state={failState} food={food} props={[]} />
-            </div>
-            <div style={{ position: 'absolute', left: 0, top: half, width, height: height - half, overflow: 'hidden' }}>
-              <KitchenScene width={width} height={height - half} frame={frame} state={state} food={food} props={[]} />
-            </div>
-          </>
-        ) : (
-          state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={props} />
-        )}
+        {/* 캔버스는 언제나 이 자리에 하나만: 비교 장면은 같은 캔버스 위쪽 절반에 '건너뛴 쪽'을 그린다 */}
+        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={compare ? [] : props} split={failState} />}
       </AbsoluteFill>
       {/* 재료 이름표: 3D 소품 위에 붙는다 */}
       {state &&
@@ -66,12 +55,14 @@ export const KitchenVideo: React.FC<VideoProps & { recipe: RecipeInput }> = ({ s
           const pos = propPositions(props.length)[i]!;
           const s = projectToScreen([pos[0], pos[1] + 0.2, pos[2]], state.camera, width, height);
           if (!s.visible) return null;
+          // 화면 가장자리 소품의 이름표가 잘리지 않게 안쪽으로 당긴다 (글자 34px + 여백으로 어림한 폭의 절반)
+          const half = (p.label.length * 34 + 40) / 2;
           return (
             <div
               key={i}
               style={{
                 position: 'absolute',
-                left: s.x,
+                left: Math.min(width - 16 - half, Math.max(16 + half, s.x)),
                 top: s.y - (i % 2) * 64,
                 transform: `translate(-50%, -100%) scale(${Math.min(1, pop)})`,
                 background: COLORS.white,
