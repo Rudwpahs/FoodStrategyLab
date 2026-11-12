@@ -425,7 +425,7 @@ const MATCH_CLOSE = 0.92;
 
 /**
  * 장면별 음성을 받아써서 대사와 맞춰 본다 (받아쓰기를 쓸 수 있을 때만).
- * - 뒷부분이 없거나(중간에 끊겨 만들어짐) 대사와 많이 다르면 그 음성을 지우고 한 번 다시 만든다
+ * - 뒷부분이 없거나(중간에 끊겨 만들어짐) 대사와 많이 다르면 그 음성을 한 번 다시 만든다
  * - 그래도 다르면 문제로 남긴다. 받아쓰기도 틀릴 수 있어 '다르게 들림'은 경고로 둔다
  */
 export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: () => boolean = () => false) {
@@ -442,8 +442,9 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
     let m = lineMatch(scene.line, heard.text);
     let text = heard.text;
     if (m.truncated || m.ratio < MATCH_REDO) {
-      removeAudioWithCache(a.file);
-      const again = await synthesize(scene.line, AUDIO_DIR);
+      // 옛 파일을 먼저 지우지 않는다: 같은 파일을 읽는 다른 작업(후보 목소리·다른 제작)이 있을 수 있어,
+      // tts가 같은 파일 잠금 안에서 새로 만든 뒤 한 번에 바꿔치기한다
+      const again = await synthesize(scene.line, AUDIO_DIR, {}, { regenerate: true });
       // 다시 만든 음성도 빈 음성인지 본다 (generateVoice와 같은 검사)
       if ((await cachedSpeechBounds(again.file).catch(() => null))?.silent) {
         removeAudioWithCache(again.file);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CATEGORIES, CATEGORY_LABELS, type Category } from '@mat-lab/recipe-core';
 import { api, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
+import { costText, useMeasuredCosts } from '../cost.ts';
 
 type Suggestion = NonNullable<ProjectDetail['source']>['suggestions'][number];
 
@@ -36,6 +37,7 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
   const [more, setMore] = useState(false);
   // 다른 주제를 받을 때 원하는 방향 (예: "실수 위주로", "전통 이야기로")
   const [direction, setDirection] = useState('');
+  const measured = useMeasuredCosts();
 
   const choose = (i: number | 'own') => {
     setPick(i);
@@ -90,7 +92,7 @@ export const TopicPicker: React.FC<{ project: ProjectDetail; onChosen: (p: Proje
           {more ? '주제 만드는 중… (10~30초)' : '다른 주제 더 보기'}
         </button>
       </div>
-      <div className="muted small" style={{ marginTop: -6 }}>마음에 드는 주제가 없으면 눌러 보세요. Claude가 레시피에서 다른 꼴의 주제 5개를 더 찾아요 (1회 약 $0.03).</div>
+      <div className="muted small" style={{ marginTop: -6 }}>마음에 드는 주제가 없으면 눌러 보세요. Claude가 레시피에서 다른 꼴의 주제 5개를 더 찾아요 (1회 {costText(measured.topics, '약 $0.03')}).</div>
       <label className={`suggestion small${pick === 'own' ? ' current' : ''}`} style={{ cursor: 'pointer' }}>
         <div className="row" style={{ gap: 8 }}>
           <input type="radio" name="topic" checked={pick === 'own'} onChange={() => choose('own')} />

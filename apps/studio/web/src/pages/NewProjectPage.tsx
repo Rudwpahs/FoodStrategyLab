@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api, type AiInfo, type UploadFile } from '../api.ts';
 import { navigate, useApp } from '../App.tsx';
+import { costText } from '../cost.ts';
 import { EMPTY_RECIPE, RecipeForm } from '../components/RecipeForm.tsx';
 import { IMAGE_ACCEPT, heicToJpeg } from '../heic.ts';
 
@@ -135,6 +136,7 @@ export const NewProjectPage: React.FC = () => {
           {reading ? '레시피 읽는 중… (10~40초)' : '레시피 읽기 → 주제 고르기'}
         </button>
         <div className="muted small">재료·분량·순서는 적힌 그대로 옮기고, 자료에 없는 주제·원리는 "AI 제안"으로 표시해요. 꼭 확인해 주세요.</div>
+        {ai?.configured && <div className="muted small">Claude 사용료: 1회 {costText(ai.measured?.['recipe-read'], '사진 한 장 약 $0.1~0.2')} · 이번 달 한도 안에서</div>}
       </div>
 
       <details className="card">

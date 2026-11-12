@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { CATEGORIES, RecipeInputSchema, type RecipeInput } from '@mat-lab/recipe-core';
+import { CATEGORIES, RecipeInputSchema, findHealthClaims, normalizeText, type RecipeInput } from '@mat-lab/recipe-core';
 import { findAiTells } from '@mat-lab/publishing';
-import { DEFAULT_MODEL, aiConfigured, assertBudget, claudeError, costUsd, recordUsage } from './claudeUsage.ts';
+import { DEFAULT_MODEL, aiConfigured, claudeError, costUsd, recordUsage, reserveBudget } from './claudeUsage.ts';
 import type { Db } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -234,10 +234,7 @@ export function blandTopicNotes(topic: string): string[] {
   return out;
 }
 
-/** 띄어쓰기·문장부호를 빼고 비교한다 (인용 대조용) */
-const squash = (t: string) => t.replace(/[\s.,!?·~…"'“”‘’()\[\]{}:;\-+*/]/g, '');
 const numbersIn = (t: string) => t.match(/\d+(?:[.,/]\d+)?/g) ?? [];
-const HEALTH = /(건강|면역|다이어트|살이 ?빠|체중|혈압|혈당|콜레스테롤|암 ?예방|항암|해독|디톡스|효능|노화|소화(?:가|를|에) ?(?:좋|돕))/;
 
 /**
  * AI 제안이 레시피에서 나왔는지 프로그램이 확인한다 (AI를 그대로 믿지 않는다).
@@ -259,11 +256,11 @@ export function groundSuggestions(x: ExtractedRecipe, memo = ''): CheckedSuggest
         where === 'step' ? steps[number - 1] : where === 'tip' ? x.tips[number - 1] : where === 'mistake' ? x.mistakeFromSource : memo;
       const evidenceLabel = where === 'step' ? `${number}번 순서` : where === 'tip' ? `팁 ${number}` : where === 'mistake' ? '자료의 실패 사례' : '연구자 메모';
       if (!target?.trim()) notes.push(`근거로 든 ${evidenceLabel}이(가) 레시피에 없어요`);
-      else if (squash(quote).length < 2 || !squash(target).includes(squash(quote))) notes.push(`근거 인용 "${quote.trim()}"을(를) ${evidenceLabel}에서 찾지 못했어요`);
+      else if (normalizeText(quote).length < 2 || !normalizeText(target).includes(normalizeText(quote))) notes.push(`근거 인용 "${quote.trim()}"을(를) ${evidenceLabel}에서 찾지 못했어요`);
       const said = `${s.topic} ${s.principle}`;
       const extra = [...new Set(numbersIn(said).filter((n) => !sourceNumbers.has(n)))];
       if (extra.length) notes.push(`레시피에 없는 숫자(${extra.join(', ')})가 들어 있어요`);
-      if (HEALTH.test(said)) notes.push('건강·효능 주장이 들어 있어요');
+      if (findHealthClaims(said).length) notes.push('건강·효능 주장이 들어 있어요');
       const styleNotes = [...findAiTells(`${s.topic}\n${s.principle}`).map((t) => `[${t.rule}] ${t.found}`), ...blandTopicNotes(s.topic)];
       const angle = 'angle' in s && s.angle ? ANGLE_LABELS[s.angle as TopicAngle] : undefined;
       return { topic: s.topic.trim(), principle: shortPrinciple(s.principle), category: s.category, evidenceLabel, evidenceQuote: quote.trim(), grounded: notes.length === 0, notes, styleNotes, ...(angle ? { angle } : {}) };
@@ -338,13 +335,26 @@ export const effortSetting = (): Effort => {
   return e && EFFORTS.includes(e) ? e : 'high';
 };
 
+/** 한 번에 받을 수 있는 출력 토큰 (월 한도에 잡아 두는 예상 금액도 이 값으로 계산한다) */
+export const READ_MAX_TOKENS = 32000;
+export const TOPICS_MAX_TOKENS = 16000;
+
+/**
+ * 보낼 입력의 넉넉한 토큰 수 (한도에 잡아 두는 예상 금액용. 실제 금액은 응답의 사용량으로 기록한다).
+ * 글은 1글자를 1토큰으로, 사진은 장당 5천, PDF는 개당 3만 토큰으로 넉넉히 센다.
+ */
+export function roughInputTokens(system: string, content: Anthropic.ContentBlockParam[] | string): number {
+  const blocks: Anthropic.ContentBlockParam[] = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+  return blocks.reduce((sum, b) => sum + (b.type === 'text' ? b.text.length : b.type === 'image' ? 5_000 : b.type === 'document' ? 30_000 : 0), system.length);
+}
+
 /** 실제 Claude API 호출 (공식 SDK, 구조화 출력). 생각까지 포함해 길어질 수 있어 스트리밍으로 받는다 */
 export const claudeParse: ParseFn = async ({ model, effort, system, content }) => {
   client ??= new Anthropic();
   const res = await client.messages
     .stream({
       model,
-      max_tokens: 32000,
+      max_tokens: READ_MAX_TOKENS,
       system,
       messages: [{ role: 'user', content }],
       output_config: { effort, format: zodOutputFormat(ExtractedRecipeSchema) },
@@ -362,7 +372,7 @@ export const claudeTopics: TopicsFn = async ({ model, system, user }) => {
   client ??= new Anthropic();
   const res = await client.messages.parse({
     model,
-    max_tokens: 16000,
+    max_tokens: TOPICS_MAX_TOKENS,
     system,
     messages: [{ role: 'user', content: user }],
     output_config: { effort: 'medium', format: zodOutputFormat(MoreTopicsSchema) },
@@ -412,7 +422,6 @@ export class RecipeReader {
   async moreTopics(source: RecipeInput, opts: { exclude: string[]; direction?: string; aiMistake?: boolean }): Promise<{ suggestions: CheckedSuggestion[]; costUsd: number }> {
     const recipe = opts.aiMistake ? { ...source, commonMistake: '' } : source;
     if (this.topicsFn === claudeTopics && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
-    assertBudget(this.db);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const direction = (opts.direction ?? '').trim().slice(0, 300);
     const user = [
@@ -423,17 +432,20 @@ export class RecipeReader {
       direction ? `\n<연구자_요청>\n${direction}\n</연구자_요청>` : '',
       '\n이 레시피로 새 주제 후보 5개를 만들어 주세요.',
     ].join('\n');
+    const release = reserveBudget(this.db, costUsd(model, roughInputTokens(TOPICS_SYSTEM, user), TOPICS_MAX_TOKENS));
     let out;
     try {
       out = await this.topicsFn({ model, system: TOPICS_SYSTEM, user });
     } catch (e) {
       throw claudeError(e);
+    } finally {
+      release();
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
     recordUsage(this.db, 'topics', model, out.inputTokens, out.outputTokens, cost);
     if (out.stopReason === 'refusal') throw new HttpError(422, '주제를 만들 수 없다는 답을 받았어요.');
     if (!out.parsed) throw new HttpError(502, '주제를 받지 못했어요. 다시 시도해 주세요.');
-    const seen = new Set(opts.exclude.map((t) => squash(t)));
+    const seen = new Set(opts.exclude.map((t) => normalizeText(t)));
     // 이미 읽은 레시피를 근거 대조용 모양으로 (재료·순서·팁은 원본 그대로)
     const asRead: ExtractedRecipe = {
       isRecipe: true,
@@ -445,7 +457,7 @@ export class RecipeReader {
       storyFromSource: recipe.story ?? '',
       otherNotes: '',
       problems: [],
-      suggestions: out.parsed.suggestions.filter((s) => !seen.has(squash(s.topic))),
+      suggestions: out.parsed.suggestions.filter((s) => !seen.has(normalizeText(s.topic))),
       commonMistake: '',
     };
     return { suggestions: groundSuggestions(asRead), costUsd: cost };
@@ -455,14 +467,20 @@ export class RecipeReader {
     if (this.parse === claudeParse && !aiConfigured()) {
       throw new HttpError(409, '레시피 읽기(Claude API)가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요. 그 전에는 "직접 입력"을 써 주세요.');
     }
-    assertBudget(this.db, (budget) => `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const content = toContentBlocks(files, memo);
+    const release = reserveBudget(
+      this.db,
+      costUsd(model, roughInputTokens(SYSTEM, content), READ_MAX_TOKENS),
+      (budget) => `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`,
+    );
     let out;
     try {
       out = await this.parse({ model, effort: effortSetting(), system: SYSTEM, content });
     } catch (e) {
       throw claudeError(e, (err) => `자료를 보내지 못했어요 (파일이 너무 크거나 형식이 맞지 않을 수 있어요): ${err.message.slice(0, 200)}`);
+    } finally {
+      release();
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
     recordUsage(this.db, 'recipe-read', model, out.inputTokens, out.outputTokens, cost);

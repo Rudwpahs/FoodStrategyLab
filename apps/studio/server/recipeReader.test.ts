@@ -7,9 +7,9 @@ import { checkScript, contentCandidates } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { openDb } from './db.ts';
-import { costUsd, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
+import { costUsd, monthSpentUsd, monthlyBudgetUsd, recordUsage, reservedUsd } from './claudeUsage.ts';
 import { ExtractedRecipeSchema, RecipeReader, TOPIC_GUIDE, blandTopicNotes, groundSuggestions, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn, type TopicsFn } from './recipeReader.ts';
-import { Repo } from './repo.ts';
+import { HttpError, Repo } from './repo.ts';
 
 /** 손글씨 김치전 레시피를 읽었다고 치는 결과 */
 const kimchijeon: ExtractedRecipe = {
@@ -110,6 +110,58 @@ describe('레시피 읽기 (가짜 Claude)', () => {
     await expect(new RecipeReader(db, fakeParse(kimchijeon, calls)).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }])).rejects.toThrow(/한도/);
     expect(calls).toHaveLength(0);
   });
+
+  it('동시에 두 번 읽어도 한도를 넘지 않는다: 먼저 시작한 호출의 예상 금액을 잡아 두고, 끝나면 놓아준다', async () => {
+    const db = openDb(':memory:');
+    recordUsage(db, 'x', 'm', 0, 0, monthlyBudgetUsd() - 0.5);
+    let finish!: () => void;
+    const calls: unknown[] = [];
+    const slowParse: ParseFn = async (req) => {
+      calls.push(req);
+      await new Promise<void>((r) => (finish = r));
+      return { parsed: kimchijeon, inputTokens: 4000, outputTokens: 2500, stopReason: 'end_turn' };
+    };
+    const reader = new RecipeReader(db, slowParse);
+    const file = [{ name: 'a.jpg', type: 'image/jpeg', data: png }];
+    const first = reader.read(file);
+    // 첫 호출의 예상 금액(출력 32,000토큰 기준 $0.64 이상)을 더하면 한도를 넘는다 → 두 번째는 Claude를 부르기 전에 429
+    expect(reservedUsd(db)).toBeGreaterThan(0.5);
+    const second = await reader.read(file).catch((e: unknown) => e);
+    expect((second as HttpError).status).toBe(429);
+    expect(calls).toHaveLength(1);
+    finish();
+    await first;
+    // 끝나면 잡아 둔 금액을 놓고, 실제 금액만 기록한다
+    expect(reservedUsd(db)).toBe(0);
+    expect(monthSpentUsd(db)).toBeCloseTo(monthlyBudgetUsd() - 0.5 + costUsd('claude-opus-5-5', 4000, 2500), 6);
+  });
+
+  it('Claude 호출이 실패해도 잡아 둔 금액을 놓아준다 (다른 주제 더 보기도 같다)', async () => {
+    const db = openDb(':memory:');
+    const failing: ParseFn = async () => {
+      throw new Error('network down');
+    };
+    await expect(new RecipeReader(db, failing).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }])).rejects.toThrow('network down');
+    expect(reservedUsd(db)).toBe(0);
+
+    recordUsage(db, 'x', 'm', 0, 0, monthlyBudgetUsd() - 0.2);
+    let finish!: () => void;
+    let topicCallsN = 0;
+    const slowTopics: TopicsFn = async () => {
+      topicCallsN++;
+      await new Promise<void>((r) => (finish = r));
+      return { parsed: { suggestions: [] }, inputTokens: 10, outputTokens: 10, stopReason: 'end_turn' };
+    };
+    const reader = new RecipeReader(db, fakeParse(kimchijeon), slowTopics);
+    const recipe = toRecipe(kimchijeon).recipe;
+    const first = reader.moreTopics(recipe, { exclude: [] });
+    const second = await reader.moreTopics(recipe, { exclude: [] }).catch((e: unknown) => e);
+    expect((second as HttpError).status).toBe(429);
+    expect(topicCallsN).toBe(1);
+    finish();
+    await first;
+    expect(reservedUsd(db)).toBe(0);
+  });
 });
 
 describe('AI 제안 근거 확인', () => {
@@ -132,6 +184,16 @@ describe('AI 제안 근거 확인', () => {
     expect(out.find((s) => s.topic.includes('몸에'))!.notes.join()).toContain('건강');
     expect(out.find((s) => s.topic.includes('짤까'))!.notes.join()).toContain('찾지 못했어요');
     expect(out.find((s) => s.topic === '없는 순서')!.notes.join()).toContain('5번 순서');
+  });
+
+  it('건강·효능 주장은 공용 목록(recipe-core)으로 찾는다: 예전 서버 목록의 말도, 공용 목록에만 있던 말도', () => {
+    const health = (principle: string) => groundSuggestions({ ...kimchijeon, suggestions: [{ angle: 'one-thing', topic: '김치전 반죽은 왜 찬물일까?', principle, category: 'science', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } }] })[0]!;
+    for (const p of ['찬물 반죽은 소화에 좋다.', '찬물 반죽은 콜레스테롤을 낮춘다.', '찬물 반죽은 노화를 막는다.', '찬물로 하면 살이 빠진다.', '찬물 반죽은 피부미용에 좋다.', '찬물 반죽은 살균이 된다.']) {
+      const s = health(p);
+      expect(s.grounded, p).toBe(false);
+      expect(s.notes.join(), p).toContain('건강·효능');
+    }
+    expect(health('찬물로 반죽하면 글루텐이 덜 생겨 바삭해진다.').grounded).toBe(true);
   });
 
   it('근거가 확인된 제안이 하나도 없으면 레시피에는 넣되 꼭 고치라고 알린다', () => {

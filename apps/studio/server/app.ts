@@ -13,10 +13,10 @@ import type { IgCheck } from '@mat-lab/recipe-core';
 import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, removeProject, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
 import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
-import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
+import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd, recentCostByPurpose } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
-import { HttpError, creditedReviewer, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
+import { HttpError, creditedReviewer, publicRender, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, lastVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -423,7 +423,15 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     res.json(repo.confirmAiFields(pid, by));
   });
   api.get('/ai', (_req, res) => {
-    res.json({ configured: aiConfigured(), model: process.env.CLAUDE_MODEL || DEFAULT_MODEL, spentUsd: monthSpentUsd(repo.db), budgetUsd: monthlyBudgetUsd(), maxFiles: MAX_FILES });
+    res.json({
+      configured: aiConfigured(),
+      model: process.env.CLAUDE_MODEL || DEFAULT_MODEL,
+      spentUsd: monthSpentUsd(repo.db),
+      budgetUsd: monthlyBudgetUsd(),
+      maxFiles: MAX_FILES,
+      // 최근 30일 실제 사용 기록의 기능별 1회 평균 (화면이 추정 대신 보여 준다)
+      measured: recentCostByPurpose(repo.db),
+    });
   });
   api.post('/projects/from-files', express.json({ limit: '40mb' }), async (req, res) => {
     const body = req.body ?? {};
@@ -782,7 +790,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/renders/:id/cancel', (req, res) => {
     const r = repo.getRender(id(req));
     cancelRender(repo, r.id);
-    res.json(repo.getRender(r.id));
+    res.json(publicRender(repo.getRender(r.id)));
   });
 
   api.get('/renders/:id', (req, res) => {
@@ -790,7 +798,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const files = r.status === 'done' && fs.existsSync(r.outputDir) ? fs.readdirSync(r.outputDir).filter((f) => f.includes('.')) : [];
     const checkDir = path.join(r.outputDir, 'caption-check');
     const captionChecks = r.status === 'done' && fs.existsSync(checkDir) ? fs.readdirSync(checkDir).sort() : [];
-    res.json({ ...r, files, captionChecks, baseUrl: `/media/renders/${r.id}` });
+    res.json({ ...publicRender(r), files, captionChecks, baseUrl: `/media/renders/${r.id}` });
   });
 
   // ── 인스타그램 공식 게시 ──

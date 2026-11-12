@@ -3,7 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { CHANGE_RATE_WARN, findAiTells, humanizeSystem, humanizeUser, rewriteProblems, totalChangeRate, type GateOptions, type HumanizeItem, type HumanizeKind } from '@mat-lab/publishing';
 import type { Db } from './db.ts';
-import { DEFAULT_MODEL, aiConfigured, assertBudget, claudeError, priceOf, recordUsage } from './claudeUsage.ts';
+import { DEFAULT_MODEL, aiConfigured, claudeError, costUsd, priceOf, recordUsage, reserveBudget } from './claudeUsage.ts';
 import { HttpError } from './repo.ts';
 
 /**
@@ -35,12 +35,15 @@ export function rewriteCostUsd(model: string, u: RewriteUsage): number {
 
 let client: Anthropic | null = null;
 
+/** 한 번에 받을 수 있는 출력 토큰 (월 한도에 잡아 두는 예상 금액도 이 값으로 계산한다) */
+export const REWRITE_MAX_TOKENS = 16000;
+
 /** 실제 Claude 호출. 룰북이 든 긴 시스템 프롬프트는 캐시해서 연달아 누를 때 비용을 줄인다 */
 export const claudeRewrite: RewriteFn = async ({ model, system, user }) => {
   client ??= new Anthropic();
   const res = await client.messages.parse({
     model,
-    max_tokens: 16000,
+    max_tokens: REWRITE_MAX_TOKENS,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: user }],
     output_config: { effort: 'medium', format: zodOutputFormat(OutputSchema) },
@@ -103,17 +106,22 @@ export class Humanizer {
     const tells = findAiTells(joined);
     const same = list.map((i) => ({ id: i.id, before: i.text, after: i.text, changed: false, reasons: [] }));
     if (!tells.length && !opts.force) {
-      return { kind, items: same, tellsBefore: 0, tellsAfter: 0, changeRate: 0, costUsd: 0, notes: '', skipped: '규칙 검사에서 AI 티가 보이지 않아요. 그래도 Claude로 다듬어 볼 수 있어요 (1회 약 $0.1).' };
+      return { kind, items: same, tellsBefore: 0, tellsAfter: 0, changeRate: 0, costUsd: 0, notes: '', skipped: '규칙 검사에서 AI 티가 보이지 않아요. 그래도 Claude로 다듬어 볼 수 있어요 (1회 약 $0.1, 추정).' };
     }
     if (this.call === claudeRewrite && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
-    assertBudget(this.db);
 
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
+    const system = humanizeSystem(kind);
+    const user = humanizeUser(kind, list, tells);
+    // 넉넉한 예상 금액: 글자 1개 = 입력 1토큰(캐시 할인 없이), 출력은 한도까지
+    const release = reserveBudget(this.db, costUsd(model, system.length + user.length, REWRITE_MAX_TOKENS));
     let out;
     try {
-      out = await this.call({ model, system: humanizeSystem(kind), user: humanizeUser(kind, list, tells) });
+      out = await this.call({ model, system, user });
     } catch (e) {
       throw claudeError(e);
+    } finally {
+      release();
     }
     const cost = rewriteCostUsd(model, out.usage);
     recordUsage(this.db, `humanize-${kind}`, model, out.usage.inputTokens + out.usage.cacheWriteTokens + out.usage.cacheReadTokens, out.usage.outputTokens, cost);

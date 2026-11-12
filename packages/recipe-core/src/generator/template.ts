@@ -83,9 +83,18 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
 
 /** 한국어 TTS 기준 대략적인 길이(초). 실제 길이는 음성 생성 후 확정된다. */
 export const CHARS_PER_SECOND = 7;
+/** 아주 짧은 대사도 이만큼은 말한다 (초) */
+const MIN_SPEECH_SECONDS = 1.1;
+/** 장면 길이 = 말하는 시간 + 이만큼의 여유 (초) */
+const SCENE_PAD_SECONDS = 0.5;
+
+/** 대사를 말하는 시간만 (여유 없이). 음성이 아직 없을 때 영상 타임라인이 쓴다 */
+export function estimateSpeechSeconds(line: string): number {
+  const chars = line.replace(/\s/g, '').length;
+  return Math.max(MIN_SPEECH_SECONDS, chars / CHARS_PER_SECOND);
+}
 export function estimateSceneSeconds(scene: Pick<Scene, 'line'>): number {
-  const chars = scene.line.replace(/\s/g, '').length;
-  return Math.max(1.6, chars / CHARS_PER_SECOND + 0.5);
+  return estimateSpeechSeconds(scene.line) + SCENE_PAD_SECONDS;
 }
 export function estimateScriptSeconds(script: Script): number {
   return script.scenes.reduce((sum, s) => sum + estimateSceneSeconds(s), 0);

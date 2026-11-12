@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { BlogStyle } from '@mat-lab/publishing';
 import { api, type HumanizeResult, type ProjectDetail } from '../api.ts';
 import { useApp } from '../App.tsx';
+import { costText, useMeasuredCosts } from '../cost.ts';
 
 /**
  * im-not-ai(Humanize KR) 윤문: 규칙 검사(0원) → Claude가 룰북대로 다듬기 → 프로그램이 숫자·분량·말투·인용을 다시 검사.
@@ -19,6 +20,7 @@ export const HumanizePanel: React.FC<{
   const [result, setResult] = useState<(HumanizeResult & { version?: number }) | null>(null);
   const [busy, setBusy] = useState(false);
   const what = target === 'blog' ? '블로그 문단' : '대사';
+  const measured = useMeasuredCosts();
 
   const start = async (force = false) => {
     setBusy(true);
@@ -33,7 +35,7 @@ export const HumanizePanel: React.FC<{
     <div className="card stack humanize">
       <div className="row">
         <b>AI 티 다듬기</b>
-        <span className="muted small">im-not-ai 룰북 85개 패턴 · Claude 사용(1회 약 $0.1, 이번 달 한도 안에서)</span>
+        <span className="muted small">im-not-ai 룰북 85개 패턴 · Claude 사용(1회 {costText(measured.humanize, '약 $0.1')}, 이번 달 한도 안에서)</span>
         <div className="spacer" />
         {target === 'blog' && polished > 0 && (
           <button

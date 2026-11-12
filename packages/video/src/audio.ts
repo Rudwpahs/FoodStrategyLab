@@ -67,7 +67,13 @@ export function writeCache<T>(cacheFile: string, file: string, value: T) {
  * .bounds2/.words/.words2는 예전 버전이 만든 캐시 이름이다. 서버 데이터 폴더에 남아 있을 수 있어 함께 지운다.
  */
 export function removeAudioWithCache(file: string) {
-  for (const f of [file, `${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
+  fs.rmSync(file, { force: true });
+  removeAudioCaches(file);
+}
+
+/** 음성 파일 옆의 분석 결과만 지운다 (음성 파일은 그대로. 새 파일로 바꿔치기하기 직전에 쓴다) */
+export function removeAudioCaches(file: string) {
+  for (const f of [`${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
 }
 
 /**

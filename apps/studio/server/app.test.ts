@@ -11,6 +11,7 @@ import { friendlyRenderError, startRender } from './pipeline.ts';
 import { openDb } from './db.ts';
 import { Repo } from './repo.ts';
 import { mp3DurationSeconds } from './tts.ts';
+import { recordUsage } from './claudeUsage.ts';
 
 let base = '';
 let testRepo: Repo;
@@ -457,6 +458,43 @@ describe('미디어 파일 보내기', () => {
     const r = await media('audio/nope.mp3');
     expect(r.status).toBe(404);
     expect(await r.text()).not.toContain(DATA_DIR);
+  });
+
+  it('API 응답(콘텐츠·영상 기록)에 서버 안의 폴더 경로를 보내지 않는다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    const bodies: unknown[] = [(await call('POST', `/projects/${pid}/script/template`)).body];
+    const rid = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    // 서버 안에서는 폴더 경로를 그대로 쓴다 (내보내기·인스타 게시용)
+    expect(testRepo.getRender(rid).outputDir.startsWith(DATA_DIR)).toBe(true);
+    const project = await call('GET', `/projects/${pid}`);
+    expect(project.body.renders.length).toBeGreaterThan(0);
+    const render = await call('GET', `/renders/${rid}`);
+    expect(render.body.files).toContain('video.mp4');
+    const queued = testRepo.createRender(pid, 1);
+    testRepo.updateRender(queued, { outputDir: path.join(DATA_DIR, 'renders', String(queued)) });
+    const canceled = await call('POST', `/renders/${queued}/cancel`);
+    expect(canceled.body.status).toBe('canceled');
+    bodies.push(project.body, render.body, (await call('GET', '/projects')).body, canceled.body);
+    for (const b of bodies) {
+      expect(JSON.stringify(b)).not.toContain(DATA_DIR);
+      expect(JSON.stringify(b)).not.toContain('outputDir');
+    }
+  });
+});
+
+describe('Claude 비용 안내', () => {
+  it('GET /ai는 최근 30일 기능별 실제 1회 평균을 준다 (기록이 없는 기능은 빠져서 화면이 추정을 보인다)', async () => {
+    const before = await call('GET', '/ai');
+    expect(before.body.measured).toEqual({});
+    recordUsage(testRepo.db, 'topics', 'claude-opus-5-5', 800, 900, 0.02);
+    recordUsage(testRepo.db, 'topics', 'claude-opus-5-5', 800, 900, 0.04);
+    recordUsage(testRepo.db, 'humanize-blog', 'claude-opus-5-5', 1000, 500, 0.1);
+    const r = await call('GET', '/ai');
+    expect(r.status).toBe(200);
+    expect(r.body.measured.topics.count).toBe(2);
+    expect(r.body.measured.topics.avgUsd).toBeCloseTo(0.03, 10);
+    expect(r.body.measured.humanize).toEqual({ count: 1, avgUsd: 0.1 });
+    expect(r.body.measured['recipe-read']).toBeUndefined();
   });
 });
 

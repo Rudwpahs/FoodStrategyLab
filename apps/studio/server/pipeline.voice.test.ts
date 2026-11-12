@@ -48,6 +48,9 @@ describe('받아쓰기로 대사 대조', () => {
     const qa: RenderQa = { issues: [], checked: [], fixed: [] };
     await checkVoiceLines(script, qa);
     expect(tts.synthesize).toHaveBeenCalledTimes(1);
+    // 옛 파일을 직접 지우지 않고, tts의 같은 파일 잠금 안에서 다시 만들게 한다 (다른 작업이 읽는 중일 수 있다)
+    expect(tts.synthesize).toHaveBeenCalledWith(line, expect.any(String), {}, { regenerate: true });
+    expect(fs.existsSync(first.file)).toBe(true);
     expect(qa.issues.filter((i) => i.level === 'error')).toEqual([]);
     expect(qa.issues.map((i) => i.message).join(' ')).toContain('확인하지 못했어요');
   });
