@@ -29,10 +29,12 @@ npm run typecheck # tsc (tools 포함)
 npm run dev       # 개발 서버 http://localhost:5178
 npm run start     # 화면 묶음을 만든 뒤 빠른 실행 모드
 npm run user:add -- 아이디 이름   # 로그인 계정 (비밀번호는 입력창에서). --researcher를 붙이면 연구자 계정
-npm run e2e       # 휴대폰 폭 화면 점검 (Playwright·실행 중인 서버 필요, CI에는 없음)
+npm run e2e       # E2E: 시험 서버(가짜 렌더러·가짜 Claude)를 띄워 휴대폰·PC 화면으로 전체 흐름 (CI·배포 전에도 돎)
+npm run e2e:live  # 배포된 실제 서버 읽기 점검 (배포 뒤 자동)
+npm run e2e:render # 진짜 렌더 1개 (10~30분, 영상 패키지를 바꾼 뒤 손으로)
 ```
 
-변경 후에는 `npm test`와 `npm run typecheck`가 통과해야 한다.
+변경 후에는 `npm test`와 `npm run typecheck`가 통과해야 한다. 화면·서버 흐름을 바꿨으면 `npm run e2e`도 (계획서: `docs/testing/E2E_PLAN.md`).
 
 - 클라우드(Modal) 설정은 두 묶음이다: `matlab-studio`(GitHub 비밀값에서 배포 때마다 다시 씀)와 `matlab-settings`(사람이 Modal 화면에서 고침, 배포가 덮어쓰지 않음). `docs/MODAL_SETUP.md` 참고.
 - 계정: 연구자 계정이 하나라도 있으면 승인은 연구자 계정만 한다. 클라우드에서는 화면의 [계정]에서 계정 추가·비밀번호 변경, 로그인 화면에서 설정 코드로 비밀번호 재설정.

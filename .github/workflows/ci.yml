@@ -22,3 +22,28 @@ jobs:
       - run: npm test
       - name: 화면 묶음 만들기 (빌드 오류 확인)
         run: npx vite build -c apps/studio/vite.config.ts --logLevel error
+
+  # E2E 1단계 (docs/testing/E2E_PLAN.md): 가짜 렌더러·가짜 Claude를 끼운 시험 서버에 휴대폰·PC 화면으로 전체 흐름
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 시험용 브라우저 설치
+        run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - name: 실패하면 보고서(화면 사진·동영상·trace) 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            tmp/e2e-report
+            tmp/e2e-results
+          retention-days: 7
+

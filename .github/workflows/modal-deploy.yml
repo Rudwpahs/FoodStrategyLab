@@ -1,6 +1,6 @@
 name: Deploy to Modal
 
-# 스튜디오를 Modal 클라우드에 올린다. 테스트·타입 검사가 통과해야 배포한다.
+# 스튜디오를 Modal 클라우드에 올린다. 테스트·타입 검사·E2E(화면 흐름)가 통과해야 배포하고, 배포 뒤 실제 서버를 읽기만 하는 점검을 돈다.
 # 필요한 저장소 비밀값(Settings → Secrets and variables → Actions):
 #   MODAL_TOKEN_ID, MODAL_TOKEN_SECRET : Modal 설정 → API Tokens 에서 만든 값
 #   STUDIO_SETUP_CODE                  : 처음 계정을 만들 때 화면에 넣을 설정 코드 (최소 8자, 12자 이상 권장, 직접 정함)
@@ -36,7 +36,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,11 +48,26 @@ jobs:
       - name: tools 타입 검사 (tools/setup/voice.ts는 클라우드 서버가 켜질 때 돈다)
         run: npx tsc -p tools/tsconfig.json --noEmit
       - run: npm test
+      - name: E2E용 브라우저 설치
+        run: npx playwright install --with-deps chromium
+      - name: E2E (가짜 렌더러·가짜 Claude, docs/testing/E2E_PLAN.md)
+        run: npm run e2e
+      - name: E2E가 실패하면 보고서 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            tmp/e2e-report
+            tmp/e2e-results
+          retention-days: 7
 
   deploy:
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    outputs:
+      url: ${{ steps.wake.outputs.url }}
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -128,9 +143,11 @@ jobs:
         run: modal deploy deploy/modal/app.py
 
       - name: 스튜디오 깨우기 · 주소 알려 주기
+        id: wake
         if: steps.check.outputs.ready == '1'
         run: |
           URL=$(python deploy/modal/url.py)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
           code=000
           for i in $(seq 1 12); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/api/health" || true)
@@ -159,3 +176,23 @@ jobs:
             echo "::error::스튜디오가 응답하지 않아요 (상태 $code / 로그인 $me). 자세한 오류는 Modal 화면의 web 로그에서 확인하세요."
             exit 1
           fi
+
+  # E2E 2단계: 배포된 실제 서버를 읽기만 하는 점검 (로그인하지 않고 아무것도 바꾸지 않음)
+  live-check:
+    needs: deploy
+    if: needs.deploy.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: 실제 서버 점검
+        env:
+          STUDIO_URL: ${{ needs.deploy.outputs.url }}
+        run: npm run e2e:live
+

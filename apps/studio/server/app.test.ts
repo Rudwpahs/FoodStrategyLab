@@ -460,6 +460,18 @@ describe('미디어 파일 보내기', () => {
   });
 });
 
+describe('보안 헤더', () => {
+  it('모든 응답에 nosniff·다른 사이트 끼워 넣기 금지·주소 숨기기 헤더가 붙는다', async () => {
+    for (const url of ['/health', '/projects', '/nope']) {
+      const r = await fetch(base + url);
+      expect(r.headers.get('x-content-type-options'), url).toBe('nosniff');
+      expect(r.headers.get('x-frame-options'), url).toBe('DENY');
+      expect(r.headers.get('referrer-policy'), url).toBe('same-origin');
+      expect(r.headers.get('x-powered-by'), url).toBeNull();
+    }
+  });
+});
+
 describe('테스트 격리', () => {
   it('테스트 파일마다 따로 만든 데이터 폴더를 쓴다 (동시에 돌 때 settings.json 등이 겹치지 않게)', () => {
     expect(path.basename(DATA_DIR)).toMatch(/^run-/);

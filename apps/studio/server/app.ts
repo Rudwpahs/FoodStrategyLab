@@ -159,6 +159,14 @@ const PLATFORM_URL: Record<Publication['platform'], RegExp> = {
 
 export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const app = express();
+  app.disable('x-powered-by');
+  // 모든 응답 공통 보안 헤더: 파일 종류를 짐작해 실행하지 않게, 다른 사이트 안에 끼워 넣지 못하게, 주소를 바깥에 흘리지 않게
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    next();
+  });
   // 레시피 사진·파일 올리기만 큰 요청(최대 40MB)을 받는다. 나머지는 2MB
   const smallJson = express.json({ limit: '2mb' });
   app.use((req, res, next) => (req.path === FROM_FILES ? next() : smallJson(req, res, next)));

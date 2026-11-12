@@ -16,13 +16,16 @@
     "render:samples": "npm run render:samples -w @mat-lab/studio",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tools/tsconfig.json --noEmit",
-    "e2e": "node apps/studio/e2e/user-flow.e2e.cjs",
+    "e2e": "vite build -c apps/studio/vite.config.ts --logLevel warn && playwright test -c apps/studio/e2e/playwright.config.ts",
+    "e2e:live": "playwright test -c apps/studio/e2e/live.config.ts",
+    "e2e:render": "tsx apps/studio/e2e/render.e2e.ts",
     "e2e:lab": "node apps/studio/e2e/content-lab.e2e.cjs",
     "check": "npm run typecheck && npm test",
     "user:add": "npm run user:add -w @mat-lab/studio --",
     "start": "npm run start -w @mat-lab/studio"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "22.20.5",
     "typescript": "5.9.3",
     "vitest": "5.0.5"

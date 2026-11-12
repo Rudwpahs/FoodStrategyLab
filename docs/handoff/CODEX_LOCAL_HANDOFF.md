@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 테스트 · 타입 검사 · 화면 빌드 | 통과 (2026-11-11, 이 브랜치에서 `npm test` 269개) | `npm test`, `npm run typecheck`, `npx tsc -p tools/tsconfig.json --noEmit`, `npx vite build -c apps/studio/vite.config.ts`. 숫자는 브랜치마다 다르니 직접 돌려 볼 것 |
 | 화면(웹) 단위 테스트 | 있음 | `apps/studio/web/src/*.test.ts`: 진행 확인 재시도(`poll.ts`), 서버 오류 읽기·중복 판별(`api.ts`), 단계 진행(`steps/progress.ts`) |
-| 화면 흐름 점검(e2e) | 휴대폰 폭 390px로 갱신·로컬 실행 확인, CI 밖 | `apps/studio/e2e/user-flow.e2e.cjs`, `content-lab.e2e.cjs` (실행법은 파일 맨 위). 가로 넘침도 검사 |
+| E2E (화면 흐름·원칙·보안) | 자동화, CI·배포 전후에 돎 | 계획서 `docs/testing/E2E_PLAN.md`. `npm run e2e`(Playwright, 가짜 렌더러·가짜 Claude 시험 서버 `apps/studio/e2e/server.ts`, 휴대폰·PC), `npm run e2e:live`(배포 뒤 실제 서버 읽기 점검), `npm run e2e:render`(진짜 렌더 1개, 수동). `content-lab.e2e.cjs`는 예전 수동 점검 |
 | Modal 배포 코드 | 작성·로컬 검증 | `deploy/modal/app.py`, `voice_proxy.py`, `.github/workflows/modal-deploy.yml`(테스트 통과 후에만 배포), 안내 `docs/MODAL_SETUP.md` |
 | Modal 비밀값 | 두 묶음 | `matlab-studio`(GitHub 비밀값을 배포 때마다 다시 씀) + `matlab-settings`(사용자가 Modal 화면에서 고치는 설정, 배포가 덮어쓰지 않음). 자세한 표는 `docs/MODAL_SETUP.md` '설정 바꾸기' |
 | Modal 실제 배포 | ✅ 배포·응답 확인 (2026-11-05, Actions #4), 첫 계정 화면까지 | **첫 계정·GPU 목소리·영상 1편 시간·비용·제작 중 깨워 두기는 미확인** |
