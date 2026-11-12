@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
-import { changeTempo, readFreshCache, removeAudioWithCache, writeCache } from '@mat-lab/video/audio';
+import { changeTempo, readFreshCache, removeAudioCaches, writeCache } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
 import { VOICE_TEMPOS, defaultPreset, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
 import { assertCommercialEngine, engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
@@ -245,8 +245,10 @@ export async function measuredWords(file: string, line: string): Promise<[number
 /**
  * 같은 문장은 다시 만들지 않는다 (캐시). 반환값: 파일 경로와 길이(초)
  * override: 설정과 다른 목소리·빠르기로 (설정 화면의 '들어보기')
+ * regenerate: 캐시가 있어도 새로 만든다 (받아쓰기로 끊긴 음성을 찾았을 때). 다 만들 때까지 옛 파일을 그대로 두고
+ *   한 번에 바꿔치기하므로, 그 파일을 읽던 다른 작업이 빈 파일이나 반쯤 쓴 파일을 보지 않는다.
  */
-export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}): Promise<{ file: string; seconds: number }> {
+export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}, opts: { regenerate?: boolean } = {}): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
   const voice = override.voice ?? voicestudioVoice();
@@ -259,15 +261,13 @@ export async function synthesize(text: string, audioDir: string, override: Voice
   if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
   const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
-  if (!fs.existsSync(file)) {
-    // 같은 음성을 동시에 만들면(후보 목소리 작업 + 영상 제작) 먼저 시작한 작업을 기다린다
-    let job = making.get(file);
-    if (!job) {
-      job = makeAudio(provider, text, file, voice, tempo, target).finally(() => making.delete(file));
-      making.set(file, job);
-    }
-    await job;
+  // 같은 음성을 이미 만들고 있으면(후보 목소리 작업 + 영상 제작, 또는 다시 만드는 중) 그 작업을 기다린다
+  let job = making.get(file);
+  if (!job && (opts.regenerate || !fs.existsSync(file))) {
+    job = makeAudio(provider, text, file, voice, tempo, target).finally(() => making.delete(file));
+    making.set(file, job);
   }
+  if (job) await job;
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
 
@@ -295,8 +295,6 @@ async function makeAudio(provider: TtsProvider, text: string, file: string, voic
 }
 
 async function makeAudioFile(provider: TtsProvider, text: string, file: string, voice: string, tempo: number, target: VoiceStudioTarget | null) {
-  // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 먼저 지운다
-  removeAudioWithCache(file);
   // 임시 파일 이름은 작업마다 다르게 (다른 작업의 임시 파일을 덮거나 지우지 않게)
   const tmp = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   const raw = `${tmp}.raw.mp3`;
@@ -315,6 +313,9 @@ async function makeAudioFile(provider: TtsProvider, text: string, file: string, 
       if (e.proxy) args.push('--proxy', e.proxy);
       await run(e.command, args);
     }
+    // 같은 이름으로 다시 만드는 경우: 옛 분석 결과(길이·어절 시간)를 지우고, 다 만든 파일로 한 번에 바꿔치기한다
+    // (옛 파일을 먼저 지우지 않는다: 그 사이에 읽는 작업이 '파일 없음'을 보지 않게)
+    removeAudioCaches(file);
     fs.renameSync(tmp, file);
   } finally {
     fs.rmSync(raw, { force: true });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { cachedAudio, measuredWords, resetTtsDetection, synthesize, ttsProvider, voiceIdentity, voicestudioVoice } from './tts.ts';
+import { cachedAudio, measuredWords, mp3DurationSeconds, resetTtsDetection, synthesize, ttsProvider, voiceIdentity, voicestudioVoice } from './tts.ts';
 import { createDesignedVoice, engineInfo, findVoiceStudio, listProfiles, writeVoiceSettings } from './voicestudio.ts';
 import { voicePresets } from './voicePresets.ts';
 
@@ -26,6 +26,8 @@ const profiles: { id: number; name: string; kind: string }[] = [{ id: 1, name: '
 let designBody = '';
 let engines = [{ id: 'omnivoice', available: true }, { id: 'voxcpm2', available: true }, { id: 'moss-tts-nano', available: false }];
 let starting = false;
+let speechGate: Promise<void> | null = null;
+let speechBody: Buffer | null = null;
 let server: http.Server;
 const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
 
@@ -81,7 +83,8 @@ beforeAll(async () => {
         }
         requests.push(parsed);
         res.setHeader('content-type', parsed.response_format === 'wav' ? 'audio/wav' : 'audio/mpeg');
-        res.end(mp3);
+        // speechGate가 있으면 열릴 때까지 응답을 미룬다 (만드는 도중의 상태를 시험)
+        void (speechGate ?? Promise.resolve()).then(() => res.end(speechBody ?? mp3));
       });
       return;
     }
@@ -227,6 +230,43 @@ describe('VoiceStudio 음성', () => {
     expect(requests.length).toBe(before + 1);
     expect(new Set([a!.file, b!.file, c!.file]).size).toBe(1);
     expect(fs.readdirSync(audioDir).filter((f) => f.includes('.tmp'))).toEqual([]);
+  });
+
+  it('다시 만들 때(regenerate) 옛 파일을 먼저 지우지 않고 한 번에 바꾸며, 같은 문장을 읽는 다른 작업은 새 파일을 기다린다', async () => {
+    const line = '다시 만드는 동안 다른 작업이 읽는 문장';
+    const old = await synthesize(line, audioDir);
+    fs.writeFileSync(`${old.file}.asr.json`, '{}');
+    const before = requests.length;
+    let open!: () => void;
+    speechGate = new Promise((r) => (open = r));
+    // 새 음성은 2.4초 (옛 음성 1.2초와 구별)
+    speechBody = Buffer.concat([mp3, mp3]);
+    try {
+      const regen = synthesize(line, audioDir, {}, { regenerate: true });
+      for (let i = 0; i < 400 && requests.length === before; i++) await new Promise((r) => setTimeout(r, 5));
+      expect(requests.length).toBe(before + 1);
+      // 만드는 동안에도 옛 파일은 온전히 남아 있다 (읽던 작업이 '파일 없음'이나 반쯤 쓴 파일을 보지 않는다)
+      expect(mp3DurationSeconds(fs.readFileSync(old.file))).toBeCloseTo(1.2, 5);
+      let readerDone = false;
+      const reader = synthesize(line, audioDir).then((a) => {
+        readerDone = true;
+        return a;
+      });
+      await new Promise((r) => setTimeout(r, 30));
+      expect(readerDone).toBe(false);
+      open();
+      const [a, b] = await Promise.all([regen, reader]);
+      expect([a.file, b.file]).toEqual([old.file, old.file]);
+      expect(a.seconds).toBeCloseTo(2.4, 5);
+      expect(b.seconds).toBeCloseTo(2.4, 5);
+      expect(requests.length).toBe(before + 1);
+      // 옛 받아쓰기 결과는 지운다 (새 음성에 옛 판정이 붙지 않게)
+      expect(fs.existsSync(`${old.file}.asr.json`)).toBe(false);
+      expect(fs.readdirSync(audioDir).filter((f) => f.includes('.tmp'))).toEqual([]);
+    } finally {
+      speechGate = null;
+      speechBody = null;
+    }
   });
 
   it('같은 문장은 캐시를 써서 다시 요청하지 않는다', async () => {
