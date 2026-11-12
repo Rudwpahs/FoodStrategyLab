@@ -67,8 +67,11 @@ test('B3 영상 완성: 진행이 끝나고 영상·표지·카드가 열리며 
     await expect(img).toBeVisible();
     expect(await img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), `${alt} 그림`).toBe(true);
   }
-  const video = page.locator('video').first();
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(1);
+  // 완성본 영상 (미리보기 플레이어의 영상 요소와 헷갈리지 않게 파일 주소로 고른다)
+  const video = page.locator('video[src$="/video.mp4"]').first();
+  // 영상 정보(길이·크기)를 읽었는지. 느린 컴퓨터에서는 몇 초 걸릴 수 있다. 영상 오류(error)는 없어야 한다
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+  expect(await video.evaluate((v: HTMLVideoElement) => v.error?.code ?? 0), '영상 재생 오류').toBe(0);
   await expect(page.getByText(/자동 품질 검사 — 통과/)).toBeVisible();
   await expect(page.getByText('검수용 · 승인 후 내려받기')).toBeVisible();
   await noOverflow(page, '영상');
