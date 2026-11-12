@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { SAMPLE_RECIPES, generateTemplateScript } from '@mat-lab/recipe-core';
+import { SAMPLE_RECIPES, estimateSceneSeconds, estimateSpeechSeconds, generateTemplateScript } from '@mat-lab/recipe-core';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
-import { buildTimeline, captionChunks, captionGroups, totalFrames, wordTimings } from './timeline.ts';
+import { FPS, buildTimeline, captionChunks, captionGroups, totalFrames, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
 
@@ -13,6 +13,12 @@ describe('타임라인', () => {
       expect(x.speechFrames).toBeLessThanOrEqual(x.durationInFrames);
     });
     expect(totalFrames(t)).toBe(t.at(-1)!.from + t.at(-1)!.durationInFrames);
+  });
+
+  it('음성이 없으면 recipe-core의 말하는 시간 추정을 그대로 쓴다 (예전 "장면 길이 - 0.5초"와 같은 타임라인)', () => {
+    const t = buildTimeline(script, script.scenes.map(() => null));
+    script.scenes.forEach((s, i) => expect(t[i]!.speechFrames).toBe(Math.min(t[i]!.durationInFrames, Math.ceil(estimateSpeechSeconds(s.line) * FPS))));
+    expect(t).toEqual(buildTimeline(script, script.scenes.map((s) => estimateSceneSeconds(s) - 0.5)));
   });
 
   it('음성 길이가 있으면 그 길이를 기준으로 한다', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientPiece, ingredientProps } from './index.ts';
+import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, estimateSpeechSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientPiece, ingredientProps } from './index.ts';
 
 const [kimchi, spinach, egg] = SAMPLE_RECIPES as [typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0]];
 
@@ -102,6 +102,21 @@ describe('생성 AI 클립 묶음', () => {
         const secs = g.reduce((sum, id) => sum + estimateSceneSeconds(script.scenes.find((s) => s.id === id)!), 0);
         expect(g.length === 1 || secs <= 8).toBe(true);
       }
+    }
+  });
+});
+
+describe('대사 길이 추정', () => {
+  it('말하는 시간은 글자 수(띄어쓰기 빼고)를 초당 7자로 나누고, 아무리 짧아도 1.1초', () => {
+    expect(estimateSpeechSeconds('안녕')).toBe(1.1);
+    expect(estimateSpeechSeconds('가나다라 마바사아 자차카타 파하')).toBeCloseTo(14 / 7, 10);
+  });
+
+  it('장면 길이는 말하는 시간 + 0.5초 (예전 값과 같다)', () => {
+    for (const line of ['안녕', '가나다라마바사', '찬물로 반죽해야 바삭해요', '팬을 충분히 달군 뒤 기름을 넉넉히 두르고 얇게 펴서 부쳐요']) {
+      const chars = line.replace(/\s/g, '').length;
+      expect(estimateSceneSeconds({ line })).toBeCloseTo(Math.max(1.6, chars / 7 + 0.5), 10);
+      expect(estimateSceneSeconds({ line }) - estimateSpeechSeconds(line)).toBeCloseTo(0.5, 10);
     }
   });
 });
