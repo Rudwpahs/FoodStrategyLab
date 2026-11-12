@@ -73,6 +73,27 @@ export function recordUsage(db: Db, purpose: string, model: string, inputTokens:
   db.prepare('INSERT INTO ai_usage (created_at, month, purpose, model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)').run(new Date().toISOString(), monthKey(), purpose, model, inputTokens, outputTokens, cost);
 }
 
+/** 실제로 쓴 금액의 평균 (횟수와 1회 평균 달러) */
+export interface MeasuredCost {
+  count: number;
+  avgUsd: number;
+}
+
+/**
+ * 최근 며칠 동안 기능별로 실제로 쓴 1회 평균 금액 (화면의 비용 안내를 추정 대신 실측으로 보이려고).
+ * 기능 이름은 기록할 때 쓴 purpose (recipe-read, topics). AI 티 다듬기(humanize-대사·블로그 등)는 humanize 하나로 묶는다.
+ */
+export function recentCostByPurpose(db: Db, days = 30, now = new Date()): Record<string, MeasuredCost> {
+  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT CASE WHEN purpose LIKE 'humanize-%' THEN 'humanize' ELSE purpose END AS p, COUNT(*) AS n, AVG(cost_usd) AS avg
+       FROM ai_usage WHERE created_at >= ? AND created_at <= ? GROUP BY p`,
+    )
+    .all(since, now.toISOString()) as { p: string; n: number; avg: number }[];
+  return Object.fromEntries(rows.map((r) => [r.p, { count: Number(r.n), avgUsd: Number(r.avg) }]));
+}
+
 /**
  * Claude API 오류 → 사용자에게 보여 줄 HttpError. API 오류가 아니면 그대로 돌려준다 (호출한 쪽에서 throw).
  * badRequest: 잘못된 요청(400)을 따로 설명할 때 (예: 올린 파일이 너무 큼)

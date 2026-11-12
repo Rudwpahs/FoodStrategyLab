@@ -5,8 +5,9 @@ import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQue
 import type { ProjectDetail, ProjectSummary, PublicRender, Publication } from '../../server/repo.ts';
 import type { FormatInsight } from '../../server/insights.ts';
 import type { HumanizeResult } from '../../server/humanize.ts';
+import type { MeasuredCost } from '../../server/claudeUsage.ts';
 
-export type { CandidateVoiceJob, FormatInsight, HumanizeResult, ProjectDetail, ProjectSummary, Publication };
+export type { CandidateVoiceJob, FormatInsight, HumanizeResult, MeasuredCost, ProjectDetail, ProjectSummary, Publication };
 /** 화면이 받는 영상 기록 (서버 폴더 경로는 오지 않는다) */
 export type RenderRow = PublicRender;
 
@@ -19,6 +20,8 @@ export interface AiInfo {
   spentUsd: number;
   budgetUsd: number;
   maxFiles: number;
+  /** 최근 30일 기능별(recipe-read, topics, humanize) 실제 1회 평균. 기록이 없는 기능은 빠진다 */
+  measured?: Record<string, MeasuredCost>;
 }
 
 export interface UploadFile {

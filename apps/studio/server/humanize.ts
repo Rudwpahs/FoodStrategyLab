@@ -106,7 +106,7 @@ export class Humanizer {
     const tells = findAiTells(joined);
     const same = list.map((i) => ({ id: i.id, before: i.text, after: i.text, changed: false, reasons: [] }));
     if (!tells.length && !opts.force) {
-      return { kind, items: same, tellsBefore: 0, tellsAfter: 0, changeRate: 0, costUsd: 0, notes: '', skipped: '규칙 검사에서 AI 티가 보이지 않아요. 그래도 Claude로 다듬어 볼 수 있어요 (1회 약 $0.1).' };
+      return { kind, items: same, tellsBefore: 0, tellsAfter: 0, changeRate: 0, costUsd: 0, notes: '', skipped: '규칙 검사에서 AI 티가 보이지 않아요. 그래도 Claude로 다듬어 볼 수 있어요 (1회 약 $0.1, 추정).' };
     }
     if (this.call === claudeRewrite && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
 

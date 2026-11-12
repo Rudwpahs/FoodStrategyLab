@@ -1,7 +1,7 @@
 import './testDataDir.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { assertBudget, claudeError, costUsd, monthKey, monthSpentUsd, priceOf, recordUsage, reserveBudget, reservedUsd } from './claudeUsage.ts';
+import { assertBudget, claudeError, costUsd, monthKey, monthSpentUsd, priceOf, recentCostByPurpose, recordUsage, reserveBudget, reservedUsd } from './claudeUsage.ts';
 import { openDb } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -38,6 +38,26 @@ describe('Claude 비용·월 한도 (레시피 읽기·주제 더 보기·AI 티
     release();
     expect(reservedUsd(db)).toBe(0);
     expect(() => assertBudget(db)).not.toThrow();
+  });
+
+  it('최근 30일 기능별 실제 1회 평균 금액 (다듬기는 하나로 묶고, 30일 넘은 기록은 뺀다)', () => {
+    const db = openDb(':memory:');
+    const insert = (at: string, purpose: string, cost: number) =>
+      db.prepare('INSERT INTO ai_usage (created_at, month, purpose, model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?)').run(at, monthKey(new Date(at)), purpose, 'claude-opus-5-5', 0, 0, cost);
+    const now = new Date('2026-11-12T00:00:00Z');
+    insert('2026-11-10T00:00:00.000Z', 'recipe-read', 0.1);
+    insert('2026-11-11T00:00:00.000Z', 'recipe-read', 0.2);
+    insert('2026-10-01T00:00:00.000Z', 'recipe-read', 5);
+    insert('2026-11-11T00:00:00.000Z', 'topics', 0.03);
+    insert('2026-11-11T00:00:00.000Z', 'humanize-script', 0.1);
+    insert('2026-11-11T00:00:00.000Z', 'humanize-blog', 0.3);
+    const m = recentCostByPurpose(db, 30, now);
+    expect(m['recipe-read']!.count).toBe(2);
+    expect(m['recipe-read']!.avgUsd).toBeCloseTo(0.15, 10);
+    expect(m.topics).toEqual({ count: 1, avgUsd: 0.03 });
+    expect(m.humanize!.count).toBe(2);
+    expect(m.humanize!.avgUsd).toBeCloseTo(0.2, 10);
+    expect(recentCostByPurpose(openDb(':memory:'))).toEqual({});
   });
 
   it('API 오류를 쉬운 문장으로 바꾸고, 다른 오류는 그대로 둔다', () => {
