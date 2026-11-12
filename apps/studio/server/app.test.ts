@@ -108,6 +108,13 @@ describe('스튜디오 API 흐름', () => {
     const restored = await call('POST', `/projects/${pid}/versions/1/restore`);
     expect(restored.body.latest.version).toBe(3);
     expect(restored.body.latest.script.scenes[1].line).not.toBe('수정된 대사입니다.');
+
+    // 작업 내역은 최근 50건만 보내고, 전체 건수는 따로 알려 준다
+    expect(restored.body.eventCount).toBe(restored.body.events.length);
+    for (let i = 0; i < 60; i++) testRepo.logEvent(pid, 'info', `기록 ${i}`);
+    const detail = await call('GET', `/projects/${pid}`);
+    expect(detail.body.events).toHaveLength(50);
+    expect(detail.body.eventCount).toBe(restored.body.eventCount + 60);
   });
 
   it('승인 후 원본 레시피를 고치면 재검수가 필요하다', async () => {
@@ -281,6 +288,17 @@ describe('최종 사용자 흐름: 후보 3개 → 선택 → 검수용 영상 �
     const keys = c.body.candidates.map((x: { key: string }) => x.key);
     const more = await call('GET', `/projects/${pid}/candidates?exclude=${keys.join(',')}`);
     for (const x of more.body.candidates) expect(keys).not.toContain(x.key);
+    // 목소리 작업은 맡은 후보만 알려 준다 (작업 중에 새로 본 후보에 '목소리 넣는 중'이 뜨지 않게). 목소리 도구는 끈 채로
+    const tts = process.env.TTS_PROVIDER;
+    process.env.TTS_PROVIDER = 'none';
+    try {
+      const job = await call('POST', `/projects/${pid}/candidates/voice`, { keys: [keys[0]] });
+      expect(job.status).toBe(202);
+      expect(job.body.keys).toEqual([keys[0]]);
+    } finally {
+      if (tts === undefined) delete process.env.TTS_PROVIDER;
+      else process.env.TTS_PROVIDER = tts;
+    }
 
     // 4. C(실험형) 선택 → 새 대본 버전
     const pick = c.body.candidates[2];

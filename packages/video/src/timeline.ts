@@ -101,6 +101,11 @@ export function totalFrames(timings: SceneTiming[]): number {
   return last ? last.from + last.durationInFrames : 1;
 }
 
+/** 화면에 적는 영상 길이(초). 재생 막대(Remotion Player)가 보여 주는 값과 같게 버림한다. */
+export function videoSeconds(timings: SceneTiming[], fps = FPS): number {
+  return Math.floor(totalFrames(timings) / fps);
+}
+
 export interface WordTiming {
   text: string;
   from: number;

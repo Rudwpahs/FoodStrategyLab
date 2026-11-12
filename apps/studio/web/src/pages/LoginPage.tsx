@@ -49,11 +49,14 @@ export const LoginPage: React.FC<{ auth: AuthState; onLoggedIn: () => void }> = 
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div className="card stack" style={{ width: '100%', maxWidth: 380 }}>
-        <div className="row" style={{ gap: 10 }}>
-          <LogoMark size={40} />
-          <b style={{ fontSize: 20 }}>{BRAND.labName} 스튜디오</b>
+    <div className="login">
+      <div className="card stack login-card">
+        <div className="row" style={{ gap: 12, flexWrap: 'nowrap' }}>
+          <LogoMark size={44} />
+          <div>
+            <h1 className="login-title">{BRAND.labName} 스튜디오</h1>
+            <div className="muted small">{auth.mode === 'local' ? '계정을 먼저 만들어야 해요' : setup ? '처음 한 번, 계정을 만들어요' : '로그인하고 이어서 작업하세요'}</div>
+          </div>
         </div>
         {auth.mode === 'local' ? (
           <div className="issue warning">
@@ -97,8 +100,8 @@ export const LoginPage: React.FC<{ auth: AuthState; onLoggedIn: () => void }> = 
                 연구자 본인 계정이에요 (이 계정만 승인할 수 있어요)
               </label>
             )}
-            {error && <div className="issue error">{error}</div>}
-            <button className="btn primary" disabled={busy}>
+            {error && <div className="issue error" role="alert">{error}</div>}
+            <button className="btn primary big block" disabled={busy}>
               {busy ? '확인 중…' : setup ? '계정 만들고 시작하기' : reset ? '새 비밀번호로 바꾸고 로그인' : '로그인'}
             </button>
             {!setup && auth.canReset && (

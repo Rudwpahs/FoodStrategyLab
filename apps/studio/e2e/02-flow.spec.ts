@@ -22,9 +22,9 @@ test('B1 새 콘텐츠: 예시 레시피로 만들기', async ({ page }) => {
   const walnut = meta.samples.find((s: { dishName: string }) => s.dishName === '호두정과');
   await page.goto('/#/new');
   await page.getByText('직접 입력하기').click();
-  await page.locator('select').filter({ hasText: '파일럿 샘플 불러오기' }).selectOption({ label: walnut.topic });
+  await page.locator('select').filter({ hasText: '샘플 고르기' }).selectOption({ label: walnut.topic });
   await noOverflow(page, '새 콘텐츠');
-  await page.getByRole('button', { name: '저장하고 후보 영상 보기 →' }).click();
+  await page.getByRole('button', { name: '저장하고 후보 영상 보기' }).click();
   await expect(page).toHaveURL(/#\/p\/\d+\/script/);
   id = Number(/#\/p\/(\d+)\//.exec(page.url())![1]);
   const p = await (await page.request.get(`/api/projects/${id}`)).json();
@@ -61,7 +61,7 @@ test('B3 영상 완성: 진행이 끝나고 영상·표지·카드가 열리며 
   const done = await waitRender(page.request, renderId);
   expect(done.status, done.error ?? '').toBe('done');
   await page.goto(`/#/p/${id}/video`);
-  await expect(page.getByRole('heading', { name: `완성본 (작업 #${renderId})` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '완성본', exact: true })).toBeVisible();
   for (const alt of ['커버', '썸네일', '레시피 카드']) {
     const img = page.getByAltText(alt);
     await expect(img).toBeVisible();

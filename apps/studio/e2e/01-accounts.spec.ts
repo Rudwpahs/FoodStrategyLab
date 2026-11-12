@@ -23,7 +23,7 @@ test('A1 설정 코드로 첫 계정 만들기 (틀린 코드는 거절)', async
   await fill(SETUP_CODE);
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
   await page.getByRole('button', { name: '계정 만들고 시작하기' }).click();
-  await expect(page.getByRole('link', { name: '콘텐츠 목록' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '콘텐츠', level: 1 })).toBeVisible();
   const me = await (await page.request.get('/api/auth/me')).json();
   expect(me.user.username).toBe(RESEARCHER.username);
   expect(me.user.role).toBe('member');
@@ -40,7 +40,7 @@ test('A2 로그아웃 → 틀린 비밀번호 → 맞는 비밀번호', async ({
   await expect(page.locator('.issue.error')).toContainText('맞지 않아요');
   await page.getByLabel('비밀번호').fill(RESEARCHER.password);
   await page.getByRole('button', { name: '로그인' }).click();
-  await expect(page.getByRole('link', { name: '콘텐츠 목록' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '콘텐츠', level: 1 })).toBeVisible();
 });
 
 test('A3 [계정]에서 도우미 계정 추가 → 도우미로 로그인', async ({ page, browser }) => {
@@ -116,7 +116,7 @@ test('A5 비밀번호를 잊었어요 → 설정 코드로 재설정 → 옛 로
   await page.getByLabel(/새 비밀번호/).fill(HELPER.reset);
   await page.getByLabel('비밀번호 한 번 더').fill(HELPER.reset);
   await page.getByRole('button', { name: '새 비밀번호로 바꾸고 로그인' }).click();
-  await expect(page.getByRole('link', { name: '콘텐츠 목록' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '콘텐츠', level: 1 })).toBeVisible();
   expect((await old.get('/api/projects')).status()).toBe(401);
   await old.dispose();
 });

@@ -84,6 +84,7 @@ export const VoicePanel: React.FC = () => {
 
       <div className="stack" style={{ gap: 8 }}>
         <b>목소리 고르기</b>
+        {info.presets.length === 0 && <div className="small muted">고를 수 있는 목소리 목록을 불러오지 못했어요. 관리자에게 알려 주세요.</div>}
         <div className="voice-options">
           {info.presets.map((p) => {
             const on = info.selectedPreset === p.id;

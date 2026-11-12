@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES, estimateSceneSeconds, estimateSpeechSeconds, generateTemplateScript } from '@mat-lab/recipe-core';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
-import { FPS, buildTimeline, captionChunks, captionGroups, totalFrames, wordTimings } from './timeline.ts';
+import { buildTimeline, captionChunks, captionGroups, FPS, totalFrames, videoSeconds, wordTimings } from './timeline.ts';
 
 const script = generateTemplateScript(SAMPLE_RECIPES[1]!);
 
@@ -119,5 +119,14 @@ describe('빈 음성 감지', () => {
     expect(b.silent).toBe(false);
     expect(b.start).toBeGreaterThan(0.2);
     expect(b.end).toBeLessThan(0.85);
+  });
+});
+
+describe('화면에 적는 영상 길이', () => {
+  it('재생 막대처럼 버림한다', () => {
+    const at = (frames: number) => [{ sceneId: 's1', from: 0, durationInFrames: frames, speechFrames: 0 }];
+    expect(videoSeconds(at(1257))).toBe(41); // 41.9초 → 재생 막대 0:41
+    expect(videoSeconds(at(1230))).toBe(41);
+    expect(videoSeconds(at(1229))).toBe(40);
   });
 });

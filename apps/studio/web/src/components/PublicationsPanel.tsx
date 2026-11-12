@@ -49,7 +49,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
       {!approved && <div className="issue warning">이희재 연구자의 승인을 받은 최신 콘텐츠만 게시·기록할 수 있어요.</div>}
 
       <div className="card stack">
-        <h2 style={{ margin: 0 }}>인스타그램 릴스</h2>
+        <h2 style={{ margin: 0 }}>인스타그램 릴스 게시</h2>
         <InstagramPublish key={render?.id ?? "none"} renderId={render?.id ?? null} approved={approved} onPublished={reload} />
         <div className="muted small">인스타그램 앱에서 직접 올렸다면 게시물 주소를 기록해 주세요.</div>
         <div className="row">
@@ -58,16 +58,19 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
         </div>
         <div className="row small">
           예약 메모
-          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} disabled={!approved} />
+          <input type="datetime-local" aria-label="인스타그램 예약 메모 날짜와 시간" value={when} onChange={(e) => setWhen(e.target.value)} disabled={!approved} />
           <button className="btn small" disabled={!approved || !when} onClick={() => record('instagram', 'scheduled')}>예약 기록</button>
           <span className="muted">(예약은 메모만 남아요. 실제 게시는 그 시각에 직접 눌러 주세요)</span>
         </div>
       </div>
 
       <div className="card stack">
-        <h2 style={{ margin: 0 }}>네이버 블로그 (반자동)</h2>
-        <ol className="small" style={{ margin: 0 }}>
-          <li>왼쪽 원고에서 <b>본문 복사</b> → 아래 버튼으로 글쓰기 창 열기 → 붙여넣기</li>
+        <div className="card-head">
+          <h2>네이버 블로그</h2>
+          <span className="muted">반자동</span>
+        </div>
+        <ol className="small" style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 4 }}>
+          <li>'네이버 블로그 원고' 칸에서 <b>본문 복사</b>를 누르고, 아래 버튼으로 글쓰기 창을 열어 붙여넣기</li>
           <li>사진을 내려받아 글 속 [사진 첨부] 자리에 올리기</li>
           <li>발행한 뒤 글 주소를 기록하기</li>
         </ol>
@@ -91,7 +94,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
       </div>
 
       <div className="card stack">
-        <h2 style={{ margin: 0 }}>유튜브 쇼츠</h2>
+        <h2 style={{ margin: 0 }}>유튜브 쇼츠 게시</h2>
         <div className="row">
           <input type="url" placeholder="https://www.youtube.com/shorts/…" value={urls.youtube ?? ''} onChange={(e) => setUrls({ ...urls, youtube: e.target.value })} style={{ flex: 1 }} disabled={!approved} />
           <button className="btn primary small" disabled={!approved || !urls.youtube} onClick={() => record('youtube', 'published')}>게시 기록</button>
@@ -100,7 +103,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
 
       <div className="card stack">
         <h2 style={{ margin: 0 }}>게시 이력과 성과</h2>
-        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 같은 연출을 3편 이상 모으면 [주제·영상 고르기]의 후보 영상에 방향이 보여요. 조회수는 참고만 해요.</div>
+        <div className="muted small">게시 하루 이틀 뒤 인스타그램·유튜브 인사이트 숫자를 옮겨 적어 주세요. 적은 숫자는 [주제·영상 고르기]의 후보 카드에 같은 연출의 지난 성과로 보이고, 같은 연출을 3편 이상 모으면 방향이 보여요. 조회수는 참고만 해요.</div>
         {project.publications.length === 0 && <div className="muted">아직 기록이 없어요.</div>}
         {project.publications.map((p) => (
           <PublicationRow key={p.id} pub={p} onSaved={reload} />
@@ -114,7 +117,7 @@ const PublicationRow: React.FC<{ pub: Publication; onSaved: () => Promise<void> 
   const { run } = useApp();
   const [vals, setVals] = useState<Record<string, string>>(Object.fromEntries(Object.entries(pub.metrics).map(([k, v]) => [k, String(v)])));
   return (
-    <div className="stack" style={{ border: '1px solid #ddd', borderRadius: 12, padding: 10 }}>
+    <div className="stack panel">
       <div className="row small">
         <b>{PLATFORM_LABEL[pub.platform]}</b>
         <span className="badge">{pub.status === 'published' ? '게시됨' : `예약 ${new Date(pub.scheduledAt).toLocaleString('ko-KR')}`}</span>

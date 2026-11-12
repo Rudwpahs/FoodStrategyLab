@@ -26,16 +26,16 @@ export const ClipUploads: React.FC<{ project: ProjectDetail; setProject: (p: Pro
         const media = project.sceneMedia[firstId];
         const range = ids.map((id) => byId.get(id)!.index);
         return (
-          <div key={firstId} className="scene" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-            <div style={{ width: 72, height: 128, flex: 'none', borderRadius: 10, overflow: 'hidden', background: '#2b2321', border: '2px solid var(--ink)' }}>
-              {media?.kind === 'video' && <video src={media.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-              {media?.kind === 'image' && <img src={media.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-              {!media && <div style={{ color: '#fff', fontSize: 12, textAlign: 'center', paddingTop: 52 }}>3D</div>}
+          <div key={firstId} className="scene clip-row">
+            <div className="clip-thumb">
+              {media?.kind === 'video' && <video src={media.url} muted />}
+              {media?.kind === 'image' && <img src={media.url} alt="" />}
+              {!media && '3D'}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <b>클립 {gi + 1}</b> <span className="muted small">장면 {range[0]}{range.length > 1 ? `–${range.at(-1)}` : ''}</span>
               {ids.map((id) => (
-                <div key={id} className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div key={id} className="small ellipsis">
                   “{byId.get(id)!.scene.line}”
                 </div>
               ))}
@@ -45,7 +45,8 @@ export const ClipUploads: React.FC<{ project: ProjectDetail; setProject: (p: Pro
               <input
                 type="file"
                 accept={`video/mp4,video/webm,${PHOTO_ACCEPT}`}
-                hidden
+                className="sr-only"
+                aria-label={`클립 ${gi + 1} ${media ? '바꾸기' : '올리기'}`}
                 onChange={async (e) => {
                   const picked = e.target.files?.[0];
                   e.target.value = '';

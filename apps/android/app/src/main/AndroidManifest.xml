@@ -2,8 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 안드로이드 9 이하에서 공용 '다운로드' 폴더에 저장할 때만 쓴다 (10부터는 필요 없다) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
-    <!-- 카메라 앱이 있는지 확인하려면 (안드로이드 11부터) 미리 적어 둬야 한다 -->
+    <!-- 파일 고르기 창에 '사진 찍기'를 넣으려면 카메라 앱이 있는지 알아야 한다 (안드로이드 11부터는 미리 밝혀야 보인다) -->
     <queries>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
@@ -27,11 +29,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- 카메라로 찍은 사진을 받는 앱 안 자리 (다른 앱에는 닫혀 있고, 카메라에만 잠깐 쓰기 권한을 준다) -->
-        <provider
-            android:name=".PhotoProvider"
-            android:authorities="kr.matlab.studio.photo"
-            android:exported="false"
-            android:grantUriPermissions="true" />
     </application>
 </manifest>

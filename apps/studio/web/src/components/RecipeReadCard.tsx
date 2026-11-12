@@ -24,13 +24,15 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
 
   return (
     <details className="card" open={open || src.problems.length > 0 || (src.aiFields.length > 0 && !src.aiConfirmedAt)}>
-      <summary style={{ cursor: 'pointer' }}>
-        <b>올린 자료에서 읽은 레시피</b>{' '}
-        <span className="muted small">
-          재료 {r.ingredients.length}개 · 순서 {r.steps.length}단계{src.problems.length ? ` · 확인할 곳 ${src.problems.length}개` : ''} (눌러서 보기)
+      <summary>
+        올린 자료에서 읽은 레시피{' '}
+        <span className="muted small num">
+          재료 {r.ingredients.length}개 · 순서 {r.steps.length}단계
         </span>
+        {src.problems.length > 0 && <span className="badge review" style={{ marginLeft: 6 }}>확인할 곳 {src.problems.length}</span>}
+        {src.aiFields.length > 0 && !src.aiConfirmedAt && <span className="badge review" style={{ marginLeft: 6 }}>AI 제안 확인 필요</span>}
       </summary>
-      <div className="stack" style={{ marginTop: 12 }}>
+      <div className="stack">
         {src.files.length > 0 && (
           <div className="source-thumbs">
             {src.files.map((f) =>
@@ -39,8 +41,8 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
                   <img src={f.url} alt={f.name} />
                 </a>
               ) : (
-                <a key={f.file} className="btn small ghost" href={f.url} target="_blank" rel="noreferrer">
-                  📄 {f.name}
+                <a key={f.file} className="file-chip" href={f.url} target="_blank" rel="noreferrer">
+                  {f.name}
                 </a>
               ),
             )}
@@ -69,7 +71,7 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
         )}
         {src.aiFields.map((f) => (
           <div key={f} className="ai-field small">
-            <span className="badge review">AI 제안 · 확인 필요</span> <b>{FIELD_LABELS[f] ?? f}</b>: {value(f)}
+            <span className="badge review">AI 제안</span> <b>{FIELD_LABELS[f] ?? f}</b> {value(f)}
           </div>
         ))}
         {src.suggestions.length > 0 && !hideSuggestions && (
@@ -107,12 +109,12 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
         )}
         {src.aiFields.length > 0 &&
           (src.aiConfirmedAt ? (
-            <div className="small">
-              ✅ AI 제안 내용 확인함 ({src.aiConfirmedBy}, {new Date(src.aiConfirmedAt).toLocaleString('ko-KR')})
+            <div className="small note-ok">
+              AI 제안 내용 확인함 · {src.aiConfirmedBy}, {new Date(src.aiConfirmedAt).toLocaleString('ko-KR')}
             </div>
           ) : (
             <div className="issue warning small">
-              AI 제안 내용은 영상에서 <b>"이희재 연구자의 조리 노트"</b>로 소개돼요. 맞으면 확인을, 틀리면 [레시피 고치기]에서 고쳐 주세요. 확인 전에는 승인할 수 없어요.
+              AI 제안 내용은 영상에서 <b>"이희재 연구자의 조리 노트"</b>로 소개돼요. 맞으면 [AI 제안 내용이 맞아요]를, 틀리면 [레시피 고치기]를 눌러 고쳐 주세요. 확인 전에는 승인할 수 없어요.
             </div>
           ))}
         <div className="row">
@@ -126,7 +128,7 @@ export const RecipeReadCard: React.FC<{ project: ProjectDetail; onEdit: () => vo
                 if ((await run(() => api.confirmAi(project.id), 'AI 제안 내용을 확인했어요')) !== undefined) await onConfirmed();
               }}
             >
-              AI 제안 내용 맞아요 (확인)
+              AI 제안 내용이 맞아요
             </button>
           )}
         </div>

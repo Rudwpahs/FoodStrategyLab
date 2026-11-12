@@ -46,7 +46,7 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
           이번 콘텐츠 주제 <span className="hint">질문형이 좋아요. 예) 왜 김치전은 금방 눅눅해질까?</span>
           <input type="text" value={r.topic} onChange={(e) => set('topic', e.target.value)} required />
         </label>
-        <div className="grid2">
+        <div className="grid2 fields">
           <label className="field">
             요리 이름
             <input type="text" value={r.dishName} onChange={(e) => set('dishName', e.target.value)} placeholder="예) 바삭한 김치전" />
@@ -78,13 +78,16 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
       </div>
 
       <div className="card stack">
-        <h3>재료·분량 <span className="muted small">— 원본 그대로 영상·블로그에 들어갑니다</span></h3>
+        <div className="card-head">
+          <h3>재료·분량</h3>
+          <span className="muted">원본 그대로 영상·블로그에 들어가요</span>
+        </div>
         {r.ingredients.map((ing, i) => (
-          <div className="row" key={i}>
-            <input type="text" style={{ flex: 2 }} placeholder="재료 이름" value={ing.name} onChange={(e) => setIng(i, 'name', e.target.value)} />
-            <input type="text" style={{ flex: 1 }} placeholder="분량 (예: 200g, 1큰술, 2T)" value={ing.amount} onChange={(e) => setIng(i, 'amount', e.target.value)} />
-            <input type="text" style={{ flex: 1 }} placeholder="묶음 (선택: 소스, 고명)" value={ing.group ?? ''} onChange={(e) => setIng(i, 'group', e.target.value)} />
-            <button type="button" className="btn small ghost" onClick={() => set('ingredients', r.ingredients.filter((_, idx) => idx !== i))} aria-label="재료 삭제">✕</button>
+          <div className="ing-row" key={i}>
+            <input type="text" className="ing-name" placeholder="재료 이름" aria-label={`${i + 1}번 재료 이름`} value={ing.name} onChange={(e) => setIng(i, 'name', e.target.value)} />
+            <input type="text" placeholder="분량 (200g)" aria-label={`${i + 1}번 재료 분량`} value={ing.amount} onChange={(e) => setIng(i, 'amount', e.target.value)} />
+            <input type="text" placeholder="묶음 (예: 소스)" aria-label={`${i + 1}번 재료 묶음`} value={ing.group ?? ''} onChange={(e) => setIng(i, 'group', e.target.value)} />
+            <button type="button" className="btn small ghost ing-x" onClick={() => set('ingredients', r.ingredients.filter((_, idx) => idx !== i))} aria-label={`${i + 1}번 재료 삭제`}>✕</button>
           </div>
         ))}
         <div>
@@ -121,7 +124,7 @@ export const RecipeForm: React.FC<Props> = ({ initial, submitLabel, onSubmit, bu
 
       <div className="row">
         <div className="spacer" />
-        <button className="btn primary" disabled={busy}>{submitLabel}</button>
+        <button className="btn primary big" disabled={busy}>{submitLabel}</button>
       </div>
     </form>
   );
