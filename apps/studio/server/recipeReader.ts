@@ -3,7 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { CATEGORIES, RecipeInputSchema, type RecipeInput } from '@mat-lab/recipe-core';
 import { findAiTells } from '@mat-lab/publishing';
-import { DEFAULT_MODEL, aiConfigured, assertBudget, claudeError, costUsd, recordUsage } from './claudeUsage.ts';
+import { DEFAULT_MODEL, aiConfigured, claudeError, costUsd, recordUsage, reserveBudget } from './claudeUsage.ts';
 import type { Db } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -338,13 +338,26 @@ export const effortSetting = (): Effort => {
   return e && EFFORTS.includes(e) ? e : 'high';
 };
 
+/** 한 번에 받을 수 있는 출력 토큰 (월 한도에 잡아 두는 예상 금액도 이 값으로 계산한다) */
+export const READ_MAX_TOKENS = 32000;
+export const TOPICS_MAX_TOKENS = 16000;
+
+/**
+ * 보낼 입력의 넉넉한 토큰 수 (한도에 잡아 두는 예상 금액용. 실제 금액은 응답의 사용량으로 기록한다).
+ * 글은 1글자를 1토큰으로, 사진은 장당 5천, PDF는 개당 3만 토큰으로 넉넉히 센다.
+ */
+export function roughInputTokens(system: string, content: Anthropic.ContentBlockParam[] | string): number {
+  const blocks: Anthropic.ContentBlockParam[] = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+  return blocks.reduce((sum, b) => sum + (b.type === 'text' ? b.text.length : b.type === 'image' ? 5_000 : b.type === 'document' ? 30_000 : 0), system.length);
+}
+
 /** 실제 Claude API 호출 (공식 SDK, 구조화 출력). 생각까지 포함해 길어질 수 있어 스트리밍으로 받는다 */
 export const claudeParse: ParseFn = async ({ model, effort, system, content }) => {
   client ??= new Anthropic();
   const res = await client.messages
     .stream({
       model,
-      max_tokens: 32000,
+      max_tokens: READ_MAX_TOKENS,
       system,
       messages: [{ role: 'user', content }],
       output_config: { effort, format: zodOutputFormat(ExtractedRecipeSchema) },
@@ -362,7 +375,7 @@ export const claudeTopics: TopicsFn = async ({ model, system, user }) => {
   client ??= new Anthropic();
   const res = await client.messages.parse({
     model,
-    max_tokens: 16000,
+    max_tokens: TOPICS_MAX_TOKENS,
     system,
     messages: [{ role: 'user', content: user }],
     output_config: { effort: 'medium', format: zodOutputFormat(MoreTopicsSchema) },
@@ -412,7 +425,6 @@ export class RecipeReader {
   async moreTopics(source: RecipeInput, opts: { exclude: string[]; direction?: string; aiMistake?: boolean }): Promise<{ suggestions: CheckedSuggestion[]; costUsd: number }> {
     const recipe = opts.aiMistake ? { ...source, commonMistake: '' } : source;
     if (this.topicsFn === claudeTopics && !aiConfigured()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
-    assertBudget(this.db);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const direction = (opts.direction ?? '').trim().slice(0, 300);
     const user = [
@@ -423,11 +435,14 @@ export class RecipeReader {
       direction ? `\n<연구자_요청>\n${direction}\n</연구자_요청>` : '',
       '\n이 레시피로 새 주제 후보 5개를 만들어 주세요.',
     ].join('\n');
+    const release = reserveBudget(this.db, costUsd(model, roughInputTokens(TOPICS_SYSTEM, user), TOPICS_MAX_TOKENS));
     let out;
     try {
       out = await this.topicsFn({ model, system: TOPICS_SYSTEM, user });
     } catch (e) {
       throw claudeError(e);
+    } finally {
+      release();
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
     recordUsage(this.db, 'topics', model, out.inputTokens, out.outputTokens, cost);
@@ -455,14 +470,20 @@ export class RecipeReader {
     if (this.parse === claudeParse && !aiConfigured()) {
       throw new HttpError(409, '레시피 읽기(Claude API)가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요. 그 전에는 "직접 입력"을 써 주세요.');
     }
-    assertBudget(this.db, (budget) => `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`);
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const content = toContentBlocks(files, memo);
+    const release = reserveBudget(
+      this.db,
+      costUsd(model, roughInputTokens(SYSTEM, content), READ_MAX_TOKENS),
+      (budget) => `이번 달 레시피 읽기 한도($${budget})를 다 썼어요. 다음 달에 다시 되거나, 관리자가 한도를 올려야 해요. 그동안은 "직접 입력"을 써 주세요.`,
+    );
     let out;
     try {
       out = await this.parse({ model, effort: effortSetting(), system: SYSTEM, content });
     } catch (e) {
       throw claudeError(e, (err) => `자료를 보내지 못했어요 (파일이 너무 크거나 형식이 맞지 않을 수 있어요): ${err.message.slice(0, 200)}`);
+    } finally {
+      release();
     }
     const cost = costUsd(model, out.inputTokens, out.outputTokens);
     recordUsage(this.db, 'recipe-read', model, out.inputTokens, out.outputTokens, cost);

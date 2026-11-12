@@ -7,9 +7,9 @@ import { checkScript, contentCandidates } from '@mat-lab/recipe-core';
 import { createApp } from './app.ts';
 import { DATA_DIR } from './config.ts';
 import { openDb } from './db.ts';
-import { costUsd, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
+import { costUsd, monthSpentUsd, monthlyBudgetUsd, recordUsage, reservedUsd } from './claudeUsage.ts';
 import { ExtractedRecipeSchema, RecipeReader, TOPIC_GUIDE, blandTopicNotes, groundSuggestions, shortPrinciple, toContentBlocks, toRecipe, type ExtractedRecipe, type ParseFn, type TopicsFn } from './recipeReader.ts';
-import { Repo } from './repo.ts';
+import { HttpError, Repo } from './repo.ts';
 
 /** 손글씨 김치전 레시피를 읽었다고 치는 결과 */
 const kimchijeon: ExtractedRecipe = {
@@ -109,6 +109,58 @@ describe('레시피 읽기 (가짜 Claude)', () => {
     const calls: unknown[] = [];
     await expect(new RecipeReader(db, fakeParse(kimchijeon, calls)).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }])).rejects.toThrow(/한도/);
     expect(calls).toHaveLength(0);
+  });
+
+  it('동시에 두 번 읽어도 한도를 넘지 않는다: 먼저 시작한 호출의 예상 금액을 잡아 두고, 끝나면 놓아준다', async () => {
+    const db = openDb(':memory:');
+    recordUsage(db, 'x', 'm', 0, 0, monthlyBudgetUsd() - 0.5);
+    let finish!: () => void;
+    const calls: unknown[] = [];
+    const slowParse: ParseFn = async (req) => {
+      calls.push(req);
+      await new Promise<void>((r) => (finish = r));
+      return { parsed: kimchijeon, inputTokens: 4000, outputTokens: 2500, stopReason: 'end_turn' };
+    };
+    const reader = new RecipeReader(db, slowParse);
+    const file = [{ name: 'a.jpg', type: 'image/jpeg', data: png }];
+    const first = reader.read(file);
+    // 첫 호출의 예상 금액(출력 32,000토큰 기준 $0.64 이상)을 더하면 한도를 넘는다 → 두 번째는 Claude를 부르기 전에 429
+    expect(reservedUsd(db)).toBeGreaterThan(0.5);
+    const second = await reader.read(file).catch((e: unknown) => e);
+    expect((second as HttpError).status).toBe(429);
+    expect(calls).toHaveLength(1);
+    finish();
+    await first;
+    // 끝나면 잡아 둔 금액을 놓고, 실제 금액만 기록한다
+    expect(reservedUsd(db)).toBe(0);
+    expect(monthSpentUsd(db)).toBeCloseTo(monthlyBudgetUsd() - 0.5 + costUsd('claude-opus-5-5', 4000, 2500), 6);
+  });
+
+  it('Claude 호출이 실패해도 잡아 둔 금액을 놓아준다 (다른 주제 더 보기도 같다)', async () => {
+    const db = openDb(':memory:');
+    const failing: ParseFn = async () => {
+      throw new Error('network down');
+    };
+    await expect(new RecipeReader(db, failing).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }])).rejects.toThrow('network down');
+    expect(reservedUsd(db)).toBe(0);
+
+    recordUsage(db, 'x', 'm', 0, 0, monthlyBudgetUsd() - 0.2);
+    let finish!: () => void;
+    let topicCallsN = 0;
+    const slowTopics: TopicsFn = async () => {
+      topicCallsN++;
+      await new Promise<void>((r) => (finish = r));
+      return { parsed: { suggestions: [] }, inputTokens: 10, outputTokens: 10, stopReason: 'end_turn' };
+    };
+    const reader = new RecipeReader(db, fakeParse(kimchijeon), slowTopics);
+    const recipe = toRecipe(kimchijeon).recipe;
+    const first = reader.moreTopics(recipe, { exclude: [] });
+    const second = await reader.moreTopics(recipe, { exclude: [] }).catch((e: unknown) => e);
+    expect((second as HttpError).status).toBe(429);
+    expect(topicCallsN).toBe(1);
+    finish();
+    await first;
+    expect(reservedUsd(db)).toBe(0);
   });
 });
 

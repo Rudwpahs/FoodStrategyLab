@@ -36,10 +36,36 @@ export function monthSpentUsd(db: Db, now = new Date()): number {
 
 export const monthlyBudgetUsd = () => Number(process.env.CLAUDE_MONTHLY_BUDGET_USD || '100');
 
-/** 이번 달 한도를 다 썼으면 Claude를 부르지 않는다 (부르기 전에 확인) */
-export function assertBudget(db: Db, message = (budget: number) => `이번 달 Claude 사용 한도($${budget})를 다 썼어요. 다음 달에 다시 쓸 수 있어요.`) {
+const budgetMessage = (budget: number) => `이번 달 Claude 사용 한도($${budget})를 다 썼어요. 다음 달에 다시 쓸 수 있어요.`;
+
+/**
+ * 지금 진행 중인 Claude 호출이 쓸 수도 있는 금액 (DB별). 서버는 Node 프로세스 하나라 메모리에 둔다.
+ * 두 요청이 동시에 시작해도 둘 다 "아직 한도 안"으로 통과하지 않게 한도 확인 때 함께 센다.
+ */
+const reserved = new WeakMap<Db, number>();
+export const reservedUsd = (db: Db) => reserved.get(db) ?? 0;
+
+/** 이번 달 한도를 다 썼으면 Claude를 부르지 않는다 (부르기 전에 확인). 진행 중인 호출의 예상 금액도 쓴 것으로 센다 */
+export function assertBudget(db: Db, message = budgetMessage) {
   const budget = monthlyBudgetUsd();
-  if (monthSpentUsd(db) >= budget) throw new HttpError(429, message(budget));
+  if (monthSpentUsd(db) + reservedUsd(db) >= budget) throw new HttpError(429, message(budget));
+}
+
+/**
+ * 한도를 확인하고 이번 호출의 넉넉한 예상 금액을 잡아 둔다 (확인과 잡기 사이에 다른 요청이 끼어들지 않는다).
+ * 예상 금액은 출력이 max_tokens를 다 쓴다고 보고 costUsd로 계산한다.
+ * 호출이 끝나면(성공·실패 모두) 돌려받은 함수를 불러 놓아주고, 실제 금액은 recordUsage로 기록한다.
+ */
+export function reserveBudget(db: Db, estimateUsd: number, message = budgetMessage): () => void {
+  assertBudget(db, message);
+  const amount = Math.max(0, estimateUsd);
+  reserved.set(db, reservedUsd(db) + amount);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    reserved.set(db, Math.max(0, reservedUsd(db) - amount));
+  };
 }
 
 /** 쓴 금액을 기록한다 (월 한도 계산용) */

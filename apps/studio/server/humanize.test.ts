@@ -6,8 +6,8 @@ import { QUICK_RULES } from '@mat-lab/publishing';
 import { createApp } from './app.ts';
 import { openDb } from './db.ts';
 import { Humanizer, rewriteCostUsd, verifyRewrites, type RewriteFn } from './humanize.ts';
-import { monthSpentUsd } from './claudeUsage.ts';
-import { Repo } from './repo.ts';
+import { monthSpentUsd, monthlyBudgetUsd, recordUsage, reservedUsd } from './claudeUsage.ts';
+import { HttpError, Repo } from './repo.ts';
 
 /**
  * 가짜 Claude: 받은 항목에서 "매우 중요합니다"·"되어집니다"를 고치고(정상 윤문),
@@ -142,6 +142,34 @@ describe('im-not-ai 윤문 (가짜 Claude)', () => {
     const n = calls.length;
     await expect(new Humanizer(db, fakeRewrite).run('blog', [{ id: 'p1', text: '이것은 매우 중요합니다.' }], { keep: [] })).rejects.toThrow(/한도/);
     expect(calls.length).toBe(n);
+  });
+
+  it('동시에 두 번 눌러도 한도를 넘지 않는다: 먼저 시작한 호출의 예상 금액을 잡아 두고, 끝나면(실패해도) 놓아준다', async () => {
+    const db = openDb(':memory:');
+    recordUsage(db, 'x', 'm', 0, 0, monthlyBudgetUsd() - 0.1);
+    let finish!: () => void;
+    let n = 0;
+    const slow: RewriteFn = async (req) => {
+      n++;
+      await new Promise<void>((r) => (finish = r));
+      return fakeRewrite(req);
+    };
+    const h = new Humanizer(db, slow);
+    const items = [{ id: 'p1', text: '이것은 매우 중요합니다.' }];
+    const first = h.run('blog', items, { keep: [] });
+    const second = await h.run('blog', items, { keep: [] }).catch((e: unknown) => e);
+    expect((second as HttpError).status).toBe(429);
+    expect(n).toBe(1);
+    finish();
+    await first;
+    expect(reservedUsd(db)).toBe(0);
+
+    const failing: RewriteFn = async () => {
+      throw new Error('network down');
+    };
+    const db2 = openDb(':memory:');
+    await expect(new Humanizer(db2, failing).run('blog', items, { keep: [] })).rejects.toThrow('network down');
+    expect(reservedUsd(db2)).toBe(0);
   });
 
   it('비용 계산: 캐시 쓰기 1.25배, 캐시 읽기 0.1배', () => {

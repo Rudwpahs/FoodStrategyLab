@@ -1,7 +1,7 @@
 import './testDataDir.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { assertBudget, claudeError, costUsd, monthKey, monthSpentUsd, priceOf, recordUsage } from './claudeUsage.ts';
+import { assertBudget, claudeError, costUsd, monthKey, monthSpentUsd, priceOf, recordUsage, reserveBudget, reservedUsd } from './claudeUsage.ts';
 import { openDb } from './db.ts';
 import { HttpError } from './repo.ts';
 
@@ -26,6 +26,18 @@ describe('Claude 비용·월 한도 (레시피 읽기·주제 더 보기·AI 티
     recordUsage(db, 'test', 'claude-opus-5-5', 10, 10, 50);
     expect(() => assertBudget(db)).toThrow(/한도\(\$100\)/);
     expect(() => assertBudget(db, (b) => `읽기 한도 ${b}`)).toThrow('읽기 한도 100');
+  });
+
+  it('진행 중인 호출의 예상 금액도 한도에 센다 (놓아주면 빠지고, 두 번 놓아도 한 번만 빠진다)', () => {
+    const db = openDb(':memory:');
+    recordUsage(db, 'test', 'claude-opus-5-5', 10, 10, 99);
+    const release = reserveBudget(db, 1);
+    expect(reservedUsd(db)).toBe(1);
+    expect(() => reserveBudget(db, 0.01)).toThrow(/한도/);
+    release();
+    release();
+    expect(reservedUsd(db)).toBe(0);
+    expect(() => assertBudget(db)).not.toThrow();
   });
 
   it('API 오류를 쉬운 문장으로 바꾸고, 다른 오류는 그대로 둔다', () => {
