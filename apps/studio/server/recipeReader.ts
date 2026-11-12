@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { CATEGORIES, RecipeInputSchema, type RecipeInput } from '@mat-lab/recipe-core';
+import { CATEGORIES, RecipeInputSchema, findHealthClaims, normalizeText, type RecipeInput } from '@mat-lab/recipe-core';
 import { findAiTells } from '@mat-lab/publishing';
 import { DEFAULT_MODEL, aiConfigured, claudeError, costUsd, recordUsage, reserveBudget } from './claudeUsage.ts';
 import type { Db } from './db.ts';
@@ -234,10 +234,7 @@ export function blandTopicNotes(topic: string): string[] {
   return out;
 }
 
-/** 띄어쓰기·문장부호를 빼고 비교한다 (인용 대조용) */
-const squash = (t: string) => t.replace(/[\s.,!?·~…"'“”‘’()\[\]{}:;\-+*/]/g, '');
 const numbersIn = (t: string) => t.match(/\d+(?:[.,/]\d+)?/g) ?? [];
-const HEALTH = /(건강|면역|다이어트|살이 ?빠|체중|혈압|혈당|콜레스테롤|암 ?예방|항암|해독|디톡스|효능|노화|소화(?:가|를|에) ?(?:좋|돕))/;
 
 /**
  * AI 제안이 레시피에서 나왔는지 프로그램이 확인한다 (AI를 그대로 믿지 않는다).
@@ -259,11 +256,11 @@ export function groundSuggestions(x: ExtractedRecipe, memo = ''): CheckedSuggest
         where === 'step' ? steps[number - 1] : where === 'tip' ? x.tips[number - 1] : where === 'mistake' ? x.mistakeFromSource : memo;
       const evidenceLabel = where === 'step' ? `${number}번 순서` : where === 'tip' ? `팁 ${number}` : where === 'mistake' ? '자료의 실패 사례' : '연구자 메모';
       if (!target?.trim()) notes.push(`근거로 든 ${evidenceLabel}이(가) 레시피에 없어요`);
-      else if (squash(quote).length < 2 || !squash(target).includes(squash(quote))) notes.push(`근거 인용 "${quote.trim()}"을(를) ${evidenceLabel}에서 찾지 못했어요`);
+      else if (normalizeText(quote).length < 2 || !normalizeText(target).includes(normalizeText(quote))) notes.push(`근거 인용 "${quote.trim()}"을(를) ${evidenceLabel}에서 찾지 못했어요`);
       const said = `${s.topic} ${s.principle}`;
       const extra = [...new Set(numbersIn(said).filter((n) => !sourceNumbers.has(n)))];
       if (extra.length) notes.push(`레시피에 없는 숫자(${extra.join(', ')})가 들어 있어요`);
-      if (HEALTH.test(said)) notes.push('건강·효능 주장이 들어 있어요');
+      if (findHealthClaims(said).length) notes.push('건강·효능 주장이 들어 있어요');
       const styleNotes = [...findAiTells(`${s.topic}\n${s.principle}`).map((t) => `[${t.rule}] ${t.found}`), ...blandTopicNotes(s.topic)];
       const angle = 'angle' in s && s.angle ? ANGLE_LABELS[s.angle as TopicAngle] : undefined;
       return { topic: s.topic.trim(), principle: shortPrinciple(s.principle), category: s.category, evidenceLabel, evidenceQuote: quote.trim(), grounded: notes.length === 0, notes, styleNotes, ...(angle ? { angle } : {}) };
@@ -448,7 +445,7 @@ export class RecipeReader {
     recordUsage(this.db, 'topics', model, out.inputTokens, out.outputTokens, cost);
     if (out.stopReason === 'refusal') throw new HttpError(422, '주제를 만들 수 없다는 답을 받았어요.');
     if (!out.parsed) throw new HttpError(502, '주제를 받지 못했어요. 다시 시도해 주세요.');
-    const seen = new Set(opts.exclude.map((t) => squash(t)));
+    const seen = new Set(opts.exclude.map((t) => normalizeText(t)));
     // 이미 읽은 레시피를 근거 대조용 모양으로 (재료·순서·팁은 원본 그대로)
     const asRead: ExtractedRecipe = {
       isRecipe: true,
@@ -460,7 +457,7 @@ export class RecipeReader {
       storyFromSource: recipe.story ?? '',
       otherNotes: '',
       problems: [],
-      suggestions: out.parsed.suggestions.filter((s) => !seen.has(squash(s.topic))),
+      suggestions: out.parsed.suggestions.filter((s) => !seen.has(normalizeText(s.topic))),
       commonMistake: '',
     };
     return { suggestions: groundSuggestions(asRead), costUsd: cost };

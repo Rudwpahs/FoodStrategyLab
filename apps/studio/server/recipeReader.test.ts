@@ -186,6 +186,16 @@ describe('AI 제안 근거 확인', () => {
     expect(out.find((s) => s.topic === '없는 순서')!.notes.join()).toContain('5번 순서');
   });
 
+  it('건강·효능 주장은 공용 목록(recipe-core)으로 찾는다: 예전 서버 목록의 말도, 공용 목록에만 있던 말도', () => {
+    const health = (principle: string) => groundSuggestions({ ...kimchijeon, suggestions: [{ angle: 'one-thing', topic: '김치전 반죽은 왜 찬물일까?', principle, category: 'science', evidence: { where: 'tip', number: 1, quote: '찬물로 해야 바삭하다' } }] })[0]!;
+    for (const p of ['찬물 반죽은 소화에 좋다.', '찬물 반죽은 콜레스테롤을 낮춘다.', '찬물 반죽은 노화를 막는다.', '찬물로 하면 살이 빠진다.', '찬물 반죽은 피부미용에 좋다.', '찬물 반죽은 살균이 된다.']) {
+      const s = health(p);
+      expect(s.grounded, p).toBe(false);
+      expect(s.notes.join(), p).toContain('건강·효능');
+    }
+    expect(health('찬물로 반죽하면 글루텐이 덜 생겨 바삭해진다.').grounded).toBe(true);
+  });
+
   it('근거가 확인된 제안이 하나도 없으면 레시피에는 넣되 꼭 고치라고 알린다', () => {
     const x: ExtractedRecipe = { ...kimchijeon, suggestions: [{ angle: 'one-thing', topic: '김치전은 왜 짤까?', principle: '두부를 넣으면 짠맛이 줄어든다.', category: 'fix', evidence: { where: 'step', number: 2, quote: '두부를 넣는다' } }] };
     const r = toRecipe(x);
