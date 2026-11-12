@@ -458,6 +458,27 @@ describe('미디어 파일 보내기', () => {
     expect(r.status).toBe(404);
     expect(await r.text()).not.toContain(DATA_DIR);
   });
+
+  it('API 응답(콘텐츠·영상 기록)에 서버 안의 폴더 경로를 보내지 않는다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    const bodies: unknown[] = [(await call('POST', `/projects/${pid}/script/template`)).body];
+    const rid = (await call('POST', `/projects/${pid}/renders`)).body.renderId;
+    // 서버 안에서는 폴더 경로를 그대로 쓴다 (내보내기·인스타 게시용)
+    expect(testRepo.getRender(rid).outputDir.startsWith(DATA_DIR)).toBe(true);
+    const project = await call('GET', `/projects/${pid}`);
+    expect(project.body.renders.length).toBeGreaterThan(0);
+    const render = await call('GET', `/renders/${rid}`);
+    expect(render.body.files).toContain('video.mp4');
+    const queued = testRepo.createRender(pid, 1);
+    testRepo.updateRender(queued, { outputDir: path.join(DATA_DIR, 'renders', String(queued)) });
+    const canceled = await call('POST', `/renders/${queued}/cancel`);
+    expect(canceled.body.status).toBe('canceled');
+    bodies.push(project.body, render.body, (await call('GET', '/projects')).body, canceled.body);
+    for (const b of bodies) {
+      expect(JSON.stringify(b)).not.toContain(DATA_DIR);
+      expect(JSON.stringify(b)).not.toContain('outputDir');
+    }
+  });
 });
 
 describe('테스트 격리', () => {

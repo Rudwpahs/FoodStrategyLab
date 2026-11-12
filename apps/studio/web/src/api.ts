@@ -2,11 +2,13 @@ import type { ContentCandidate, HookCandidate, HookInfo, HookType, IgCheck, Issu
 import type { SceneTiming, VideoProps } from '@mat-lab/video/timeline';
 import type { CandidateVoiceJob } from '../../server/pipeline.ts';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
-import type { ProjectDetail, ProjectSummary, Publication, RenderRow } from '../../server/repo.ts';
+import type { ProjectDetail, ProjectSummary, PublicRender, Publication } from '../../server/repo.ts';
 import type { FormatInsight } from '../../server/insights.ts';
 import type { HumanizeResult } from '../../server/humanize.ts';
 
-export type { CandidateVoiceJob, FormatInsight, HumanizeResult, ProjectDetail, ProjectSummary, Publication, RenderRow };
+export type { CandidateVoiceJob, FormatInsight, HumanizeResult, ProjectDetail, ProjectSummary, Publication };
+/** 화면이 받는 영상 기록 (서버 폴더 경로는 오지 않는다) */
+export type RenderRow = PublicRender;
 
 /** 후보 + 미리보기 타임라인 (목소리를 만든 문장은 실제 목소리로) */
 export type VoicedCandidate = ContentCandidate & { timings: SceneTiming[] | null; voiced: boolean };

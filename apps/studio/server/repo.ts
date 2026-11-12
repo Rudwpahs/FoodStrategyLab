@@ -163,11 +163,18 @@ export interface ProjectDetail extends ProjectSummary {
   latest: ScriptVersion | null;
   versions: Omit<ScriptVersion, 'script'>[];
   reviews: Review[];
-  renders: RenderRow[];
+  renders: PublicRender[];
   events: { type: string; message: string; createdAt: string }[];
   approval: Review | null;
   blogStyle: string;
   publications: Publication[];
+}
+
+/** 화면에 보내는 영상 기록: 서버 폴더 경로(outputDir)는 빼고 보낸다 (파일은 /media 주소로 받는다) */
+export type PublicRender = Omit<RenderRow, 'outputDir'>;
+export function publicRender(r: RenderRow): PublicRender {
+  const { outputDir: _, ...rest } = r;
+  return rest;
 }
 
 type Row = Record<string, unknown>;
@@ -589,7 +596,7 @@ export class Repo {
       createdAt: String(r.created_at),
     }));
     const reviews = (this.db.prepare('SELECT * FROM reviews WHERE project_id = ? ORDER BY id DESC').all(id) as Row[]).map(toReview);
-    const renders = (this.db.prepare('SELECT * FROM renders WHERE project_id = ? ORDER BY id DESC').all(id) as Row[]).map(toRender);
+    const renders = (this.db.prepare('SELECT * FROM renders WHERE project_id = ? ORDER BY id DESC').all(id) as Row[]).map((r) => publicRender(toRender(r)));
     const events = (this.db.prepare('SELECT type, message, created_at FROM events WHERE project_id = ? ORDER BY id DESC LIMIT 50').all(id) as Row[]).map((r) => ({
       type: String(r.type),
       message: String(r.message),

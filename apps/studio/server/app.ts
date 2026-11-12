@@ -16,7 +16,7 @@ import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
 import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
-import { HttpError, creditedReviewer, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
+import { HttpError, creditedReviewer, publicRender, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, lastVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
 import { VOICE_TEMPOS, isVoiceTempo, presetById, presetByVoiceName, voicePresets } from './voicePresets.ts';
 
@@ -774,7 +774,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   api.post('/renders/:id/cancel', (req, res) => {
     const r = repo.getRender(id(req));
     cancelRender(repo, r.id);
-    res.json(repo.getRender(r.id));
+    res.json(publicRender(repo.getRender(r.id)));
   });
 
   api.get('/renders/:id', (req, res) => {
@@ -782,7 +782,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const files = r.status === 'done' && fs.existsSync(r.outputDir) ? fs.readdirSync(r.outputDir).filter((f) => f.includes('.')) : [];
     const checkDir = path.join(r.outputDir, 'caption-check');
     const captionChecks = r.status === 'done' && fs.existsSync(checkDir) ? fs.readdirSync(checkDir).sort() : [];
-    res.json({ ...r, files, captionChecks, baseUrl: `/media/renders/${r.id}` });
+    res.json({ ...publicRender(r), files, captionChecks, baseUrl: `/media/renders/${r.id}` });
   });
 
   // ── 인스타그램 공식 게시 ──
