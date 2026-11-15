@@ -396,3 +396,44 @@ def web() -> None:
 
     atexit.register(_shutdown)
     threading.Thread(target=_setup_voice, args=(env, public_url), daemon=True).start()
+
+
+# ───────────── 견본 영상 한 편 (E2E 3단계를 운영과 같은 환경에서) ─────────────
+# 운영 서버와 같은 이미지·같은 렌더 코드·배포된 GPU 맛조수 목소리로 예시 레시피 영상 하나를 끝까지 만든다.
+# 운영 데이터 저장소(matlab-data)는 붙이지 않는다: 운영 DB·콘텐츠를 읽거나 바꾸지 않고, 임시 폴더에서만 만든다.
+# 실행: GitHub Actions의 'Render sample video' (수동) → modal run deploy/modal/app.py::sample --dish 호두정과
+@app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600)
+def render_sample(dish: str = "호두정과") -> dict:
+    import sys
+    import tempfile
+
+    sys.path.insert(0, "/app/deploy/modal")
+    from voice_proxy import serve
+
+    # 이미 배포된 목소리 GPU를 쓴다 (목소리 프로필이 거기 있고, 엔진을 하나 더 띄우지 않게)
+    deployed_voice = modal.Cls.from_name(APP_NAME, "Voice")
+
+    def call_voice(method: str, path: str, headers: dict, body: bytes) -> tuple:
+        return deployed_voice().request.remote(method, path, headers, body)
+
+    serve(VOICE_PROXY_PORT, call_voice, "/tmp/voice-meta.json")
+    out = tempfile.mkdtemp(prefix="sample-")
+    env = _studio_env(None, "render-sample")
+    # 데이터 폴더는 render.e2e.ts가 임시 폴더로 정한다. 운영용 DB 위치·깨워 두기·공개 주소는 쓰지 않는다
+    for k in ("MATLAB_DB_FILE", "KEEPALIVE", "PUBLIC_URL"):
+        env.pop(k, None)
+    env.update({"HOST": "127.0.0.1", "PORT": "5198", "E2E_OUT": out, "E2E_EXPECT_VOICE": "1", "E2E_DISH": dish})
+    code = subprocess.run([TSX, "apps/studio/e2e/render.e2e.ts"], cwd="/app", env=env).returncode
+    files = {p.name: p.read_bytes() for p in Path(out).iterdir() if p.is_file()}
+    return {"code": code, "files": files}
+
+
+@app.local_entrypoint()
+def sample(dish: str = "호두정과", out: str = "out-sample") -> None:
+    result = render_sample.remote(dish)
+    Path(out).mkdir(parents=True, exist_ok=True)
+    for name, data in result["files"].items():
+        (Path(out) / name).write_bytes(data)
+    print(f"견본 파일 {len(result['files'])}개 → {out}: {', '.join(sorted(result['files']))}")
+    if result["code"] != 0:
+        raise SystemExit(f"견본 영상 확인에서 실패한 항목이 있어요 (코드 {result['code']}). 위 기록과 {out}/summary.json을 보세요.")

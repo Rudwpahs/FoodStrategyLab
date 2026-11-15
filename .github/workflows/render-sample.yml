@@ -1,0 +1,46 @@
+name: Render sample video
+
+# 운영과 같은 환경(Modal: 같은 서버 이미지 + 배포된 GPU 맛조수 목소리)에서 예시 레시피 영상 한 편을 끝까지 만들어
+# 결과(영상·표지·레시피 카드·자동 검사 결과)를 이 실행의 첨부 파일(artifact)로 올린다. 손으로만 실행한다.
+# 운영 DB·콘텐츠는 건드리지 않는다 (deploy/modal/app.py의 render_sample은 데이터 저장소를 붙이지 않음).
+# 비용: 클라우드 CPU 8개 + 목소리 GPU를 영상 한 편만큼 (추정 $0.5~1).
+# 필요한 저장소 비밀값: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET (배포와 같은 값). 먼저 한 번 배포돼 있어야 한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dish:
+        description: '예시 레시피 요리 이름 (호두정과, 바삭한 김치전 …)'
+        required: false
+        default: '호두정과'
+
+concurrency:
+  group: render-sample
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Modal 도구 설치
+        run: pip install -q modal==1.6.3
+      - name: 견본 영상 만들기 (운영과 같은 환경, 20~40분)
+        env:
+          DISH: ${{ inputs.dish }}
+        run: modal run deploy/modal/app.py::sample --dish "$DISH" --out out-sample
+      - name: 결과 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-video
+          path: out-sample
+          if-no-files-found: warn
+          retention-days: 14

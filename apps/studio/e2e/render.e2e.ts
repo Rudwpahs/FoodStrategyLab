@@ -2,6 +2,10 @@
  * E2E 3단계: 실제 렌더 (docs/testing/E2E_PLAN.md 4절 G). 진짜 Remotion으로 예시 레시피 영상 1개를 목소리 없이 끝까지 만들고 결과를 확인한다.
  * 10~30분 걸린다. CI에는 넣지 않고, 영상 패키지를 바꾼 뒤·큰 배포 전에 손으로 돌린다.
  * 실행: npm run e2e:render   (결과 폴더를 마지막에 알려 준다. 영상을 직접 열어 보고 확인)
+ * 클라우드 견본(deploy/modal/app.py의 render_sample)에서는:
+ *   E2E_OUT=폴더       결과 파일(영상·표지·카드·검사 결과)을 이 폴더에 복사한다
+ *   E2E_EXPECT_VOICE=1 맛조수 목소리가 실제로 들어갔는지도 확인한다 (목소리 없이 만들어지면 실패)
+ *   E2E_DISH=요리 이름  예시 레시피 고르기 (기본 호두정과)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,7 +34,9 @@ const port = Number(process.env.PORT ?? 5198);
 const { repo, server, vite } = await startServer(port);
 const started = Date.now();
 try {
-  const recipe = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+  const dish = process.env.E2E_DISH || '호두정과';
+  const recipe = SAMPLE_RECIPES.find((r) => r.dishName === dish);
+  if (!recipe) throw new Error(`예시 레시피에 "${dish}"가 없어요 (${SAMPLE_RECIPES.map((r) => r.dishName).join(', ')})`);
   const pid = repo.createProject(recipe);
   repo.addScriptVersion(pid, generateTemplateScript(recipe), 'template', 'E2E 실제 렌더');
   const rid = startRender(repo, pid, `http://127.0.0.1:${port}`);
@@ -61,6 +67,18 @@ try {
   for (const f of ['cover.png', 'cover.jpg', 'thumbnail.png', 'recipe-card.png']) check(fs.existsSync(path.join(dir, f)), f);
   const cards = fs.readdirSync(dir).filter((f) => /^carousel-\d+\.jpg$/.test(f));
   check(cards.length >= 2 && cards.length <= 10, `레시피 카드 ${cards.length}장 (2~10장)`);
+  if (process.env.E2E_EXPECT_VOICE === '1') {
+    const audio = fs.existsSync(path.join(dataDir, 'audio')) ? fs.readdirSync(path.join(dataDir, 'audio')).filter((f) => /\.(mp3|wav)$/.test(f)) : [];
+    check(audio.length > 0, `맛조수 목소리 파일 ${audio.length}개`);
+    check(!qa?.issues.some((i) => /edge-tts|목소리가 들리지 않아요/.test(i.message)), '목소리가 맛조수 목소리로 들어감 (대체 음성·무음 아님)');
+  }
+  const out = process.env.E2E_OUT;
+  if (out && fs.existsSync(dir)) {
+    fs.mkdirSync(out, { recursive: true });
+    for (const f of fs.readdirSync(dir)) if (/^(video\.mp4|cover\.jpg|recipe-card\.png|thumbnail\.png|qa\.json|carousel-\d+\.jpg)$/.test(f)) fs.copyFileSync(path.join(dir, f), path.join(out, f));
+    fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({ dish, status: r.status, error: r.error, minutes: Math.round((Date.now() - started) / 6000) / 10, fails }, null, 2));
+    console.log(`결과 파일 복사: ${out}`);
+  }
   console.log(`\n결과 폴더: ${dir}`);
 } finally {
   server.close();
