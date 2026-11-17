@@ -1,0 +1,37 @@
+name: Fetch SFX candidates
+
+# 효과음 후보(Freesound CC0 미리듣기 파일)를 내려받아 첨부 파일(artifact)로 올린다. 손으로만 실행한다.
+# 개발 컨테이너의 주소는 Freesound 파일 서버가 막아서(403), 사용자 승인을 받아 GitHub 서버에서 받는다.
+# 받은 파일은 골라서 다듬어 packages/video의 효과음으로 넣는다 (라이선스는 CC0만, packages/video/assets/sfx/LICENSES.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'Freesound 미리듣기 주소 (https://cdn.freesound.org/previews/…-hq.mp3), 쉼표로 구분'
+        required: true
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 내려받기 (Freesound 미리듣기 주소만 받는다)
+        env:
+          URLS: ${{ inputs.urls }}
+        run: |
+          mkdir -p sfx
+          IFS=',' read -ra list <<< "$URLS"
+          for u in "${list[@]}"; do
+            u="$(echo "$u" | tr -d '[:space:]')"
+            if [[ ! "$u" =~ ^https://cdn\.freesound\.org/previews/[0-9]+/[0-9]+_[0-9]+-hq\.mp3$ ]]; then
+              echo "::error::허용하지 않는 주소예요: $u"; exit 1
+            fi
+            curl -fsSL --retry 2 -o "sfx/$(basename "$u")" "$u"
+          done
+          ls -la sfx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sfx-candidates
+          path: sfx
+          retention-days: 7
