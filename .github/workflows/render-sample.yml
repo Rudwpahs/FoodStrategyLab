@@ -13,6 +13,10 @@ on:
         description: '예시 레시피 요리 이름 (호두정과, 바삭한 김치전 …)'
         required: false
         default: '호두정과'
+      style:
+        description: '연출 (비우면 기본 템플릿, before-after·comedy 등이면 효과음이 들어간 후보 영상과 같은 대본)'
+        required: false
+        default: 'before-after'
 
 concurrency:
   group: render-sample
@@ -35,7 +39,8 @@ jobs:
       - name: 견본 영상 만들기 (운영과 같은 환경, 20~40분)
         env:
           DISH: ${{ inputs.dish }}
-        run: modal run deploy/modal/app.py::sample --dish "$DISH" --out out-sample
+          STYLE: ${{ inputs.style }}
+        run: modal run deploy/modal/app.py::sample --dish "$DISH" --style "$STYLE" --out out-sample
       - name: 결과 올리기
         if: always()
         uses: actions/upload-artifact@v4

@@ -93,7 +93,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
           </Sequence>
         );
       })}
-      {/* 효과음: 코드로 합성한 소리 (훅·실패·공개·서명 순간만, 목소리보다 작게) */}
+      {/* 효과음: 실제 녹음 CC0 (훅·실패·공개·서명 순간만, 목소리보다 작게) */}
       {sfx.map((c) => {
         const t = byId.get(c.sceneId);
         if (!t) return null;

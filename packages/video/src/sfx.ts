@@ -1,86 +1,39 @@
 import type { Scene, Script } from '@mat-lab/recipe-core';
-import { seeded } from './random.ts';
+import { SFX_WAV_BASE64 } from './sfxData.ts';
 
 /**
- * 효과음: 코드로 직접 합성한다 (외부 음원을 쓰지 않으므로 저작권·라이선스 문제가 없다).
- * 근거: 놀람이 주의를 모은다는 연구(sources.md S44), 1분 넘는 Shorts의 음원 클레임 위험(S16).
+ * 효과음: 실제 녹음 (CC0, 출처는 packages/video/assets/sfx/LICENSES.md).
+ * 예전에는 코드로 합성했는데, 합성음은 귀로 확인하지 못해 어색하게 들릴 수 있어 실제 녹음으로 바꿨다.
+ * 근거: 놀람이 주의를 모은다는 연구(sources.md S44), 1분 넘는 Shorts의 음원 클레임 위험(S16) — CC0라 클레임 대상이 아니다.
  */
 export type SfxName = 'whoosh' | 'ding' | 'boing' | 'pop';
-const RATE = 22050;
 
-function wav(samples: Float32Array): Uint8Array {
-  const data = new Int16Array(samples.length);
-  for (let i = 0; i < samples.length; i++) data[i] = Math.round(Math.max(-1, Math.min(1, samples[i]!)) * 32767);
-  const buf = new ArrayBuffer(44 + data.byteLength);
-  const v = new DataView(buf);
-  const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  str(0, 'RIFF');
-  v.setUint32(4, 36 + data.byteLength, true);
-  str(8, 'WAVE');
-  str(12, 'fmt ');
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true);
-  v.setUint16(22, 1, true);
-  v.setUint32(24, RATE, true);
-  v.setUint32(28, RATE * 2, true);
-  v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);
-  str(36, 'data');
-  v.setUint32(40, data.byteLength, true);
-  new Uint8Array(buf, 44).set(new Uint8Array(data.buffer));
-  return new Uint8Array(buf);
-}
-
-/** 매번 같은 소리가 나도록 고정 씨앗 난수 (-0.5~0.5) */
-function noise(seed: number) {
-  const rnd = seeded(seed);
-  return () => rnd() - 0.5;
-}
-
-export function synthSfx(name: SfxName): Float32Array {
-  const len = { whoosh: 0.38, ding: 0.7, boing: 0.45, pop: 0.12 }[name];
-  const n = Math.round(len * RATE);
-  const out = new Float32Array(n);
-  const rnd = noise(7);
-  let lp = 0;
-  let phase = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / RATE;
-    const p = t / len;
-    if (name === 'whoosh') {
-      // 걸러진 잡음이 커졌다 작아짐
-      const cutoff = 0.04 + 0.25 * Math.sin(Math.PI * p);
-      lp += cutoff * (rnd() - lp);
-      out[i] = lp * 2.4 * Math.sin(Math.PI * p);
-    } else if (name === 'ding') {
-      const env = Math.exp(-5 * t);
-      out[i] = env * (0.55 * Math.sin(2 * Math.PI * 1318.5 * t) + 0.25 * Math.sin(2 * Math.PI * 2637 * t)) * Math.min(1, t / 0.004);
-    } else if (name === 'boing') {
-      // 내려가는 소리 + 떨림 (실수·실패)
-      const f = 420 * Math.pow(0.45, p) * (1 + 0.06 * Math.sin(2 * Math.PI * 18 * t));
-      phase += (2 * Math.PI * f) / RATE;
-      out[i] = 0.5 * Math.sin(phase) * (1 - p) * Math.min(1, t / 0.01);
-    } else {
-      const f = 600 + 900 * p;
-      phase += (2 * Math.PI * f) / RATE;
-      out[i] = 0.45 * Math.sin(phase) * Math.sin(Math.PI * p);
-    }
-  }
-  return out;
-}
-
-const cache = new Map<SfxName, string>();
-/** Remotion <Audio>에 바로 넣을 수 있는 data URL */
+/** Remotion <Audio>에 바로 넣을 수 있는 data URL (화면 미리보기와 렌더가 같은 소리) */
 export function sfxUrl(name: SfxName): string {
-  let url = cache.get(name);
-  if (!url) {
-    const bytes = wav(synthSfx(name));
-    let bin = '';
-    for (const b of bytes) bin += String.fromCharCode(b);
-    url = `data:audio/wav;base64,${btoa(bin)}`;
-    cache.set(name, url);
+  return `data:audio/wav;base64,${SFX_WAV_BASE64[name]}`;
+}
+
+/** 효과음 소리 값 (-1~1)과 초당 샘플 수. 품질 검사 시험에서 실제 효과음을 섞어 볼 때 쓴다 */
+export function sfxSamples(name: SfxName): { samples: Float32Array; rate: number } {
+  const bin = atob(SFX_WAV_BASE64[name]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const v = new DataView(bytes.buffer);
+  // RIFF 안의 'fmt '·'data' 칸을 찾는다 (16비트 모노만 쓴다)
+  let rate = 0;
+  for (let o = 12; o + 8 <= bytes.length; ) {
+    const id = String.fromCharCode(...bytes.subarray(o, o + 4));
+    const size = v.getUint32(o + 4, true);
+    if (id === 'fmt ') rate = v.getUint32(o + 12, true);
+    if (id === 'data') {
+      const n = Math.floor(size / 2);
+      const samples = new Float32Array(n);
+      for (let i = 0; i < n; i++) samples[i] = v.getInt16(o + 8 + i * 2, true) / 32768;
+      return { samples, rate };
+    }
+    o += 8 + size + (size % 2);
   }
-  return url;
+  throw new Error(`효과음 ${name}에 소리 칸이 없어요`);
 }
 
 export interface SfxCue {

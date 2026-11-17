@@ -3,7 +3,7 @@ import zlib from 'node:zlib';
 import type { Script } from '@mat-lab/recipe-core';
 import { decodeGrayPng, splitPngs } from './audio.ts';
 import { QA_STEP, auditAudio, auditFrames, lineMatch, quietRuns, rmsDb } from './qa.ts';
-import { synthSfx } from './sfx.ts';
+import { sfxSamples } from './sfx.ts';
 import { speechBounds } from './speech.ts';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
 import { buildTimeline, totalFrames, type SceneTiming } from './timeline.ts';
@@ -224,12 +224,12 @@ describe('대사 잘림 검사: 실제 렌더처럼 끝 페이드가 걸린 소�
   });
 
   it('효과음이 말끝과 겹쳐 울리거나 말소리 밖에서 뚝 끝나도 잘림으로 보지 않는다', () => {
-    const ding = synthSfx('ding');
+    const { samples: ding, rate: dingRate } = sfxSamples('ding');
     const r = render([{ audio: utterance(0.2, 0.05, 4, 1) }, { audio: utterance(0.25, 0.3) }], (track, timings) => {
       // 짧은 대사 끝에 울리는 효과음 (말끝 0.2초 전에 시작)
       const t = timings[0]!;
       const at = Math.round(((t.from + speechPlayback(t).end) / FPS - 0.2) * RATE);
-      for (let i = 0; i < (ding.length * RATE) / 22050 && at + i < track.length; i++) track[at + i]! += 0.32 * ding[Math.floor((i * 22050) / RATE)]!;
+      for (let i = 0; i < (ding.length * RATE) / dingRate && at + i < track.length; i++) track[at + i]! += 0.32 * ding[Math.floor((i * dingRate) / RATE)]!;
       // 장면 2 앞부분에서 뚝 끝나는 효과음
       const mid = Math.round(((timings[1]!.from + 20) / FPS) * RATE);
       for (let i = 0; i < 0.3 * RATE; i++) track[mid + i]! += 0.2 * Math.sin(i / 3);
