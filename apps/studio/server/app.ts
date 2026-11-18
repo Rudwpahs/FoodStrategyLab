@@ -9,7 +9,8 @@ import { Humanizer, verifyRewrites } from './humanize.ts';
 import { StoryWriter } from './storyWriter.ts';
 import { DATA_DIR } from './config.ts';
 import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
-import { toJpeg } from '@mat-lab/video/audio';
+import { musicFile, toJpeg } from '@mat-lab/video/audio';
+import { isMusicTrack } from '@mat-lab/video/music';
 import type { IgCheck } from '@mat-lab/recipe-core';
 import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, removeProject, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
@@ -326,6 +327,14 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     if (auth.researcherCount() > 0) throw new HttpError(409, '연구자 계정이 이미 정해져 있어요.');
     auth.setRole(user.username, 'researcher');
     res.json({ user: { ...user, role: 'researcher' } });
+  });
+
+  /** 배경 음악 파일 (미리보기 재생용, CC0 — packages/video/assets/bgm) */
+  api.get('/music/:name', (req, res) => {
+    const name = String(req.params.name).replace(/\.mp3$/, '');
+    if (!isMusicTrack(name)) throw new HttpError(404, '없는 음악이에요.');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.sendFile(musicFile(name), { dotfiles: 'allow' });
   });
 
   api.get('/meta', async (_req, res) => {

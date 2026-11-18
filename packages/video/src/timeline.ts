@@ -59,6 +59,8 @@ export interface VideoProps {
   photoColor?: string;
   /** 장면별 생성 AI 클립·이미지 (있으면 그 장면은 3D 대신 이것을 보여준다) */
   sceneMedia?: Record<string, { url: string; kind: 'video' | 'image' }>;
+  /** 배경 음악 주소 (브라우저 미리보기에서만 넘긴다. 서버 렌더는 검사 뒤 따로 섞는다) */
+  musicSrc?: string;
   [key: string]: unknown;
 }
 

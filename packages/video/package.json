@@ -9,7 +9,8 @@
     "./timeline": "./src/timeline.ts",
     "./audio": "./src/audio.ts",
     "./cards": "./src/cardPages.ts",
-    "./qa": "./src/qa.ts"
+    "./qa": "./src/qa.ts",
+    "./music": "./src/music.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

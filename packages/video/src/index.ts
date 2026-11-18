@@ -3,3 +3,4 @@ export { ShortVideo } from './compositions/ShortVideo.tsx';
 export { Character } from './components/Character.tsx';
 export { COLORS } from './theme.ts';
 export * from './timeline.ts';
+export { MUSIC_LABELS, musicFor, type MusicTrack } from './music.ts';

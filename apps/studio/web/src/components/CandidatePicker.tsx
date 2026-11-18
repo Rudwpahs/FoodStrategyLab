@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
 import { Character, ShortVideo, buildTimeline, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
-import { api, type CandidateVoiceJob, type FormatInsight, type ProjectDetail, type VoicedCandidate } from '../api.ts';
+import { api, musicUrl, type CandidateVoiceJob, type FormatInsight, type ProjectDetail, type VoicedCandidate } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { poll } from '../poll.ts';
 import { ConnectionNote } from './ConnectionNote.tsx';
@@ -195,7 +195,7 @@ const CandidateCard: React.FC<{
   const letter = String.fromCharCode(65 + index);
   const props = useMemo<VideoProps>(() => {
     const timings = c.timings ?? buildTimeline(c.script, c.script.scenes.map(() => null));
-    return { script: c.script, timings, reviewed: false, cleanDraft: true, recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
+    return { script: c.script, timings, reviewed: false, cleanDraft: true, musicSrc: musicUrl(c.script), recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
   }, [c.script, c.timings, project.recipe, project.photo?.url, project.photo?.color]);
 
   return (

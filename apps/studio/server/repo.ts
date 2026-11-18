@@ -71,7 +71,7 @@ export function creditedReviewer(approval: Review | null | undefined): string {
 
 /** 서버가 기록하는 자동 검사 결과. code 'skipped' = 검사나 처리를 하지 못함 (검사했다고 적지 않고 경고로 남긴다) */
 export type RenderQaIssue = Omit<QaIssue, 'code'> & { code: QaIssue['code'] | 'skipped' };
-export type RenderQa = Omit<QaReport, 'issues'> & { issues: RenderQaIssue[] };
+export type RenderQa = Omit<QaReport, 'issues'> & { issues: RenderQaIssue[]; /** 섞은 배경 음악 (music.ts의 곡 이름) */ music?: string };
 
 export interface RenderRow {
   id: number;

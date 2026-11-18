@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Player } from '@remotion/player';
 import { PLACE_LABELS } from '@mat-lab/recipe-core';
 import { Character, ShortVideo, buildTimeline, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
-import { api, type ProjectDetail, type StoriesResponse, type StoryItem } from '../api.ts';
+import { api, musicUrl, type ProjectDetail, type StoriesResponse, type StoryItem } from '../api.ts';
 import { useApp } from '../App.tsx';
 
 type Story = Extract<StoryItem, { script: unknown }>;
@@ -102,7 +102,7 @@ const StoryCard: React.FC<{
 }> = ({ story: s, project, isNew, chosen, live, busy, making, onPlay, onMake }) => {
   const props = useMemo<VideoProps>(() => {
     const timings = buildTimeline(s.script, s.script.scenes.map(() => null));
-    return { script: s.script, timings, reviewed: false, cleanDraft: true, recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
+    return { script: s.script, timings, reviewed: false, cleanDraft: true, musicSrc: musicUrl(s.script), recipe: project.recipe, photoUrl: project.photo?.url, photoColor: project.photo?.color || undefined };
   }, [s.script, project.recipe, project.photo?.url, project.photo?.color]);
   const places = [...new Set(s.script.scenes.map((sc) => sc.place).filter((p): p is NonNullable<typeof p> => Boolean(p)))];
   const errors = s.issues.filter((i) => i.level === 'error');

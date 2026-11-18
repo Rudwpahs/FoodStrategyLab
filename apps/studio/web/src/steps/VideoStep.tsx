@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
-import { api, photoColor, type RenderStatus } from '../api.ts';
+import { api, musicUrl, photoColor, type RenderStatus } from '../api.ts';
 import { QaPanel } from '../components/QaPanel.tsx';
 import { ConnectionNote } from '../components/ConnectionNote.tsx';
 import { Fold } from '../components/Fold.tsx';
@@ -30,7 +30,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
     const my = ++previewReq.current;
     const r = await run(() => api.preview(project.id));
     if (my !== previewReq.current) return;
-    if (r) setPreview({ props: r.props, voiced: r.voiced });
+    if (r) setPreview({ props: { ...r.props, musicSrc: musicUrl(r.props.script) }, voiced: r.voiced });
     else setPreviewFailed(true);
   };
 

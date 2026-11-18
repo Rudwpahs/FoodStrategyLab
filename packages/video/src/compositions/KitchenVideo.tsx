@@ -6,6 +6,7 @@ import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { captionKeywords, type CaptionKeywords } from '../captionStyle.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
+import { musicGain, speechIntervals } from '../music.ts';
 import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
@@ -14,13 +15,13 @@ import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene, foodFor } from '../three/KitchenScene.tsx';
 import { propPositions } from '../three/layout.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
-import type { SceneTiming, VideoProps } from '../timeline.ts';
+import { totalFrames, type SceneTiming, type VideoProps } from '../timeline.ts';
 
 ensureFonts();
 
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {} }) => {
+export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {}, musicSrc }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -32,6 +33,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
+  const music = useMemo(() => ({ intervals: speechIntervals(timings), total: totalFrames(timings) }), [timings]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
   const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
   const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
@@ -105,6 +107,8 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
           </Sequence>
         );
       })}
+      {/* 배경 음악 (미리보기에서만: 서버 렌더는 품질 검사 뒤에 ffmpeg로 같은 규칙대로 섞는다, music.ts) */}
+      {musicSrc && <Audio src={musicSrc} loop volume={(f) => musicGain(f, music.intervals, music.total)} />}
       <BrandBadge />
       {!reviewed && !cleanDraft && <DraftWatermark />}
     </AbsoluteFill>

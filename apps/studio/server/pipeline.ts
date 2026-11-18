@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
-import { FPS, buildTimeline, captionGroups, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { FPS, buildTimeline, captionGroups, totalFrames, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
+import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { musicFor, musicVolumeExpr, speechIntervals } from '@mat-lab/video/music';
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPlan } from '@mat-lab/video/cards';
 import { DATA_DIR } from './config.ts';
@@ -327,6 +328,22 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     qa.issues.push(...audit.issues);
     qa.checked.push(...audit.checked);
     if (loudnessSkipped) qa.issues.push({ level: 'warning', code: 'skipped', message: '음량 맞추기(-14 LUFS)를 하지 못해 원래 음량 그대로예요.' });
+    // 배경 음악은 품질 검사가 끝난 뒤에 섞는다 (음악이 대사 잘림·무음 검사를 흐리지 않게). 대사 중에는 줄인다 (music.ts)
+    if (process.env.BGM !== 'off') {
+      set('배경 음악 넣기', 0.84);
+      const video = path.join(outDir, 'video.mp4');
+      const mixed = path.join(outDir, 'video-music.mp4');
+      const track = musicFor(script);
+      try {
+        await mixMusic(video, musicFile(track), mixed, musicVolumeExpr(speechIntervals(timings), totalFrames(timings)));
+        fs.renameSync(mixed, video);
+        qa.music = track;
+      } catch (e) {
+        console.warn('[배경 음악] 섞기 실패:', (e as Error).message);
+        fs.rmSync(mixed, { force: true });
+        qa.issues.push({ level: 'warning', code: 'skipped', message: '배경 음악을 넣지 못해 음악 없이 만들었어요.' });
+      }
+    }
     repo.setRenderQa(renderId, qa);
     fs.writeFileSync(path.join(outDir, 'qa.json'), JSON.stringify(qa, null, 2));
     set('자막 확인 프레임', 0.85);

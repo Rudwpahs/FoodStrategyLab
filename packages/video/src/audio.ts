@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 import { RenderInternals } from '@remotion/renderer';
 
 /**
@@ -181,4 +182,25 @@ export async function extractFrame(video: string, seconds: number, output: strin
 export async function changeTempo(input: string, output: string, tempo: number): Promise<void> {
   const t = Math.min(2, Math.max(0.5, tempo));
   await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-af', `atempo=${t.toFixed(3)}`, '-codec:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', path.resolve(output)]);
+}
+
+/** 배경 음악 파일 (packages/video/assets/bgm, CC0) */
+export function musicFile(track: string): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/bgm', `${path.basename(track)}.mp3`);
+}
+
+/**
+ * 완성 영상에 배경 음악을 섞는다 (화면은 다시 인코딩하지 않음).
+ * 곡은 영상 길이만큼 되풀이하고, volumeExpr(music.ts의 musicVolumeExpr)로 대사 중에는 줄이고 끝에서 작아지게 한다.
+ */
+export async function mixMusic(input: string, music: string, output: string, volumeExpr: string): Promise<void> {
+  await ff([
+    '-hide_banner', '-y',
+    '-i', path.resolve(input),
+    '-stream_loop', '-1', '-i', path.resolve(music),
+    '-filter_complex', `[1:a]aresample=48000,aformat=channel_layouts=stereo,volume='${volumeExpr}':eval=frame[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]`,
+    '-map', '0:v', '-map', '[a]',
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-shortest', '-movflags', '+faststart',
+    path.resolve(output),
+  ]);
 }

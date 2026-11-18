@@ -1,5 +1,6 @@
 import type { ContentCandidate, HookCandidate, HookInfo, HookType, IgCheck, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { SceneTiming, VideoProps } from '@mat-lab/video/timeline';
+import { musicFor } from '@mat-lab/video/music';
 import type { CandidateVoiceJob } from '../../server/pipeline.ts';
 import type { StoryCandidate } from '@mat-lab/recipe-core';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
@@ -308,3 +309,6 @@ export interface StoriesResponse {
   stories: StoryItem[];
   currentTitle: string | null;
 }
+
+/** 미리보기 배경 음악 주소 (서버 렌더와 같은 곡: music.ts의 musicFor) */
+export const musicUrl = (script: Pick<Script, 'style' | 'hookType'>) => `/api/music/${musicFor(script)}.mp3`;
