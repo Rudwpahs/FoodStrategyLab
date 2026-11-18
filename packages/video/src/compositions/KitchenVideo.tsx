@@ -14,6 +14,7 @@ import { ensureFonts } from '../fonts.ts';
 import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene, foodFor } from '../three/KitchenScene.tsx';
 import { propPositions } from '../three/layout.ts';
+import { placeTransitionAt } from '../three/places.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import { totalFrames, type SceneTiming, type VideoProps } from '../timeline.ts';
 
@@ -37,55 +38,68 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
   const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
   const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
+  // 장소가 바뀌는 장면 경계: 화면을 옆으로 휙 넘기며(가로 흐림) 바꾼다 — 끊김이 아니라 일부러 넘긴 것처럼
+  const whip = placeTransitionAt(script, timings, frame);
+  // 나가는 화면은 왼쪽으로 밀려나고 들어오는 화면은 오른쪽에서 들어온다. 살짝 키워서 가장자리가 비지 않게
+  const whipTransform = whip.amount > 0 ? `translateX(${whip.side * whip.amount * 12}%) scale(${1 + whip.amount * 0.28})` : undefined;
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
+      {whip.amount > 0 && <WhipFilter amount={whip.amount} />}
       {/* 색 보정: 대비·채도를 살짝 올려 영화 같은 느낌 */}
-      <AbsoluteFill style={{ filter: 'contrast(1.07) saturate(1.1)' }}>
+      <AbsoluteFill
+        style={{
+          filter: `contrast(1.07) saturate(1.1)${whip.amount > 0 ? ' url(#whip-blur)' : ''}`,
+          transform: whipTransform,
+        }}
+      >
         {/* 캔버스는 언제나 이 자리에 하나만: 비교 장면은 같은 캔버스 위쪽 절반에 '건너뛴 쪽'을 그린다 */}
         {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={compare ? [] : props} split={failState} />}
       </AbsoluteFill>
-      {/* 재료 이름표: 3D 소품 위에 붙는다 */}
-      {state &&
-        !compare &&
-        props.map((p, i) => {
-          const pop = state.propPop[i] ?? 0;
-          if (pop < 0.3) return null;
-          const pos = propPositions(props.length)[i]!;
-          const s = projectToScreen([pos[0], pos[1] + 0.2, pos[2]], state.camera, width, height);
-          if (!s.visible) return null;
-          // 화면 가장자리 소품의 이름표가 잘리지 않게 안쪽으로 당긴다 (글자 34px + 여백으로 어림한 폭의 절반)
-          const half = (p.label.length * 34 + 40) / 2;
-          return (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                left: Math.min(width - 16 - half, Math.max(16 + half, s.x)),
-                top: s.y - (i % 2) * 64,
-                transform: `translate(-50%, -100%) scale(${Math.min(1, pop)})`,
-                background: COLORS.white,
-                border: `4px solid ${COLORS.ink}`,
-                borderRadius: 18,
-                padding: '6px 16px',
-                fontFamily: FONT_FAMILY,
-                fontWeight: 800,
-                fontSize: 34,
-                whiteSpace: 'nowrap',
-                color: COLORS.ink,
-                boxShadow: `0 5px 0 ${COLORS.ink}`,
-              }}
-            >
-              {p.label}
-            </div>
-          );
-        })}
+      {/* 재료 이름표: 3D 소품 위에 붙는다 (장소를 넘길 때는 3D 화면과 함께 밀린다) */}
+      <AbsoluteFill style={{ transform: whipTransform }}>
+        {state &&
+          !compare &&
+          props.map((p, i) => {
+            const pop = state.propPop[i] ?? 0;
+            if (pop < 0.3) return null;
+            const pos = propPositions(props.length)[i]!;
+            const s = projectToScreen([pos[0], pos[1] + 0.2, pos[2]], state.camera, width, height);
+            if (!s.visible) return null;
+            // 화면 가장자리 소품의 이름표가 잘리지 않게 안쪽으로 당긴다 (글자 34px + 여백으로 어림한 폭의 절반)
+            const half = (p.label.length * 34 + 40) / 2;
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: Math.min(width - 16 - half, Math.max(16 + half, s.x)),
+                  top: s.y - (i % 2) * 64,
+                  transform: `translate(-50%, -100%) scale(${Math.min(1, pop)})`,
+                  background: COLORS.white,
+                  border: `4px solid ${COLORS.ink}`,
+                  borderRadius: 18,
+                  padding: '6px 16px',
+                  fontFamily: FONT_FAMILY,
+                  fontWeight: 800,
+                  fontSize: 34,
+                  whiteSpace: 'nowrap',
+                  color: COLORS.ink,
+                  boxShadow: `0 5px 0 ${COLORS.ink}`,
+                }}
+              >
+                {p.label}
+              </div>
+            );
+          })}
+      </AbsoluteFill>
       {/* 생성 AI 클립: 묶음 첫 장면에 올리면 약 8초 묶음 전체를 덮는다 */}
       {clips.map((c) => (
         <Sequence key={c.key} from={c.from} durationInFrames={c.duration} name={`clip ${c.key}`}>
           <SceneClip media={c.media} />
         </Sequence>
       ))}
+      {whip.amount > 0 && <AbsoluteFill style={{ backgroundColor: '#FFF6E8', opacity: whip.amount * 0.32, pointerEvents: 'none' }} />}
       <PostFx frame={frame} />
       {script.scenes.map((scene) => {
         const timing = byId.get(scene.id);
@@ -114,6 +128,15 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
     </AbsoluteFill>
   );
 };
+
+/** 장소 넘김용 가로 흐림 필터 (SVG). 넘기는 몇 프레임에만 붙는다 */
+const WhipFilter: React.FC<{ amount: number }> = ({ amount }) => (
+  <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
+    <filter id="whip-blur" x="-10%" y="0" width="120%" height="100%">
+      <feGaussianBlur stdDeviation={`${Math.round(amount * 46)} 0`} />
+    </filter>
+  </svg>
+);
 
 type Media = { url: string; kind: 'video' | 'image' };
 

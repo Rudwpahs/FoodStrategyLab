@@ -3,7 +3,8 @@ import type { FoodKind, Scene, Script } from '@mat-lab/recipe-core';
 import type { SceneTiming } from '../timeline.ts';
 import type { StageState } from './KitchenScene.tsx';
 import type { Vec3 } from './layout.ts';
-import { beatAt, cameraAt, compareFailShot } from './shots.ts';
+import { PLACE_HAS_STOVE, placePlan, videoLook } from './places.ts';
+import { beatAt, cameraAt, compareFailShot, shotPlan } from './shots.ts';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -45,7 +46,10 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   const { scene, index, local, progress, timing } = at;
   const sameTypeBefore = script.scenes.slice(0, index).filter((s) => s.type === scene.type).length;
   // 긴 장면은 약 3초마다 다른 각도로 (음식 익힘은 장면 전체 진행률로 이어진다)
-  const beat = beatAt(scene, sameTypeBefore, local, timing.durationInFrames);
+  // 장소와 구도는 대본 전체를 보고 한 번에 정한다 (이어지는 장면이 같은 구도가 되지 않게)
+  const sceneIndex = script.scenes.indexOf(scene);
+  const place = placePlan(script)[sceneIndex] ?? 'kitchen';
+  const beat = beatAt(scene, sameTypeBefore, local, timing.durationInFrames, { variant: shotPlan(script)[sceneIndex] ?? 0, place });
   const shot = variant === 'compare-fail' ? compareFailShot(beat.shot) : beat.shot;
   const cam = cameraAt(shot, beat.progress);
 
@@ -68,13 +72,15 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     action: shot.action,
     face: shot.face,
     burnerOn: shot.burnerOn,
-    showFoodInVessel: scene.type === 'steps' || scene.visual === 'sizzle' || (scene.type === 'explain' && !scene.visual),
+    showFoodInVessel: PLACE_HAS_STOVE[place] && (scene.type === 'steps' || scene.visual === 'sizzle' || (scene.type === 'explain' && !scene.visual)),
     cook,
     flip,
     plated: shot.plated,
     propPop,
     chefPop: index === 0 ? popIn(local / 10) : 1,
     mood: shot.mood,
+    place,
+    dayTime: videoLook(script.title).dayTime,
   };
 }
 

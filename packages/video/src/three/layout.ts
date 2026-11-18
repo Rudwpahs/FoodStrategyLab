@@ -2,6 +2,10 @@
 export type Vec3 = [number, number, number];
 
 export const COUNTER_TOP = 0.94;
+/** 뒷벽 앞면 z. 모든 무대(주방·시장·식탁·찬장·연구실)가 이 벽 앞에 조리대 높이의 작업대를 둔다 */
+export const WALL_Z = -1.62;
+/** 작업대 앞 가장자리 z (재료·접시는 작업대 위, 맛조수는 그 앞 발판 위) */
+export const COUNTER_FRONT = WALL_Z + 0.66;
 /** 캐릭터가 올라선 발판 위치 */
 export const CHEF_POS: Vec3 = [-0.62, 0.42, -0.5];
 /** 맛조수 얼굴 가운데 (카메라가 겨누는 곳) */
