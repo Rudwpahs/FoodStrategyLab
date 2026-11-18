@@ -59,6 +59,9 @@ export const StoryDraftSchema = z.object({
 export const StoryOutputSchema = z.object({ stories: z.array(StoryDraftSchema) });
 export type StoryDraft = z.infer<typeof StoryDraftSchema>;
 
+/** 팬·불이 있는 무대 (조리 장면은 여기서만) */
+const FIRE_PLACES: readonly Place[] = ['kitchen', 'lab'];
+
 /** 장면이 펼쳐질 곳을 고르는 기준 (3D 무대) */
 const PLACE_GUIDE: Record<Place, string> = {
   kitchen: '주방 조리대: 굽기·볶기·조리 장면',
@@ -98,7 +101,7 @@ export function storySystem(): string {
 - type: intro | question | mistake | explain | ingredients | steps | tip | outro
 - emotion: ${EMOTIONS.join(' | ')}
 - visual(선택): result(완성 음식 먼저) | fail(맛조수가 든 실패 접시) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만)
-- place(필수): 대본 하나에 적어도 3곳을 써서 무대가 바뀌게 해.
+- place(필수): 대본 하나에 2~3곳을 써서 무대가 바뀌게 해 (너무 자주 옮기지 마). 조리 장면(type "steps", visual "sizzle")은 불이 있는 kitchen이나 lab에서만.
 ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 - 대사에는 숫자를 원본 표기 그대로 써 (예: "설탕 2큰술").`;
 }
@@ -170,7 +173,8 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
       ...(s.cardItems?.length ? { cardItems: s.cardItems.map((c) => c.trim()).filter(Boolean) } : {}),
       // 서명 카드는 마지막 장면에만 (중간에 나오면 영상이 끝난 것처럼 보인다)
       ...(s.visual && (s.visual !== 'signature' || i === last) ? { visual: s.visual } : {}),
-      place: s.place,
+      // 불이 없는 무대(시장·식탁·찬장)에서는 팬·불이 그려지지 않으므로 조리 장면은 주방으로 옮긴다
+      place: (s.type === 'steps' || s.visual === 'sizzle') && !FIRE_PLACES.includes(s.place) ? 'kitchen' : s.place,
       ...(i === 0 ? { hook: true } : {}),
     })),
   };

@@ -71,6 +71,14 @@ describe('AI 이야기 대본', () => {
     expect(storyBlocked(c)).toBe(true);
   });
 
+  it('조리 장면을 불이 없는 무대에 두면 주방으로 옮긴다', () => {
+    const d = draft();
+    d.scenes[4] = { ...d.scenes[4]!, place: 'market' };
+    const c = finalizeStory(walnut, d, 'story-1');
+    if ('error' in c) throw new Error(c.error);
+    expect(c.script.scenes[4]!.place).toBe('kitchen');
+  });
+
   it('재료 장면이 없으면 버린다', () => {
     const d = draft();
     d.scenes = d.scenes.filter((s) => s.type !== 'ingredients');
