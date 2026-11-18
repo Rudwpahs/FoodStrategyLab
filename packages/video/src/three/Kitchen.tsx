@@ -1,5 +1,11 @@
 import React from 'react';
-import { BURNER, CHEF_POS, COUNTER_TOP } from './layout.ts';
+import { BURNER, CHEF_POS, COUNTER_TOP, WALL_Z } from './layout.ts';
+import type { DayTime } from './places.ts';
+
+/** 시간대별 창밖 빛 색 (주방·식탁 창문) */
+export function windowColor(dayTime: DayTime): string {
+  return dayTime === 'evening' ? '#FFC487' : dayTime === 'morning' ? '#CFEAFF' : '#E4F2FF';
+}
 
 /** 로우폴리(블록) 스타일 연구소 주방. 모두 상자·원기둥으로 만든다. */
 
@@ -12,16 +18,15 @@ export const Box: React.FC<BoxProps> = ({ pos, size, color, rot, shadow = true, 
   </mesh>
 );
 
-type CylProps = { pos: [number, number, number]; r: number; h: number; color: string; seg?: number; rot?: [number, number, number]; r2?: number; metal?: boolean };
+type CylProps = { pos: [number, number, number]; r: number; h: number; color: string; seg?: number; rot?: [number, number, number]; r2?: number; metal?: boolean; shadow?: boolean };
 
-export const Cyl: React.FC<CylProps> = ({ pos, r, h, color, seg = 20, rot, r2, metal }) => (
-  <mesh position={pos} rotation={rot} castShadow receiveShadow>
+export const Cyl: React.FC<CylProps> = ({ pos, r, h, color, seg = 20, rot, r2, metal, shadow = true }) => (
+  <mesh position={pos} rotation={rot} castShadow={shadow} receiveShadow>
     <cylinderGeometry args={[r, r2 ?? r, h, seg]} />
     <meshStandardMaterial color={color} roughness={metal ? 0.35 : 0.8} metalness={metal ? 0.5 : 0} flatShading />
   </mesh>
 );
 
-const WALL_Z = -1.62;
 const LEFT_X = -2.3;
 const C = {
   floorA: '#B9784A',
@@ -44,7 +49,7 @@ const Floor: React.FC = () => (
   </group>
 );
 
-const Walls: React.FC = () => (
+const Walls: React.FC<{ dayTime: DayTime }> = ({ dayTime }) => (
   <group>
     {/* 뒷벽: 아래 판넬 + 위 벽 */}
     <Box pos={[0, 1.9, WALL_Z - 0.05]} size={[6, 2.6, 0.1]} color={C.wall} shadow={false} />
@@ -53,7 +58,7 @@ const Walls: React.FC = () => (
     ))}
     {/* 왼쪽 벽 + 창문 */}
     <Box pos={[LEFT_X - 0.05, 1.6, 0]} size={[0.1, 3.2, 5]} color={C.wall} shadow={false} />
-    <Box pos={[LEFT_X + 0.01, 1.55, 0.05]} size={[0.02, 0.9, 1.1]} color="#BFE3FF" emissive="#BFE3FF" shadow={false} />
+    <Box pos={[LEFT_X + 0.01, 1.55, 0.05]} size={[0.02, 0.9, 1.1]} color={windowColor(dayTime)} emissive={windowColor(dayTime)} shadow={false} />
     <Box pos={[LEFT_X + 0.03, 1.1, 0.05]} size={[0.08, 0.06, 1.2]} color="#FFFFFF" />
     <Box pos={[LEFT_X + 0.03, 2.0, 0.05]} size={[0.08, 0.06, 1.2]} color="#FFFFFF" />
     <Box pos={[LEFT_X + 0.03, 1.55, -0.52]} size={[0.08, 0.96, 0.06]} color="#FFFFFF" />
@@ -172,10 +177,10 @@ export const Plate: React.FC = () => (
 );
 
 /** 주방 세트 (조명은 장면 분위기에 따라 KitchenScene에서 넣는다) */
-export const KitchenSet: React.FC = () => (
+export const KitchenSet: React.FC<{ dayTime?: DayTime }> = ({ dayTime = 'afternoon' }) => (
   <group>
     <Floor />
-    <Walls />
+    <Walls dayTime={dayTime} />
     <Counter />
     <Shelf />
     <Fridge />

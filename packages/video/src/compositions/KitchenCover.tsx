@@ -7,6 +7,7 @@ import { ensureFonts } from '../fonts.ts';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene, foodFor, type StageState } from '../three/KitchenScene.tsx';
 import { CHEF_FACE } from '../three/layout.ts';
+import { videoLook } from '../three/places.ts';
 
 ensureFonts();
 
@@ -15,7 +16,7 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
   const square = width === height;
-  const state = coverState(emotion, square);
+  const state = coverState(emotion, square, title);
   return (
     <AbsoluteFill style={{ backgroundColor: '#FFF1DC' }}>
       <KitchenScene width={width} height={height} frame={0} state={state} food={food} props={[]} />
@@ -73,7 +74,8 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
   );
 };
 
-function coverState(emotion: Scene['emotion'], square: boolean): StageState {
+/** 표지는 완성 접시가 어울리는 식탁에서. 시간대 조명은 영상과 같은 제목 씨앗으로 */
+function coverState(emotion: Scene['emotion'], square: boolean, title: string): StageState {
   const face = CHEF_FACE;
   return {
     camera: square
@@ -91,5 +93,7 @@ function coverState(emotion: Scene['emotion'], square: boolean): StageState {
     propPop: [],
     chefPop: 1,
     mood: 'golden',
+    place: 'dining',
+    dayTime: videoLook(title).dayTime,
   };
 }

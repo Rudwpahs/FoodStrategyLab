@@ -1,12 +1,13 @@
 import React, { useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
-import { Object3D, PerspectiveCamera, Scene } from 'three';
+import { Color, Object3D, PerspectiveCamera, Scene } from 'three';
 import { foodProfile, type Emotion, type FoodProfile, type IngredientProp, type RecipeInput } from '@mat-lab/recipe-core';
 import { Chef3D } from './Chef3D.tsx';
 import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
-import { KitchenSet } from './Kitchen.tsx';
 import { BURNER, CHEF_POS, PLATE, chefFacing, handPlate, propPositions, type Vec3 } from './layout.ts';
+import { PLACE_HAS_STOVE, type DayTime, type Place } from './places.ts';
+import { PlaceSet } from './Sets.tsx';
 import type { ChefAction, Mood, Shot } from './shots.ts';
 
 /** 3D 장면에 넣을 음식 */
@@ -32,6 +33,10 @@ export interface StageState {
   propPop: number[];
   chefPop: number;
   mood: Mood;
+  /** 장면이 펼쳐지는 곳 (3D 무대) */
+  place: Place;
+  /** 영상 한 편의 시간대 조명 */
+  dayTime: DayTime;
 }
 
 /** 분위기별 조명: 은은한 바탕빛 + 창문 쪽 주광 + 피사체 뒤쪽의 색 테두리 조명 */
@@ -45,8 +50,29 @@ export const MOODS: Record<Mood, { bg: string; sky: string; ground: string; hemi
   golden: { bg: '#F0D3A8', sky: '#FFE9C4', ground: '#9A6234', hemi: 0.7, key: '#FFD08A', keyI: 2.5, rim: '#FFA53A', rimI: 2.4, fire: 0 },
 };
 
-const MoodLights: React.FC<{ mood: Mood; camera: StageState['camera'] }> = ({ mood, camera }) => {
-  const m = MOODS[mood];
+/**
+ * 시간대별로 분위기 조명 위에 살짝 얹는 빛: 아침은 맑고 푸르스름하게, 오후는 그대로, 저녁은 낮고 주황빛으로.
+ * 장면 분위기(MOODS)가 먼저이고 시간대는 영상끼리 덜 똑같아 보이게 하는 정도로만 섞는다.
+ */
+export const DAY_LIGHT: Record<DayTime, { keyPos: Vec3; tint: string; amount: number; keyMul: number; hemiMul: number }> = {
+  morning: { keyPos: [-3.4, 3.7, 3.0], tint: '#E6F0FF', amount: 0.22, keyMul: 1.02, hemiMul: 1.05 },
+  afternoon: { keyPos: [-3.2, 4.2, 2.6], tint: '#FFFFFF', amount: 0, keyMul: 1, hemiMul: 1 },
+  evening: { keyPos: [-3.8, 2.5, 2.0], tint: '#FFAE6B', amount: 0.32, keyMul: 0.95, hemiMul: 0.88 },
+};
+
+const tinted = (color: string, tint: string, amount: number) => (amount > 0 ? `#${new Color(color).lerp(new Color(tint), amount).getHexString()}` : color);
+
+const MoodLights: React.FC<{ mood: Mood; dayTime: DayTime; camera: StageState['camera'] }> = ({ mood, dayTime, camera }) => {
+  const d = DAY_LIGHT[dayTime];
+  const base = MOODS[mood];
+  const m = {
+    ...base,
+    bg: tinted(base.bg, d.tint, d.amount * 0.6),
+    sky: tinted(base.sky, d.tint, d.amount),
+    key: tinted(base.key, d.tint, d.amount * 1.3),
+    keyI: base.keyI * d.keyMul,
+    hemi: base.hemi * d.hemiMul,
+  };
   const rimTarget = useMemo(() => new Object3D(), []);
   // 카메라 반대편 위쪽에서 피사체를 비추는 테두리 조명
   const [px, py, pz] = camera.pos;
@@ -63,7 +89,7 @@ const MoodLights: React.FC<{ mood: Mood; camera: StageState['camera'] }> = ({ mo
       <hemisphereLight args={[m.sky, m.ground, m.hemi]} />
       <ambientLight intensity={0.15} />
       <directionalLight
-        position={[-3.2, 4.2, 2.6]}
+        position={d.keyPos}
         intensity={m.keyI}
         color={m.key}
         castShadow
@@ -100,11 +126,16 @@ const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProf
   const positions = propPositions(props.length);
   return (
     <>
-      <MoodLights mood={state.mood} camera={state.camera} />
-      <KitchenSet />
-      <Flame frame={frame} on={state.burnerOn} />
-      <CookingFood food={food} cook={state.cook} frame={frame} stirring={state.action === 'cook'} flip={state.flip} showFood={state.showFoodInVessel} />
-      {state.showFoodInVessel && state.burnerOn && <Steam origin={[BURNER[0], BURNER[1] + 0.12, BURNER[2]]} frame={frame} amount={5} />}
+      <MoodLights mood={state.mood} dayTime={state.dayTime} camera={state.camera} />
+      <PlaceSet place={state.place} dayTime={state.dayTime} />
+      {/* 팬·불은 불이 있는 무대(주방·연구실)에만 */}
+      {PLACE_HAS_STOVE[state.place] && (
+        <>
+          <Flame frame={frame} on={state.burnerOn} />
+          <CookingFood food={food} cook={state.cook} frame={frame} stirring={state.action === 'cook'} flip={state.flip} showFood={state.showFoodInVessel} />
+          {state.showFoodInVessel && state.burnerOn && <Steam origin={[BURNER[0], BURNER[1] + 0.12, BURNER[2]]} frame={frame} amount={5} />}
+        </>
+      )}
       {state.action === 'present' ? (
         <PlatedFood food={state.plated === 'none' ? null : food} failed={state.plated === 'failed'} frame={frame} origin={handPlate(facing)} />
       ) : (
