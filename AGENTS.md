@@ -10,10 +10,10 @@
 
 | 경로 | 역할 |
 | --- | --- |
-| `packages/recipe-core` | 규칙·순수 함수: 레시피 모델, 원본 대조(`fidelity.ts`), 훅 15종(`hooks.ts`), 연출 6종(`styles.ts`), 후보 5개(`candidates.ts`) |
-| `packages/video` | Remotion + Three.js 렌더: 3D 주방·맛조수·음식(`foodShapes.ts`), 자막, 효과음(`sfx.ts`), 렌더러(`render.ts`), 완성 영상 자동 품질 검사(`qa.ts`: 대사 잘림·무음·검은 화면·받아쓰기 대조) |
+| `packages/recipe-core` | 규칙·순수 함수: 레시피 모델, 원본 대조(`fidelity.ts`), 훅 15종(`hooks.ts`), 연출 6종(`styles.ts`), 후보 5개(`candidates.ts`), AI 이야기 대본 프롬프트·검사(`generator/story.ts`) |
+| `packages/video` | Remotion + Three.js 렌더: 3D 주방·맛조수·음식(`foodShapes.ts`), 자막, 자막 강조·줄 나누기(`captionStyle.ts`), 효과음(`sfx.ts`), 배경 음악·더킹(`music.ts`, CC0 곡은 `assets/bgm`), 렌더러(`render.ts`), 완성 영상 자동 품질 검사(`qa.ts`: 대사 잘림·무음·검은 화면·받아쓰기 대조) |
 | `packages/publishing` | 블로그(자동·전문가 답변형), SNS 문구, 일관성 검사, 문체 점검(AI 티: im-not-ai 규칙, `aiTells.ts`), im-not-ai 윤문 룰북·요청문·게이트(`imNotAi/`), ZIP |
-| `apps/studio/server` | Express 5 + node:sqlite: API, 로그인(`auth.ts`), 제작 파이프라인(`pipeline.ts`), VoiceStudio 연동(`voicestudio.ts`, `tts.ts`), 레시피 읽기(`recipeReader.ts`)·AI 티 다듬기(`humanize.ts`, Claude API·월 한도 공유) |
+| `apps/studio/server` | Express 5 + node:sqlite: API, 로그인(`auth.ts`), 제작 파이프라인(`pipeline.ts`), VoiceStudio 연동(`voicestudio.ts`, `tts.ts`), 레시피 읽기(`recipeReader.ts`)·AI 티 다듬기(`humanize.ts`)·AI 이야기 대본(`storyWriter.ts`) (Claude API·월 한도 공유) |
 | `apps/studio/web` | React 19 화면 (Vite) |
 | `apps/android` | 스튜디오를 여는 안드로이드 WebView 앱 |
 | `deploy/modal/` | 기본 배포: Modal 클라우드(`app.py` 웹+GPU 목소리, `voice_proxy.py`), `.github/workflows/modal-deploy.yml`, 안내 `docs/MODAL_SETUP.md` |
