@@ -97,7 +97,7 @@ export function storySystem(): string {
 13. 맛조수와 그 주변 인물(친구·할머니 등)의 이야기는 지어내도 돼. 다만 "실험 결과", "연구로 증명" 같은 가짜 사실 표현, 건강 효능 주장은 금지.
 
 ## 형식
-- 장면 6~9개. 대사는 공백 빼고 대본 전체 200~270자 (약 30~38초). 한 장면 대사는 한두 문장, 짧고 말하기 쉽게.
+- 장면 6~8개. 대사는 공백 빼고 대본 전체 170~220자 (실제 목소리로 약 32~40초). 270자를 넘으면 영상이 45초를 넘어 지루해져. 한 장면 대사는 한두 문장, 짧고 말하기 쉽게.
 - type: intro | question | mistake | explain | ingredients | steps | tip | outro
 - emotion: ${EMOTIONS.join(' | ')}
 - visual(선택): result(완성 음식 먼저) | fail(맛조수가 든 실패 접시) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만)
@@ -201,7 +201,8 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   if (places.size < 2) warnings.push('무대가 한 곳뿐이에요');
   const seconds = estimateScriptSeconds(script);
   if (seconds < 20) warnings.push(`예상 길이 ${Math.round(seconds)}초: 너무 짧아요`);
-  if (seconds > 48) warnings.push(`예상 길이 ${Math.round(seconds)}초: 너무 길어요`);
+  // 실제 목소리는 글자 수 어림보다 20%쯤 느리다 (견본: 어림 39초 → 실제 47초)
+  if (seconds > 40) warnings.push(`예상 길이 ${Math.round(seconds)}초: 너무 길어요`);
   return {
     id,
     storyType: draft.storyType,
