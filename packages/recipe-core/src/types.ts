@@ -87,6 +87,22 @@ export const VISUAL_LABELS: Record<Visual, string> = {
   signature: '이희재 연구자 서명 카드',
 };
 
+/**
+ * 장면이 펼쳐지는 곳 (3D 무대). 비어 있으면 영상 쪽이 장면 종류에 맞춰 고른다.
+ * kitchen: 주방 조리대 / market: 시장 가판대(재료 고르기) / dining: 식탁(완성·맛보기) / pantry: 찬장·냉장고 앞(재료 꺼내기) / lab: 연구실 칠판(원리 설명)
+ */
+export const PLACES = ['kitchen', 'market', 'dining', 'pantry', 'lab'] as const;
+export const PlaceSchema = z.enum(PLACES);
+export type Place = z.infer<typeof PlaceSchema>;
+
+export const PLACE_LABELS: Record<Place, string> = {
+  kitchen: '주방 조리대',
+  market: '시장 가판대',
+  dining: '식탁',
+  pantry: '찬장·냉장고 앞',
+  lab: '연구실 칠판',
+};
+
 export const SceneSchema = z.object({
   id: z.string().min(1),
   type: SceneTypeSchema,
@@ -98,6 +114,8 @@ export const SceneSchema = z.object({
   cardItems: z.array(z.string().trim()).optional(),
   /** 화면 연출 (선택) */
   visual: VisualSchema.optional(),
+  /** 장면이 펼쳐지는 곳 (선택, 비어 있으면 장면 종류에 맞춰 영상이 고름) */
+  place: PlaceSchema.optional(),
   /** 훅(첫 장면) 여부: 훅을 바꿀 때 이 장면만 다시 만든다 */
   hook: z.boolean().optional(),
 });
