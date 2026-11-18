@@ -7,6 +7,7 @@
  *   E2E_EXPECT_VOICE=1 맛조수 목소리가 실제로 들어갔는지도 확인한다 (목소리 없이 만들어지면 실패)
  *   E2E_DISH=요리 이름  예시 레시피 고르기 (기본 호두정과)
  *   E2E_STYLE=연출     후보 영상과 같은 연출 대본으로 (예: before-after — 효과음이 들어간다). 없으면 기본 템플릿 대본
+ *                     ai-story면 실제 Claude로 이야기 대본 3개를 받아 원본 대조를 통과한 첫 번째로 만든다 (ANTHROPIC_API_KEY 필요, 약 $0.1~0.3)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,7 +24,8 @@ process.env.TTS_PROVIDER ??= 'none';
 // 데이터 폴더를 정한 뒤에 서버 모듈을 불러온다 (config.ts가 불러올 때 폴더를 정한다)
 const { startServer } = await import('../server/index.ts');
 const { startRender } = await import('../server/pipeline.ts');
-const { SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, generateTemplateScript } = await import('@mat-lab/recipe-core');
+const { SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, finalizeStory, generateTemplateScript, storyBlocked } = await import('@mat-lab/recipe-core');
+const { StoryWriter } = await import('../server/storyWriter.ts');
 
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => {
@@ -40,10 +42,28 @@ try {
   if (!recipe) throw new Error(`예시 레시피에 "${dish}"가 없어요 (${SAMPLE_RECIPES.map((r) => r.dishName).join(', ')})`);
   const pid = repo.createProject(recipe);
   const style = process.env.E2E_STYLE || '';
-  if (style && !(STYLE_IDS as readonly string[]).includes(style)) throw new Error(`연출 "${style}"가 없어요 (${STYLE_IDS.join(', ')})`);
-  // 효과음(휙·띵·보잉·뽁)은 연출 대본에만 들어간다
-  const script = style ? buildStyledScript(recipe, { style: style as (typeof STYLE_IDS)[number] }).script : generateTemplateScript(recipe);
-  repo.addScriptVersion(pid, script, 'template', `E2E 실제 렌더${style ? ` (연출 ${style})` : ''}`);
+  if (style && style !== 'ai-story' && !(STYLE_IDS as readonly string[]).includes(style)) throw new Error(`연출 "${style}"가 없어요 (ai-story, ${STYLE_IDS.join(', ')})`);
+  if (style === 'ai-story') {
+    // 실제 Claude로 이야기 대본 3개를 받아, 원본 대조를 통과한 첫 번째로 만든다
+    const { drafts, costUsd } = await new StoryWriter(repo.db).write(recipe);
+    const stories = drafts.map((d, i) => finalizeStory(recipe, d, `story-${i + 1}`));
+    for (const st of stories) {
+      if ('error' in st) console.log(`  · 버린 이야기: ${st.error}`);
+      else console.log(`  · [${st.storyType}] ${st.script.title}${storyBlocked(st) ? ' (원본과 달라 막힘)' : ''}${st.warnings.length ? ` / 확인: ${st.warnings.join(', ')}` : ''}\n${st.script.scenes.map((sc) => `      ${sc.place ?? '-'} | ${sc.line}`).join('\n')}`);
+    }
+    const pick = stories.find((st): st is Exclude<typeof st, { error: string }> => !('error' in st) && !storyBlocked(st));
+    check(Boolean(pick), `원본 대조를 통과한 이야기 대본 (${stories.length}개 중, 약 $${costUsd.toFixed(2)})`);
+    if (process.env.E2E_OUT) {
+      fs.mkdirSync(process.env.E2E_OUT, { recursive: true });
+      fs.writeFileSync(path.join(process.env.E2E_OUT, 'stories.json'), JSON.stringify(stories, null, 2));
+    }
+    if (!pick) throw new Error('쓸 수 있는 이야기 대본이 없어요');
+    repo.addScriptVersion(pid, pick.script, 'ai-story', `E2E 실제 렌더 (AI 이야기: ${pick.script.title})`);
+  } else {
+    // 효과음(휙·띵·보잉·뽁)은 연출 대본에만 들어간다
+    const script = style ? buildStyledScript(recipe, { style: style as (typeof STYLE_IDS)[number] }).script : generateTemplateScript(recipe);
+    repo.addScriptVersion(pid, script, 'template', `E2E 실제 렌더${style ? ` (연출 ${style})` : ''}`);
+  }
   const rid = startRender(repo, pid, `http://127.0.0.1:${port}`);
   let last = '';
   for (;;) {
@@ -69,6 +89,7 @@ try {
   check(Boolean(qa && qa.checked.length), `자동 품질 검사 기록 (${qa?.checked.join(', ') ?? '없음'})`);
   check(!qa?.issues.some((i) => i.code === 'black'), '검은 화면 없음');
   for (const i of qa?.issues ?? []) console.log(`  · 검사 결과 [${i.level}] ${i.message}`);
+  if (process.env.BGM !== 'off') check(Boolean(qa?.music), `배경 음악 (${qa?.music ?? '없음'})`);
   for (const f of ['cover.png', 'cover.jpg', 'thumbnail.png', 'recipe-card.png']) check(fs.existsSync(path.join(dir, f)), f);
   const cards = fs.readdirSync(dir).filter((f) => /^carousel-\d+\.jpg$/.test(f));
   check(cards.length >= 2 && cards.length <= 10, `레시피 카드 ${cards.length}장 (2~10장)`);

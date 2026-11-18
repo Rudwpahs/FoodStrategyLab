@@ -402,7 +402,8 @@ def web() -> None:
 # 운영 서버와 같은 이미지·같은 렌더 코드·배포된 GPU 맛조수 목소리로 예시 레시피 영상 하나를 끝까지 만든다.
 # 운영 데이터 저장소(matlab-data)는 붙이지 않는다: 운영 DB·콘텐츠를 읽거나 바꾸지 않고, 임시 폴더에서만 만든다.
 # 실행: GitHub Actions의 'Render sample video' (수동) → modal run deploy/modal/app.py::sample --dish 호두정과
-@app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600)
+# 이야기 대본(style="ai-story")은 Claude를 부르므로 운영과 같은 비밀값(matlab-studio의 ANTHROPIC_API_KEY)을 붙인다
+@app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
 def render_sample(dish: str = "호두정과", style: str = "") -> dict:
     import sys
     import tempfile

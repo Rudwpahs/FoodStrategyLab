@@ -14,9 +14,9 @@ on:
         required: false
         default: '호두정과'
       style:
-        description: '연출 (비우면 기본 템플릿, before-after·comedy 등이면 효과음이 들어간 후보 영상과 같은 대본)'
+        description: '연출 (ai-story = Claude 이야기 대본, before-after·comedy 등 = 연출 대본, 비우면 기본 템플릿)'
         required: false
-        default: 'before-after'
+        default: 'ai-story'
 
 concurrency:
   group: render-sample
