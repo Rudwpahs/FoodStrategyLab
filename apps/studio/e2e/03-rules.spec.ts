@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKLIST, RESEARCHER, ensureAccounts, expect, login, projectWithRender, test, waitRender } from './helpers.ts';
+import { CHECKLIST, RESEARCHER, createSampleProject, ensureAccounts, expect, login, projectWithRender, test, waitRender } from './helpers.ts';
 
 /** C. 원칙·예외 경로 (E2E_PLAN.md 4절 C) */
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -92,4 +92,33 @@ test('C5 영상을 만드는 중에는 다른 후보로 만들 수 없고, 대�
   } finally {
     await page.request.post('/__e2e/hold', { data: { hold: false } });
   }
+});
+
+test('C6 AI 이야기 대본: 3개 받기 → 지어낸 분량 대본은 만들 수 없음 → 하나로 만들면 새 버전·영상 (원칙 1)', async ({ page }) => {
+  const id = await createSampleProject(page.request);
+  await page.goto(`/#/p/${id}/script`);
+  await page.getByRole('button', { name: '✍️ 이야기 대본 3개 쓰기' }).click();
+  await expect(page.locator('.toast').last()).toContainText('새 이야기 대본이 왔어요');
+  const cards = page.locator('.story-card');
+  await expect(cards).toHaveCount(3);
+  // 가짜 작가의 세 번째 대본은 원본에 없는 분량(설탕 99큰술)을 말해 막힌다
+  const bad = cards.filter({ hasText: '분량을 지어낸 이야기' });
+  await expect(bad.getByRole('button', { name: /이 이야기로 만들기/ })).toBeDisabled();
+  await expect(bad.getByText(/만들 수 없음/)).toBeVisible();
+  // 대사 전체를 펼쳐 볼 수 있다
+  const good = cards.first();
+  await good.getByText('대사 전체 보기').click();
+  await expect(good.locator('.story-lines li')).toHaveCount(6);
+  const title = (await good.locator('.candidate-title').textContent())!.trim();
+  await good.getByRole('button', { name: /이 이야기로 만들기/ }).click();
+  await expect(page.locator('.toast').last()).toContainText('영상을 만들기 시작했어요');
+  const p = await (await page.request.get(`/api/projects/${id}`)).json();
+  expect(p.latest.source).toBe('ai-story');
+  expect(p.latest.script.title).toBe(title);
+  // 재료 카드는 원본 재료 그대로
+  const meta = await (await page.request.get('/api/meta')).json();
+  const walnut = meta.samples.find((s: { dishName: string }) => s.dishName === '호두정과');
+  const card = p.latest.script.scenes.find((s: { type: string }) => s.type === 'ingredients');
+  expect(card.cardItems.length).toBe(walnut.ingredients.length);
+  expect((await waitRender(page.request, p.renders[0].id)).status).toBe('done');
 });

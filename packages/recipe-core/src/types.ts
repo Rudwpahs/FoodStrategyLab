@@ -146,4 +146,4 @@ export const ChecklistSchema = z.object({
   expression: z.boolean(),
 });
 
-export type ScriptSource = 'template' | 'ai-paste' | 'edit';
+export type ScriptSource = 'template' | 'ai-paste' | 'ai-story' | 'edit';

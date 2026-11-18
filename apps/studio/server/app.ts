@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, generateTemplateScript, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, finalizeStory, generateTemplateScript, storyBlocked, STORY_TYPE_INFO, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, IM_NOT_AI_COMMIT, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, findAiTells, isPolishableLine, lintBlog, polishPost, polishableBlogLines, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { BRAND } from '@mat-lab/recipe-core';
 import { Humanizer, verifyRewrites } from './humanize.ts';
+import { StoryWriter } from './storyWriter.ts';
 import { DATA_DIR } from './config.ts';
 import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
 import { toJpeg } from '@mat-lab/video/audio';
@@ -70,6 +71,8 @@ export interface AppDeps {
   recipeReader?: RecipeReader;
   /** im-not-ai 윤문 (테스트에서는 가짜 Claude로 바꾼다) */
   humanizer?: Humanizer;
+  /** AI 이야기 대본 작가 (테스트에서는 가짜 Claude로 바꾼다) */
+  storyWriter?: StoryWriter;
 }
 
 /** 연구자 답변 원문 (윤문하지 않는다 — 원칙 4) */
@@ -174,6 +177,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const ig = deps.instagram ?? new Instagram(repo.db);
   const reader = deps.recipeReader ?? new RecipeReader(repo.db);
   const humanizer = deps.humanizer ?? new Humanizer(repo.db);
+  const storyWriter = deps.storyWriter ?? new StoryWriter(repo.db);
+  /** 이야기 대본을 쓰고 있는 콘텐츠 (두 번 눌러 두 번 결제되지 않게) */
+  const writingStories = new Set<number>();
   /** 블로그·SNS 문구에 넣을 승인 정보 (승인 전이면 null) */
   const reviewOf = (project: ProjectDetail) => (project.approval ? { reviewer: creditedReviewer(project.approval), reviewedAt: project.approval.createdAt } : null);
   /** 최근 다른 콘텐츠의 연출·훅: 같은 상황이 반복되지 않도록 추천 순위에 반영 */
@@ -984,6 +990,53 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     const keepAlive = process.env.KEEPALIVE === '1' ? publicOrigin(req) : undefined;
     const renderId = deps.startRender(repo, pid, origin, keepAlive);
     res.status(202).json({ project: repo.getProject(pid), renderId, notes: [...built.notes, ...detached] });
+  });
+
+  // ── AI 이야기 대본: Claude가 이야기가 서로 다른 대본을 쓰고, 원본 대조를 통과한 것만 만들 수 있다 ──
+  /** 저장된 초안을 지금 레시피로 다시 대조한다 (레시피를 고친 뒤에도 원본과 어긋나지 않게) */
+  const storyList = (pid: number) => {
+    const recipe = repo.getRecipe(pid);
+    return repo.getStories(pid).map((st) => {
+      const c = finalizeStory(recipe, st.draft, st.id);
+      if ('error' in c) return { id: st.id, createdAt: st.createdAt, error: c.error };
+      return { ...c, createdAt: st.createdAt, label: STORY_TYPE_INFO[c.storyType]?.label ?? c.storyType, blocked: storyBlocked(c) };
+    });
+  };
+  api.get('/projects/:id/stories', (req, res) => {
+    const pid = id(req);
+    const current = repo.latestScript(pid)?.script;
+    res.json({ available: storyWriter.available(), writing: writingStories.has(pid), stories: storyList(pid), currentTitle: current?.style === 'ai-story' ? current.title : null });
+  });
+  api.post('/projects/:id/stories', async (req, res) => {
+    const pid = id(req);
+    requireTopic(pid);
+    if (writingStories.has(pid)) throw new HttpError(409, '이야기 대본을 쓰고 있어요. 잠시만 기다려 주세요.');
+    const project = repo.getProject(pid);
+    writingStories.add(pid);
+    try {
+      const avoidTitles = repo.getStories(pid).map((s) => s.draft.title).slice(0, 6);
+      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
+      const added = new Set(repo.addStories(pid, drafts, costUsd).map((s) => s.id));
+      res.json({ stories: storyList(pid), added: [...added], costUsd });
+    } finally {
+      writingStories.delete(pid);
+    }
+  });
+  api.post('/projects/:id/stories/:sid/make', (req, res) => {
+    const pid = id(req);
+    requireTopic(pid);
+    const story = storyList(pid).find((s) => s.id === req.params.sid);
+    if (!story) throw new HttpError(404, '이야기 대본을 찾을 수 없어요.');
+    if ('error' in story) throw new HttpError(400, `이 대본은 쓸 수 없어요: ${story.error}`);
+    if (story.blocked) throw new HttpError(400, `원본 레시피와 다른 부분이 있어 만들 수 없어요: ${story.issues.filter((i) => i.level === 'error').map((i) => i.message).join(' / ')}`);
+    const busy = repo.getProject(pid).renders.find((r) => r.status === 'queued' || r.status === 'running');
+    if (busy) throw new HttpError(409, `이미 만들고 있는 영상이 있어요 (작업 #${busy.id}). 끝나거나 취소한 뒤 다시 눌러 주세요.`);
+    const detached = detachChangedMedia(repo, pid, repo.latestScript(pid)?.script, story.script);
+    repo.addScriptVersion(pid, story.script, 'ai-story', `AI 이야기 대본 선택: ${story.script.title} (${story.label})`);
+    const origin = `http://127.0.0.1:${req.socket.localPort}`;
+    const keepAlive = process.env.KEEPALIVE === '1' ? publicOrigin(req) : undefined;
+    const renderId = deps.startRender(repo, pid, origin, keepAlive);
+    res.status(202).json({ project: repo.getProject(pid), renderId, notes: [...story.notes, ...detached] });
   });
 
   // ── 블로그 문체 후보 2개 비교·선택 ──

@@ -15,6 +15,8 @@ import { startServer } from '../server/index.ts';
 import { auditVideo, startRender, type RenderDeps } from '../server/pipeline.ts';
 import { RecipeReader, type ExtractedRecipe, type ParseFn, type TopicsFn } from '../server/recipeReader.ts';
 import { Humanizer, type RewriteFn } from '../server/humanize.ts';
+import { StoryWriter } from '../server/storyWriter.ts';
+import { fakeStoryCall } from './fakeStories.ts';
 import type { RenderQaIssue } from '../server/repo.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -117,6 +119,7 @@ await startServer(port, {
     startRender: (r, pid, origin, keepAlive) => startRender(r, pid, origin, keepAlive, { renderer, audit }),
     recipeReader: new RecipeReader(repo.db, parse, topics),
     humanizer: new Humanizer(repo.db, rewrite),
+    storyWriter: new StoryWriter(repo.db, fakeStoryCall),
   }),
   extend: (app) => {
     app.use('/__e2e', express.json());

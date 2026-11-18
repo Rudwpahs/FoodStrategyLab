@@ -299,7 +299,7 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
   }
   // 원리 장면이 없는 연출(감각 중심형)은 노트 문구를, 팁 장면을 넣지 않는 연출(코미디·스토리형)은 팁 문구를 검사하지 않는다
   const noNote = script.style === 'sensory';
-  const noTip = script.style === 'comedy' || script.style === 'story' || recipe.tips.length === 0;
+  const noTip = script.style === 'comedy' || script.style === 'story' || script.style === 'ai-story' || recipe.tips.length === 0;
   if (!noNote && !all.includes(BRAND.notePhrase) && !all.includes(BRAND.noteLead) && !cards.includes(BRAND.notePhrase)) {
     issues.push({ level: 'info', code: 'branding', message: `중간에 "${BRAND.notePhrase}" 문구가 없습니다.` });
   }

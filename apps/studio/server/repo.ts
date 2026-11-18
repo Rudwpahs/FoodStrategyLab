@@ -15,6 +15,7 @@ import {
   type RecipeInput,
   type Script,
   type ScriptSource,
+  type StoryDraft,
   type VersionState,
 } from '@mat-lab/recipe-core';
 import type { Db } from './db.ts';
@@ -31,6 +32,14 @@ export class HttpError extends Error {
 }
 
 const now = () => new Date().toISOString();
+
+/** AI 이야기 대본 초안을 몇 개까지 남길지 */
+export const STORY_KEEP = 9;
+export interface StoredStory {
+  id: string;
+  draft: StoryDraft;
+  createdAt: string;
+}
 
 export interface ScriptVersion {
   version: number;
@@ -397,6 +406,29 @@ export class Repo {
     this.logEvent(id, 'blog', note);
   }
 
+  /** AI 이야기 대본 초안 (새것이 앞, 최대 STORY_KEEP개) */
+  getStories(id: number): StoredStory[] {
+    const row = this.db.prepare('SELECT stories_json FROM projects WHERE id = ?').get(id) as Row | undefined;
+    if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
+    try {
+      const v = JSON.parse(String(row.stories_json || '[]')) as unknown;
+      return Array.isArray(v) ? v.filter((s): s is StoredStory => Boolean(s && typeof s === 'object' && typeof s.id === 'string' && s.draft && Array.isArray(s.draft.scenes))) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  addStories(id: number, drafts: StoryDraft[], costUsd: number): StoredStory[] {
+    const prev = this.getStories(id);
+    const max = prev.reduce((m, s) => Math.max(m, Number(s.id.replace('story-', '')) || 0), 0);
+    const createdAt = now();
+    const added = drafts.map((draft, i) => ({ id: `story-${max + i + 1}`, draft, createdAt }));
+    const list = [...added, ...prev].slice(0, STORY_KEEP);
+    this.db.prepare('UPDATE projects SET stories_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(list), createdAt, id);
+    this.logEvent(id, 'script', `AI 이야기 대본 ${added.length}개 받음 (약 $${costUsd.toFixed(2)})`);
+    return added;
+  }
+
   getBlogStyle(id: number): string {
     const row = this.db.prepare('SELECT blog_style FROM projects WHERE id = ?').get(id) as Row | undefined;
     if (!row) throw new HttpError(404, '콘텐츠를 찾을 수 없습니다.');
@@ -471,7 +503,7 @@ export class Repo {
       .prepare('INSERT INTO script_versions (project_id, version, script_json, source, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, version, JSON.stringify(script), source, note, now());
     this.db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
-    const label = { template: '템플릿 생성', 'ai-paste': 'AI 대본 붙여넣기', edit: '대본 수정' }[source];
+    const label = { template: '템플릿 생성', 'ai-paste': 'AI 대본 붙여넣기', 'ai-story': 'AI 이야기 대본', edit: '대본 수정' }[source];
     this.logEvent(id, 'script', `대본 v${version} 저장 (${label})${note ? ` — ${note}` : ''}`);
     return version;
   }

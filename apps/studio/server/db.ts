@@ -150,6 +150,8 @@ export function openDb(file: string): Db {
   if (!renderCols.has('qa_json')) db.exec("ALTER TABLE renders ADD COLUMN qa_json TEXT NOT NULL DEFAULT ''");
   // 블로그 원고 윤문(im-not-ai): 원문 문단 → 다듬은 문단. 원문이 바뀌면 자연히 적용되지 않는다
   if (!cols.has('polish_json')) db.exec("ALTER TABLE projects ADD COLUMN polish_json TEXT NOT NULL DEFAULT '{}'");
+  // AI 이야기 대본 후보 (Claude가 쓴 초안). 목록을 볼 때마다 지금 레시피로 다시 대조한다
+  if (!cols.has('stories_json')) db.exec("ALTER TABLE projects ADD COLUMN stories_json TEXT NOT NULL DEFAULT '[]'");
   // 계정 역할: 연구자(researcher) 계정이 하나라도 있으면 승인은 연구자 계정만 할 수 있다
   const userCols = new Set((db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name));
   if (!userCols.has('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'");

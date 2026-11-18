@@ -3,6 +3,7 @@ import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, type Sce
 import { buildTimeline, videoSeconds, type SceneTiming } from '@mat-lab/video';
 import { HookPicker } from '../components/HookPicker.tsx';
 import { CandidatePicker } from '../components/CandidatePicker.tsx';
+import { StoryPicker } from '../components/StoryPicker.tsx';
 import { RecipeReadCard } from '../components/RecipeReadCard.tsx';
 import { HumanizePanel } from '../components/HumanizePanel.tsx';
 import { TopicPicker, needsTopic } from '../components/TopicPicker.tsx';
@@ -20,7 +21,7 @@ const TYPE_LABELS: Record<Scene['type'], string> = {
   tip: '한 줄 팁',
   outro: '엔딩',
 };
-const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', edit: '직접 수정' } as const;
+const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', 'ai-story': 'AI 이야기', edit: '직접 수정' } as const;
 
 export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
   const { run } = useApp();
@@ -139,6 +140,15 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
       {/* 주제를 아직 안 골랐으면 주제 고르기를 맨 위에 (읽은 레시피는 그 아래에서 확인) */}
       {needsTopic(project) && <TopicPicker project={project} onChosen={setProject} />}
       {project.source && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} hideSuggestions={needsTopic(project)} />}
+      {!needsTopic(project) && (
+        <StoryPicker
+          project={project}
+          onMade={(p) => {
+            setProject(p);
+            go('video');
+          }}
+        />
+      )}
       {!needsTopic(project) && (
         <CandidatePicker
           boxRef={pickerRef}

@@ -1,6 +1,7 @@
 import type { ContentCandidate, HookCandidate, HookInfo, HookType, IgCheck, Issue, RecipeInput, Script, StyleId, StyleInfo } from '@mat-lab/recipe-core';
 import type { SceneTiming, VideoProps } from '@mat-lab/video/timeline';
 import type { CandidateVoiceJob } from '../../server/pipeline.ts';
+import type { StoryCandidate } from '@mat-lab/recipe-core';
 import type { BlogStyle, BlogStyleInfo, ConsistencyIssue, ExpertNotes, ExpertQuestion, LintIssue } from '@mat-lab/publishing';
 import type { ProjectDetail, ProjectSummary, PublicRender, Publication } from '../../server/repo.ts';
 import type { FormatInsight } from '../../server/insights.ts';
@@ -208,6 +209,9 @@ export const api = {
   candidateVoiceStatus: (id: number) => request<CandidateVoiceJob | null>('GET', `/projects/${id}/candidates/voice`),
   makeCandidate: (id: number, style: StyleId, hookType: HookType) =>
     request<{ project: ProjectDetail; renderId: number; notes: string[] }>('POST', `/projects/${id}/candidates/make`, { style, hookType }),
+  stories: (id: number) => request<StoriesResponse>('GET', `/projects/${id}/stories`),
+  writeStories: (id: number) => request<StoriesResponse & { added: string[]; costUsd: number }>('POST', `/projects/${id}/stories`, {}),
+  makeStory: (id: number, storyId: string) => request<{ project: ProjectDetail; renderId: number; notes: string[] }>('POST', `/projects/${id}/stories/${encodeURIComponent(storyId)}/make`, {}),
   aiInfo: () => request<AiInfo>('GET', '/ai'),
   moreTopics: (id: number, direction: string) => request<ProjectDetail>('POST', `/projects/${id}/topics/more`, { direction }),
   chooseTopic: (id: number, body: { topic: string; principle: string; category?: string }) => request<ProjectDetail>('PUT', `/projects/${id}/topic`, body),
@@ -294,4 +298,13 @@ export async function photoColor(file: File): Promise<string> {
   const n = data.length / 4;
   const hex = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
   return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+/** AI 이야기 대본 후보 (서버가 지금 레시피로 다시 대조한 결과) */
+export type StoryItem = (StoryCandidate & { createdAt: string; label: string; blocked: boolean }) | { id: string; createdAt: string; error: string };
+export interface StoriesResponse {
+  available: boolean;
+  writing: boolean;
+  stories: StoryItem[];
+  currentTitle: string | null;
 }
