@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring
 import { BRAND, clipGroups, ingredientProps, type Scene } from '@mat-lab/recipe-core';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
+import { captionKeywords, type CaptionKeywords } from '../captionStyle.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
 import { signatureNote } from '../brandText.ts';
@@ -32,6 +33,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
   const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
+  const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
   const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
 
   return (
@@ -88,7 +90,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} photoUrl={photoUrl} captionBottom={captionBottom} />
+            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} photoUrl={photoUrl} captionBottom={captionBottom} keywords={keywords} />
             <SpeechAudio timing={timing} />
           </Sequence>
         );
@@ -178,7 +180,7 @@ const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> =
 };
 
 /** 3D 화면을 가리지 않도록 카드를 작게, 위쪽에 띄운다 */
-const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; cleanDraft?: boolean; photoUrl?: string; captionBottom: number }> = ({
+const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; cleanDraft?: boolean; photoUrl?: string; captionBottom: number; keywords: CaptionKeywords }> = ({
   scene,
   timing,
   topic,
@@ -187,6 +189,7 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
   cleanDraft,
   photoUrl,
   captionBottom,
+  keywords,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -216,6 +219,8 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         frame={frame}
         speechFrames={Math.max(1, timing.speechFrames)}
         punch={scene.type === 'tip' || scene.type === 'mistake'}
+        hook={scene.hook}
+        keywords={keywords}
         words={timing.words}
         voice={scene.type === 'tip' || scene.type === 'explain' ? 'researcher' : 'character'}
         bottomY={captionBottom}

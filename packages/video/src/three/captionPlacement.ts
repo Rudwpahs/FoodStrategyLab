@@ -11,7 +11,7 @@ import { projectToScreen } from './stage.ts';
 export const FACE_SPAN = { bottom: 0.26, top: 0.58 } as const;
 /** 얼굴 앞면까지의 거리 (몸통 반지름 0.285) */
 const FACE_DEPTH = 0.28;
-/** 자막 높이: 두 줄짜리 강조 자막(92px×1.15×2, 튀어나올 때 1.16배)까지 */
+/** 자막 높이: 두 줄짜리 자막이 튀어나올 때까지 포함한 최대 높이. 자막(Captions.tsx·layoutCaption)이 이 안에 들어가게 글자 크기를 맞춘다 */
 export const CAPTION_HEIGHT = 230;
 /** 위쪽 카드·단계 표시가 차지하는 아랫변 */
 export const CARDS_BOTTOM = 760;
