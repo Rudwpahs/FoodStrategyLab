@@ -248,6 +248,19 @@ export async function measuredWords(file: string, line: string): Promise<[number
  * regenerate: 캐시가 있어도 새로 만든다 (받아쓰기로 끊긴 음성을 찾았을 때). 다 만들 때까지 옛 파일을 그대로 두고
  *   한 번에 바꿔치기하므로, 그 파일을 읽던 다른 작업이 빈 파일이나 반쯤 쓴 파일을 보지 않는다.
  */
+/**
+ * 목소리 엔진이 잘못 읽는 말을 소리 나는 대로 바꾼다 (화면 자막·대본은 그대로, 목소리에만).
+ * 어절 수를 바꾸지 않는다 (받아쓰기 어절 시간을 자막 어절에 맞추므로).
+ * - "이희재의"를 "이제의"처럼 '희'를 빼고 읽었다 (2026-11-18 견본 받아쓰기) → 표준 발음 [이히재에]
+ */
+const PRONUNCIATION: [RegExp, string][] = [
+  [/희재의(?=[\s.,!?…]|$)/g, '히재에'],
+  [/희재/g, '히재'],
+];
+export function pronounce(text: string): string {
+  return PRONUNCIATION.reduce((t, [re, to]) => t.replace(re, to), text);
+}
+
 export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}, opts: { regenerate?: boolean } = {}): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
@@ -260,11 +273,13 @@ export async function synthesize(text: string, audioDir: string, override: Voice
   const identity = await voiceIdentity(provider, { voice, tempo }, target ?? undefined);
   if (!identity) throw new Error('음성 도구에 연결할 수 없습니다.');
   fs.mkdirSync(audioDir, { recursive: true });
-  const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
+  // 발음을 고친 글자로 만든다 (파일 이름도 고친 글자 기준: 발음 규칙을 바꾸면 예전 음성을 다시 만든다)
+  const said = pronounce(text);
+  const file = path.join(audioDir, `${audioKey(said, identity)}.mp3`);
   // 같은 음성을 이미 만들고 있으면(후보 목소리 작업 + 영상 제작, 또는 다시 만드는 중) 그 작업을 기다린다
   let job = making.get(file);
   if (!job && (opts.regenerate || !fs.existsSync(file))) {
-    job = makeAudio(provider, text, file, voice, tempo, target).finally(() => making.delete(file));
+    job = makeAudio(provider, said, file, voice, tempo, target).finally(() => making.delete(file));
     making.set(file, job);
   }
   if (job) await job;
@@ -326,7 +341,7 @@ async function makeAudioFile(provider: TtsProvider, text: string, file: string, 
 /** 지금 목소리(identity)로 만든 캐시가 있으면 돌려준다 */
 export function cachedAudio(text: string, audioDir: string, identity: string | null): { file: string; seconds: number } | null {
   if (!identity) return null;
-  const file = path.join(audioDir, `${audioKey(text, identity)}.mp3`);
+  const file = path.join(audioDir, `${audioKey(pronounce(text), identity)}.mp3`);
   if (!fs.existsSync(file)) return null;
   return { file, seconds: mp3DurationSeconds(fs.readFileSync(file)) };
 }
