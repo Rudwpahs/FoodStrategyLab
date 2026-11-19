@@ -184,6 +184,18 @@ describe('AI 이야기 대본', () => {
     expect(storySystem()).toContain('맛조수 세계의 가상 인물');
   });
 
+  it('말투·실수 규칙(마케팅 연구 근거): 해요체·권유형, 맛조수는 실수하지 않고, 실패 원인형은 최근 4편에 있으면 쉰다', () => {
+    const sys = storySystem();
+    expect(sys).toContain('맛조수는 실수하지 않는다');
+    expect(sys).toContain('부드러운 권유형');
+    const recent: RecentStory[] = [
+      { storyType: 'why', title: 'a', firstLine: 'a' },
+      { storyType: 'one-fix', title: 'b', firstLine: 'b' },
+    ];
+    expect(overusedTypes(recent)).toContain('one-fix');
+    expect(overusedTypes([{ storyType: 'why', title: 'a', firstLine: 'a' }])).not.toContain('one-fix');
+  });
+
   it('재료 장면이 없으면 버린다', () => {
     const d = draft();
     d.scenes = d.scenes.filter((s) => s.type !== 'ingredients');

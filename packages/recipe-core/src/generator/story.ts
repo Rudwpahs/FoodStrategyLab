@@ -223,9 +223,11 @@ export function storySystem(): string {
 
 ## 등장인물 (말투 기준)
 - ${BRAND.character}: 연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다. 시청자가 궁금해할 것을 대신 묻고, 선생님 노트를 정확히 전한다. 지식의 주인처럼 단정하지 않고 "선생님 노트를 보면"처럼 전한다.
-  - 말투: 친근한 해요체(존댓말). 반말·아기 말투·유행어 남발 금지.
+  - 말투 (마케팅 연구 근거, 2026-11-19 사용자 결정 "마케팅학에 나온 대로"): 두 시청자 모두 해요체. 해요체가 합쇼체보다 호감이 높고 음성에서 차이가 더 크다(국내 광고언어 실험). 낯선 브랜드의 과한 친근체(반말·이모지)는 신뢰를 깎는다(Gretry 외 2017).
+    · 반말·아기 말투(~용, ~쥬, ~했지 뭐예요)·유행어·감탄사 연발 금지. 문장마다 "~거든요"를 되풀이하지 마.
+    · 조리 안내는 부드러운 권유형("~해 주세요", "~해 보세요"). "반드시 ~하세요!" 같은 단정 명령은 쓰지 마 (귀여운 캐릭터 + 단정 명령은 역효과, Chang 외 2021).
   - 반응: 짧고 자연스럽게, 대본 하나에 많아야 한 번 ("오, 그래서였네요" 정도). 비명·과장 감탄·호들갑·자기 비하는 쓰지 마.
-  - 실수 연기: one-fix 형식에서 원본의 흔한 실수를 담담하게 보여 줄 때만.
+  - 실수: 맛조수는 실수하지 않는다 (실수 효과는 유능함이 먼저 인정된 사람에게만 생기고, 유머·실수는 신뢰를 깎는다: Aronson 1966, Eisend 2009 메타분석). 실패는 one-fix 형식에서만, 주어를 "많이들 이렇게 되죠"처럼 일반 사례로 두고, 바로 원인 한 가지와 선생님 노트를 붙인다.
 - ${BRAND.callName}: ${BRAND.researcherTitle} ${BRAND.researcher}. 화면에 직접 나오지 않고, 맛조수가 "${BRAND.callName}"이라고 부르며 선생님의 노트·팁을 전한다.
 
 ## 시청자 (누구를 위한 영상인지 정하고 써)
@@ -313,7 +315,9 @@ export interface RecentStory {
 export function overusedTypes(recent: RecentStory[]): StoryType[] {
   const n: Record<string, number> = {};
   for (const r of recent) n[r.storyType] = (n[r.storyType] ?? 0) + 1;
-  return STORY_TYPES.filter((t) => (n[t] ?? 0) > 2 || (recent.length >= 3 && (n[t] ?? 0) / recent.length > 0.4));
+  // 실패 원인형은 4~5편에 1편 이하 (실패를 자주 보여 주면 전문성 신뢰가 깎인다: 자문 결과 2026-11-19, 운영값)
+  const failRecently = recent.slice(0, 4).some((r) => r.storyType === 'one-fix');
+  return STORY_TYPES.filter((t) => (t === 'one-fix' && failRecently) || (n[t] ?? 0) > 2 || (recent.length >= 3 && (n[t] ?? 0) / recent.length > 0.4));
 }
 
 /** 최근 제목·첫 대사에 여러 번 나온 낱말 (요리 이름 제외). 예: "범인", "할머니" */
