@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BRAND } from '../brand.ts';
-import { formatIngredient } from '../format.ts';
+import { formatIngredient, splitSentences } from '../format.ts';
 import { checkScript, type Issue } from '../fidelity.ts';
 import { findHealthClaims } from '../wordLists.ts';
 import { CATEGORY_LABELS, EMOTIONS, PLACES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
@@ -194,7 +194,7 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   if (!script.scenes.some((s) => s.type === 'ingredients')) return { id, error: '재료 장면이 없어요' };
   if (recipe.steps.length && !script.scenes.some((s) => s.type === 'steps')) return { id, error: '조리 순서 장면이 없어요' };
   const enforced = enforceSourceData(recipe, script);
-  script = enforced.script;
+  script = pinExpertCards(recipe, enforced.script, enforced.notes);
   const all = script.scenes.map((s) => s.line).join('\n');
   const banned = STORY_BANNED_PHRASES.filter((p) => all.includes(p));
   if (banned.length) warnings.push(`반복되던 말이 들어 있어요: ${banned.map((b) => `"${b.trim()}"`).join(', ')}`);
@@ -221,6 +221,36 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
     notes: enforced.notes,
     warnings,
   };
+}
+
+/**
+ * 연구자 이름이 붙는 카드(원리 노트·한 줄 팁)는 원본 문장으로만 채운다.
+ * 카드 글이 비면 화면이 대사를 대신 보여 주는데, 이야기 대본에서는 맛조수의 말("와삭!")이 연구자 팁처럼 보이게 된다 (견본에서 발견).
+ * - 팁 장면: 원본 팁 중 대사와 가장 많이 겹치는 것. 원본에 팁이 없으면 원리 장면으로 바꾼다
+ * - 원리 장면: 원본 핵심원리 문장만 남기고, 없으면 첫 문장
+ */
+function pinExpertCards(recipe: RecipeInput, script: Script, notes: string[]): Script {
+  const principle = splitSentences(recipe.principle ?? '');
+  const overlap = (a: string, b: string) => [...new Set(a.replace(/\s/g, ''))].filter((ch) => b.includes(ch)).length;
+  const scenes = script.scenes.map((sc) => {
+    if (sc.type === 'tip') {
+      if (!recipe.tips.length) {
+        if (!principle.length) return { ...sc, type: 'question' as const, cardTitle: undefined, cardItems: undefined };
+        notes.push(`${sc.id} 장면: 원본에 팁이 없어 원리 노트 카드로 바꿨습니다.`);
+        return { ...sc, type: 'explain' as const, cardTitle: BRAND.notePhrase, cardItems: [principle[0]!] };
+      }
+      const tip = [...recipe.tips].sort((a, b) => overlap(b, sc.line) - overlap(a, sc.line))[0]!;
+      if (JSON.stringify(sc.cardItems ?? []) !== JSON.stringify([tip])) notes.push(`${sc.id} 장면의 팁 카드를 원본 팁 문장으로 맞췄습니다.`);
+      return { ...sc, cardTitle: BRAND.tipPhrase, cardItems: [tip] };
+    }
+    if (sc.type === 'explain' && principle.length) {
+      const kept = (sc.cardItems ?? []).filter((it) => principle.some((p) => p.includes(it) || it.includes(p)));
+      if (kept.length !== (sc.cardItems ?? []).length || !kept.length) notes.push(`${sc.id} 장면의 노트 카드를 원본 원리 문장으로 맞췄습니다.`);
+      return { ...sc, cardTitle: BRAND.notePhrase, cardItems: kept.length ? kept : [principle[0]!] };
+    }
+    return sc;
+  });
+  return { ...script, scenes };
 }
 
 /** 원본 대조에서 막히는 문제(분량·재료·순서 오류)가 있는지 */

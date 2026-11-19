@@ -88,6 +88,23 @@ describe('AI 이야기 대본', () => {
     expect(storySystem()).toContain('친구한테 보내고 싶은');
   });
 
+  it('연구자 이름이 붙는 팁·노트 카드는 원본 문장으로만 채운다 (맛조수 말이 연구자 팁처럼 보이지 않게)', () => {
+    const d = draft();
+    d.scenes.splice(5, 0, { beat: 'payoff', type: 'tip', emotion: 'joy', place: 'dining', line: '와삭! 떫은맛이 싹 사라졌어요.' });
+    d.scenes[2] = { ...d.scenes[2]!, cardItems: ['맛조수가 지어낸 원리'] };
+    const c = finalizeStory(walnut, d, 'story-1');
+    if ('error' in c) throw new Error(c.error);
+    const tip = c.script.scenes.find((s) => s.type === 'tip')!;
+    expect(tip.cardTitle).toBe(BRAND.tipPhrase);
+    expect(tip.cardItems).toEqual([walnut.tips[0]]);
+    const note = c.script.scenes.find((s) => s.type === 'explain')!;
+    expect(walnut.principle).toContain(note.cardItems![0]!);
+    // 원본에 팁이 없으면 팁 장면을 원리 노트로 바꾼다
+    const noTips = finalizeStory({ ...walnut, tips: [] }, d, 'story-2');
+    if ('error' in noTips) throw new Error(noTips.error);
+    expect(noTips.script.scenes.some((s) => s.type === 'tip')).toBe(false);
+  });
+
   it('재료 장면이 없으면 버린다', () => {
     const d = draft();
     d.scenes = d.scenes.filter((s) => s.type !== 'ingredients');
