@@ -312,3 +312,15 @@ export interface StoriesResponse {
 
 /** 미리보기 배경 음악 주소 (서버 렌더와 같은 곡: music.ts의 musicFor) */
 export const musicUrl = (script: Pick<Script, 'style' | 'hookType'>) => `/api/music/${musicFor(script)}.mp3`;
+
+// ── 주간 계획·승인 대기열·쉬운 말 수정 요청 (#/plan) ──
+export type { PlanSlot, PlanSlotView, PlanView, QueueCard } from '../../server/planSlots.ts';
+export type PlanResponse = import('../../server/planSlots.ts').PlanView & { revise: { available: boolean } };
+export const planApi = {
+  get: (week?: string) => request<PlanResponse>('GET', `/plan${week ? `?week=${encodeURIComponent(week)}` : ''}`),
+  planNextWeek: (week?: string) => request<PlanResponse & { created: number[] }>('POST', '/plan/next-week', week ? { week } : {}),
+  moveSlot: (slotId: number, at: string) => request<import('../../server/planSlots.ts').PlanSlot>('PUT', `/plan/slots/${slotId}`, { at }),
+  removeSlot: (slotId: number) => request<{ ok: true }>('DELETE', `/plan/slots/${slotId}`),
+  revise: (projectId: number, text: string, version: number) =>
+    request<{ project: ProjectDetail; version: number; renderId: number; changes: string; notes: string[]; costUsd: number }>('POST', `/projects/${projectId}/script/revise`, { request: text, version }),
+};

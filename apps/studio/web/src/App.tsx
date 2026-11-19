@@ -7,6 +7,7 @@ import { AccountPage } from './pages/AccountPage.tsx';
 import { NewProjectPage } from './pages/NewProjectPage.tsx';
 import { ProjectList } from './pages/ProjectList.tsx';
 import { ProjectPage } from './pages/ProjectPage.tsx';
+import { PlanPage } from './pages/PlanPage.tsx';
 import { LogoMark } from './components/LogoMark.tsx';
 
 type Toast = { text: string; error?: boolean } | null;
@@ -108,9 +109,10 @@ export const App: React.FC = () => {
   else if (hash.startsWith('#/new')) page = <NewProjectPage />;
   else if (hash.startsWith('#/character')) page = <CharacterPage />;
   else if (hash.startsWith('#/account')) page = <AccountPage />;
+  else if (hash.startsWith('#/plan')) page = <PlanPage />;
   else page = <ProjectList />;
 
-  const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : hash.startsWith('#/account') ? 'account' : 'list';
+  const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : hash.startsWith('#/account') ? 'account' : hash.startsWith('#/plan') ? 'plan' : 'list';
   // 콘텐츠 한 편을 연 동안 '콘텐츠'는 지금 화면(page)이 아니라 지금 있는 묶음(true)
   const listCurrent = tab === 'list' ? (project ? 'true' : 'page') : undefined;
   const logout = async () => {
@@ -127,6 +129,7 @@ export const App: React.FC = () => {
         </a>
         <nav aria-label="주요 메뉴">
           <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={listCurrent}>콘텐츠</a>
+          <a href="#/plan" className={tab === 'plan' ? 'active' : ''} aria-current={tab === 'plan' ? 'page' : undefined}>계획</a>
           <a href="#/new" className={tab === 'new' ? 'active' : ''} aria-current={tab === 'new' ? 'page' : undefined}>새로 만들기</a>
           <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>맛조수·목소리</a>
         </nav>
@@ -145,6 +148,10 @@ export const App: React.FC = () => {
         <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={listCurrent}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
           콘텐츠
+        </a>
+        <a href="#/plan" className={tab === 'plan' ? 'active' : ''} aria-current={tab === 'plan' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><rect x="4" y="5" width="16" height="15" rx="3" /><path d="M4 10h16M9 3v4M15 3v4M8 14h3M8 17h6" /></svg>
+          계획
         </a>
         <a href="#/new" className={`make ${tab === 'new' ? 'active' : ''}`} aria-current={tab === 'new' ? 'page' : undefined}>
           <span className="bubble"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M12 6v12M6 12h12" /></svg></span>

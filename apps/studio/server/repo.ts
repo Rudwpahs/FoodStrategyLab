@@ -503,7 +503,7 @@ export class Repo {
       .prepare('INSERT INTO script_versions (project_id, version, script_json, source, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, version, JSON.stringify(script), source, note, now());
     this.db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
-    const label = { template: '템플릿 생성', 'ai-paste': 'AI 대본 붙여넣기', 'ai-story': 'AI 이야기 대본', edit: '대본 수정' }[source];
+    const label = { template: '템플릿 생성', 'ai-paste': 'AI 대본 붙여넣기', 'ai-story': 'AI 이야기 대본', 'ai-revise': 'AI 수정 요청 반영', edit: '대본 수정' }[source];
     this.logEvent(id, 'script', `대본 v${version} 저장 (${label})${note ? ` — ${note}` : ''}`);
     return version;
   }

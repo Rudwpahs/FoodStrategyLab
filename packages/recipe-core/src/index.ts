@@ -16,3 +16,5 @@ export * from './candidates.ts';
 export * from './instagramChecks.ts';
 export * from './text.ts';
 export * from './wordLists.ts';
+export * from './generator/revise.ts';
+export * from './plan.ts';

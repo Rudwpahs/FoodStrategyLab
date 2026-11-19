@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { PLAN_SLOTS_SQL } from './planSchema.ts';
 
 const RENDERS_TABLE = `CREATE TABLE IF NOT EXISTS renders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,5 +159,7 @@ export function openDb(file: string): Db {
   // 승인한 계정이 연구자 계정이었는지 (공개 '검토' 문구에 연구자 이름을 쓸지 정한다)
   const reviewCols = new Set((db.prepare('PRAGMA table_info(reviews)').all() as { name: string }[]).map((c) => c.name));
   if (!reviewCols.has('by_researcher')) db.exec('ALTER TABLE reviews ADD COLUMN by_researcher INTEGER NOT NULL DEFAULT 0');
+  // 주간 계획 칸 (planSchema.ts에 열 설명)
+  db.exec(PLAN_SLOTS_SQL);
   return db;
 }

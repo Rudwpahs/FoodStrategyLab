@@ -146,4 +146,5 @@ export const ChecklistSchema = z.object({
   expression: z.boolean(),
 });
 
-export type ScriptSource = 'template' | 'ai-paste' | 'ai-story' | 'edit';
+/** 대본 출처. ai-revise = 쉬운 말 수정 요청을 Claude가 반영한 대본 */
+export type ScriptSource = 'template' | 'ai-paste' | 'ai-story' | 'ai-revise' | 'edit';
