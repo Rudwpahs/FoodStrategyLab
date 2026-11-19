@@ -23,6 +23,13 @@ export const AccountPage: React.FC = () => {
 
   return (
     <div className="stack">
+      <a className="card row" href="#/auto" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <span className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+          <b>자동 게시 · 댓글 답장</b>
+          <span className="small muted">예약 게시와 댓글 단어 규칙 (처음에는 꺼져 있어요)</span>
+        </span>
+        <span aria-hidden>→</span>
+      </a>
       <div className="card stack">
         <h2 style={{ margin: 0 }}>내 계정</h2>
         <div>

@@ -13,10 +13,39 @@ import { HttpError } from './repo.ts';
  * - 릴스: POST /<IG_ID>/media (media_type=REELS, video_url: Meta가 공개 주소에서 내려받음)
  *   → GET /<컨테이너>?fields=status_code (1분에 한 번 정도, FINISHED까지) → POST /<IG_ID>/media_publish
  * - Instagram Login 방식에서는 '재개 가능한 업로드'를 쓸 수 없어 공개 주소(video_url)가 꼭 필요하다.
- * - 계정당 24시간에 API 게시 100건.
+ * - 게시 한도: 문서마다 24시간에 50건/100건으로 다르게 적혀 있어(2026-11-19 확인), 자동 게시는 실제 남은 한도를
+ *   GET /<IG_ID>/content_publishing_limit 로 읽고, 읽지 못하면 더 낮은 50건으로 본다 (publishingQuota 참고).
  */
 
 export const IG_SCOPES = ['instagram_business_basic', 'instagram_business_content_publish'];
+
+/**
+ * 댓글 답장·DM(비공개 답장)에 더 필요한 권한. 기본 연결에는 넣지 않고, 사용자가 [댓글 권한까지 다시 연결]을 눌렀을 때만 요청한다.
+ * - instagram_business_manage_comments: 댓글 읽기·답글 (https://developers.facebook.com/docs/instagram-platform/comment-moderation ,
+ *   https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-comment)
+ * - instagram_business_manage_messages: 댓글 단 사람에게 비공개 답장 DM (https://developers.facebook.com/docs/instagram-platform/private-replies)
+ * 권한 이름 목록: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login
+ */
+export const IG_COMMENT_SCOPES = ['instagram_business_manage_comments', 'instagram_business_manage_messages'];
+
+/** 최근 게시물 (댓글을 볼 대상) */
+export interface IgMedia {
+  id: string;
+  timestamp: string;
+  permalink: string;
+  commentsCount: number | null;
+}
+/** 게시물의 댓글 */
+export interface IgComment {
+  id: string;
+  text: string;
+  timestamp: string;
+  username: string;
+  fromId: string;
+}
+
+/** 한도를 읽지 못했을 때 쓰는 24시간 게시 한도 (공식 문서에 적힌 두 숫자 50·100 중 낮은 쪽) */
+export const IG_DAILY_LIMIT = 50;
 
 export interface IgConfig {
   appId: string;
@@ -168,7 +197,11 @@ export class Instagram {
   constructor(
     private db: Db,
     private http: Fetch = fetch,
-  ) {}
+  ) {
+    // 연결할 때 허용받은 권한 목록 (댓글 답장 기능이 다시 연결이 필요한지 알려 주려고). 예전 DB에는 열이 없다
+    const cols = new Set((db.prepare('PRAGMA table_info(instagram_account)').all() as { name: string }[]).map((c) => c.name));
+    if (cols.size && !cols.has('permissions')) db.exec("ALTER TABLE instagram_account ADD COLUMN permissions TEXT NOT NULL DEFAULT ''");
+  }
 
   private cfg(): IgConfig {
     const c = igConfig();
@@ -218,11 +251,12 @@ export class Instagram {
    * 로그인 창 주소. state는 앱 비밀값으로 서명한 10분짜리 표 (다른 사이트의 위조 요청 방지).
    * 서버 메모리에만 두면 로그인하는 사이 서버가 다시 켜질 때(배포·잠들기) '만료'로 실패해서, 서명으로 확인한다.
    */
-  authorizeUrl(redirectUri: string): string {
+  authorizeUrl(redirectUri: string, extraScopes: string[] = []): string {
     const cfg = this.cfg();
     const payload = Buffer.from(JSON.stringify({ r: redirectUri, e: Date.now() + 10 * 60_000, n: crypto.randomBytes(9).toString('base64url') })).toString('base64url');
     const state = `${payload}.${signState(cfg, payload)}`;
-    const q = new URLSearchParams({ client_id: cfg.appId, redirect_uri: redirectUri, response_type: 'code', scope: IG_SCOPES.join(','), state });
+    const scope = [...IG_SCOPES, ...extraScopes.filter((x) => IG_COMMENT_SCOPES.includes(x))].join(',');
+    const q = new URLSearchParams({ client_id: cfg.appId, redirect_uri: redirectUri, response_type: 'code', scope, state });
     return `${cfg.authorize}?${q}`;
   }
 
@@ -248,6 +282,7 @@ export class Instagram {
     if (!igUserId) throw new Error('인스타그램 계정 번호를 알 수 없어요.');
     const now = new Date();
     this.save({ igUserId, username: String(me.username ?? ''), token, expiresAt: new Date(now.getTime() + Number(long.expires_in ?? 5_184_000) * 1000).toISOString(), refreshedAt: now.toISOString() });
+    this.db.prepare('UPDATE instagram_account SET permissions = ? WHERE id = 1').run(perms);
     return { username: String(me.username ?? '') };
   }
 
@@ -398,6 +433,86 @@ export class Instagram {
       }
     })();
     return job;
+  }
+
+  /** 연결할 때 허용받은 권한 (모르면 빈 목록: 예전 연결이거나 Meta가 알려 주지 않음) */
+  grantedScopes(): string[] {
+    const r = this.db.prepare('SELECT permissions FROM instagram_account WHERE id = 1').get() as { permissions?: string } | undefined;
+    return String(r?.permissions ?? '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+
+  /** 연결된 계정 (번호·이름). 연결이 없으면 null */
+  connectedAccount(): { igUserId: string; username: string } | null {
+    const a = this.account();
+    return a ? { igUserId: a.igUserId, username: a.username } : null;
+  }
+
+  private authed(): { a: Account; cfg: IgConfig; api: (p: string) => string; headers: Record<string, string> } {
+    const cfg = this.cfg();
+    const a = this.account();
+    if (!a) throw new HttpError(409, '인스타그램 계정을 먼저 연결해 주세요.');
+    return { a, cfg, api: (p) => `${cfg.graph}/${cfg.version}/${p}`, headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json' } };
+  }
+
+  /**
+   * 24시간 게시 한도와 지금까지 쓴 양.
+   * GET /<IG_ID>/content_publishing_limit?fields=quota_usage,config
+   * https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/content_publishing_limit
+   * https://developers.facebook.com/docs/instagram-platform/content-publishing/ (Rate limit)
+   */
+  async publishingQuota(): Promise<{ usage: number; total: number }> {
+    const { a, api, headers } = this.authed();
+    const r = await this.json(`${api(`${a.igUserId}/content_publishing_limit`)}?fields=quota_usage,config`, { headers }, true);
+    const d = ((Array.isArray(r.data) ? r.data[0] : r) ?? {}) as { quota_usage?: number; config?: { quota_total?: number } };
+    return { usage: Number(d.quota_usage ?? 0), total: Number(d.config?.quota_total ?? IG_DAILY_LIMIT) };
+  }
+
+  /** 최근 게시물 (instagram_business_basic). GET /<IG_ID>/media?fields=id,timestamp,permalink,comments_count */
+  async recentMedia(limit = 10): Promise<IgMedia[]> {
+    const { a, api, headers } = this.authed();
+    const r = await this.json(`${api(`${a.igUserId}/media`)}?${new URLSearchParams({ fields: 'id,timestamp,permalink,comments_count', limit: String(limit) })}`, { headers }, true);
+    return ((r.data ?? []) as Record<string, unknown>[]).map((m) => ({
+      id: String(m.id ?? ''),
+      timestamp: String(m.timestamp ?? ''),
+      permalink: String(m.permalink ?? ''),
+      commentsCount: m.comments_count === undefined ? null : Number(m.comments_count),
+    }));
+  }
+
+  /**
+   * 게시물의 댓글 (instagram_business_manage_comments). GET /<IG_MEDIA_ID>/comments?fields=id,text,timestamp,username,from
+   * https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/comments
+   */
+  async mediaComments(mediaId: string, limit = 50): Promise<IgComment[]> {
+    const { api, headers } = this.authed();
+    const r = await this.json(`${api(`${encodeURIComponent(mediaId)}/comments`)}?${new URLSearchParams({ fields: 'id,text,timestamp,username,from', limit: String(limit) })}`, { headers }, true);
+    return ((r.data ?? []) as Record<string, unknown>[]).map((c) => {
+      const from = (c.from ?? {}) as { id?: string; username?: string };
+      return { id: String(c.id ?? ''), text: String(c.text ?? ''), timestamp: String(c.timestamp ?? ''), username: String(c.username ?? from.username ?? ''), fromId: String(from.id ?? '') };
+    });
+  }
+
+  /**
+   * 댓글에 공개 답글 (instagram_business_manage_comments). POST /<IG_COMMENT_ID>/replies { message }
+   * https://developers.facebook.com/docs/instagram-platform/comment-moderation
+   */
+  async replyToComment(commentId: string, message: string): Promise<string> {
+    const { api, headers } = this.authed();
+    const r = await this.json(api(`${encodeURIComponent(commentId)}/replies`), { method: 'POST', headers, body: JSON.stringify({ message }) }, true);
+    return String(r.id ?? '');
+  }
+
+  /**
+   * 댓글 단 사람에게 비공개 답장 DM (instagram_business_manage_messages + instagram_business_manage_comments).
+   * POST /<IG_ID>/messages { recipient: { comment_id }, message: { text } } — 댓글 하나에 한 번, 댓글이 달린 지 7일 안에만.
+   * https://developers.facebook.com/docs/instagram-platform/private-replies
+   */
+  async privateReply(commentId: string, text: string): Promise<void> {
+    const { a, api, headers } = this.authed();
+    await this.json(api(`${a.igUserId}/messages`), { method: 'POST', headers, body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }) }, true);
   }
 
   /**

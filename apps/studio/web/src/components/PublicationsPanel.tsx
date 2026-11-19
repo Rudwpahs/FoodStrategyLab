@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api, isDuplicateError, renderFile, type ProjectDetail, type Publication } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { InstagramPublish } from './InstagramPublish.tsx';
+import { SchedulePost } from './SchedulePost.tsx';
 
 const PLATFORM_LABEL: Record<Publication['platform'], string> = { instagram: '인스타그램 릴스', naver: '네이버 블로그', youtube: '유튜브 쇼츠' };
 const METRICS: [string, string][] = [
@@ -51,6 +52,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
       <div className="card stack">
         <h2 style={{ margin: 0 }}>인스타그램 릴스 게시</h2>
         <InstagramPublish key={render?.id ?? "none"} renderId={render?.id ?? null} approved={approved} onPublished={reload} />
+        <SchedulePost projectId={project.id} renderId={render?.id ?? null} approved={approved} />
         <div className="muted small">인스타그램 앱에서 직접 올렸다면 게시물 주소를 기록해 주세요.</div>
         <div className="row">
           <input type="url" placeholder="https://www.instagram.com/reel/…" value={urls.instagram ?? ''} onChange={(e) => setUrls({ ...urls, instagram: e.target.value })} style={{ flex: 1 }} disabled={!approved} />
@@ -60,7 +62,7 @@ export const PublicationsPanel: React.FC<{ project: ProjectDetail; reload: () =>
           예약 메모
           <input type="datetime-local" aria-label="인스타그램 예약 메모 날짜와 시간" value={when} onChange={(e) => setWhen(e.target.value)} disabled={!approved} />
           <button className="btn small" disabled={!approved || !when} onClick={() => record('instagram', 'scheduled')}>예약 기록</button>
-          <span className="muted">(예약은 메모만 남아요. 실제 게시는 그 시각에 직접 눌러 주세요)</span>
+          <span className="muted">(메모만 남아요. 그 시각에 서버가 올리게 하려면 위의 ‘예약 게시’를 쓰세요)</span>
         </div>
       </div>
 

@@ -83,7 +83,7 @@ async function send<T>(url: string, init: RequestInit): Promise<T> {
   return readResponse<T>(res, url);
 }
 
-function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+export function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   return send<T>(url, {
     method,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
