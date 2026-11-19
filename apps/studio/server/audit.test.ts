@@ -65,6 +65,14 @@ describe('계정 진단 규칙', () => {
     expect(buildAudit(input(projects, []), NOW)).toEqual(a);
   });
 
+  it('같은 요리로 만든 콘텐츠가 여러 개면 다음 영상은 요리마다 한 번만 고른다', () => {
+    const projects = [project({ dishName: '호두정과' }), project({ dishName: '호두정과' }), project({ dishName: '호두정과' }), project(), project()];
+    const a = buildAudit(input(projects, []), NOW);
+    const names = a.next.map((s) => s.dishName);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.filter((n) => n === '호두정과')).toHaveLength(1);
+  });
+
   it('게시 간격: 일주일에 2편 넘게 꾸준하면 잘하는 점, 오래 쉬면 발목 잡는 점', () => {
     const p = project({ status: 'rendered' });
     const steady = [2, 5, 9, 12, 16, 19, 23, 27, 29].map((d) => pub(p.id, daysAgo(d)));

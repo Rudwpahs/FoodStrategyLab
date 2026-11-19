@@ -307,7 +307,15 @@ function suggestions(waiting: AuditProject[], ranked: FormatInsight[]): AuditSug
   });
   // 잘 된 연출이 맞는 레시피 → 거의 다 된 것(승인·검수 대기) → 최근에 손댄 것
   picks.sort((a, b) => a.fitIndex - b.fitIndex || STATUS_RANK[a.p.status] - STATUS_RANK[b.p.status] || b.p.updatedAt.localeCompare(a.p.updatedAt) || b.p.id - a.p.id);
-  return picks.slice(0, 3).map(({ p, current, fitIndex }) => {
+  // 같은 요리를 여러 번 만든 경우(같은 레시피로 콘텐츠를 또 만든 경우) 한 번만 고른다
+  const seen = new Set<string>();
+  const unique = picks.filter(({ p }) => {
+    const key = (p.dishName || p.topic).trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return unique.slice(0, 3).map(({ p, current, fitIndex }) => {
     const top = fitIndex < 99 ? ranked[fitIndex]! : null;
     let style: StyleId;
     const why: string[] = [STATUS_NOTE[p.status]];
