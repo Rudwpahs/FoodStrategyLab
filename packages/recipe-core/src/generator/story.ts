@@ -81,11 +81,12 @@ export function storySystem(): string {
 
 ## 이야기 규칙 (가장 중요)
 1. 모든 대본은 진짜 이야기여야 해: 훅(첫 장면, 2초 안에 궁금하게) → 갈등(실수·의문·위기·내기) → 전환(선생님 노트의 원리로 깨달음) → 해결(핵심 조리) → 보상(완성·반응·여운). 장면마다 beat를 적어.
-2. 첫 대사는 사건이나 질문으로 시작해. 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지.
+2. 첫 대사는 사건이나 질문으로 시작하고 공백 빼고 25자 안으로 짧게 해 (첫 3초에 넘길지 정해진다). 첫 장면은 결과(visual "result")나 문제 순간("fail-closeup")을 바로 보여 줘. 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지.
 3. 대본끼리 이야기 갈래(storyType), 첫 대사, 장면 순서, 마지막 대사가 모두 달라야 해. 같은 문장 틀을 돌려 쓰지 마.
 4. 맛조수의 성격이 드러나는 구체적인 말·행동을 넣어 (예: 냄새 맡고 놀라기, 혼잣말, 작은 허세). 설명문을 읽는 말투가 되면 안 돼.
 5. 재미(반전·과장된 리액션·웃긴 실수) 또는 감동(누군가를 위한 마음, 작은 성취) 중 적어도 하나가 확실해야 해.
 6. 아래 말은 쓰지 마 (예전 영상에서 너무 반복됐어): ${STORY_BANNED_PHRASES.map((p) => `"${p.trim()}"`).join(', ')}.
+6-1. 대본마다 "친구한테 보내고 싶은" 한 가지를 꼭 넣어: 원본의 핵심원리·팁·흔한 실수 가운데 하나를, 몰랐던 사람이 "아 그래서였구나" 할 한 문장으로 또렷하게 (인스타그램은 보내기(공유)를 가장 중요하게 본다). 원본에 없는 사실로 만들지 마.
 7. 마지막 장면은 이야기의 여운으로 끝내고, 그 대사 안에 "${BRAND.labName}"을 자연스럽게 한 번 넣어 (대본마다 다른 문장으로). 연구소 이름은 대본 전체에서 그 한 번만.
 
 ## 사실 규칙 (어기면 그 대본은 버려짐)
@@ -197,6 +198,8 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   const labCount = all.split(BRAND.labName).length - 1;
   if (labCount === 0) warnings.push(`마지막 대사에 "${BRAND.labName}"이 없어요`);
   if (labCount > 1) warnings.push(`"${BRAND.labName}"을 ${labCount}번 말해요 (한 번이면 충분해요)`);
+  const firstChars = (script.scenes[0]?.line ?? '').replace(/\s/g, '').length;
+  if (firstChars > 30) warnings.push(`첫 대사가 ${firstChars}자예요: 첫 3초 안에 끝나게 더 짧게 (25자 안팎)`);
   const places = new Set(script.scenes.map((s) => s.place).filter(Boolean));
   if (places.size < 2) warnings.push('무대가 한 곳뿐이에요');
   const seconds = estimateScriptSeconds(script);

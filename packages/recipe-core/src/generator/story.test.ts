@@ -79,6 +79,15 @@ describe('AI 이야기 대본', () => {
     expect(c.script.scenes[4]!.place).toBe('kitchen');
   });
 
+  it('첫 대사가 길면 경고한다 (첫 3초)', () => {
+    const d = draft();
+    d.scenes[0] = { ...d.scenes[0]!, line: '오늘 제가 아주 오래 고민하고 준비한 호두정과 이야기를 처음부터 하나하나 차근차근 들려 드릴게요' };
+    const c = finalizeStory(walnut, d, 'story-1');
+    if ('error' in c) throw new Error(c.error);
+    expect(c.warnings.join(' ')).toContain('첫 대사');
+    expect(storySystem()).toContain('친구한테 보내고 싶은');
+  });
+
   it('재료 장면이 없으면 버린다', () => {
     const d = draft();
     d.scenes = d.scenes.filter((s) => s.type !== 'ingredients');

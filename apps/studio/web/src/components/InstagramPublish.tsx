@@ -174,6 +174,16 @@ export const InstagramPublish: React.FC<{ renderId: number | null; approved: boo
               </div>
             ))}
           </div>
+          {/* 계정 단위 설정 (게시물마다가 아니라 한 번): 2026-08-31부터 AI 인물이 나오는 프로필에 'AI 생성 프로필' 표시가 없으면
+              비팔로워 추천에서 빠진다. 만화 캐릭터가 대상인지는 공식 설명이 없어, 켜 두는 편이 안전하다 (켠 계정은 도달 변화 없음).
+              근거: docs/research/content-strategy/instagram/reels-quality-2026-11.md */}
+          <details className="plain small">
+            <summary>계정 설정 한 번 확인 (처음 올리기 전)</summary>
+            <ul className="small" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              <li>인스타그램 앱의 프로필 설정에서 <b>‘AI 생성 프로필’ 표시</b>를 켜 주세요. 맛조수처럼 AI 캐릭터가 나오는 계정은 표시가 없으면 추천에서 빠질 수 있고, 표시를 켜도 도달은 줄지 않는다고 해요.</li>
+              <li>설정 → <b>계정 상태</b>에서 ‘추천 가능’인지 가끔 확인해 주세요. 막혔으면 거기서 이의 신청을 할 수 있어요.</li>
+            </ul>
+          </details>
           <label className="check small">
             <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} disabled={Boolean(running)} /> 체험용 릴스로 올리기 — 팔로워가 아닌 사람에게 먼저 보여 주고, 반응이 좋으면 인스타그램 앱에서 전체 공개로 바꿔요 (첫 장면 시험용)
           </label>
