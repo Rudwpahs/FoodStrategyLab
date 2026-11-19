@@ -43,7 +43,8 @@ describe('AI 이야기 대본', () => {
     expect(user).toContain('예전 제목');
     // 형식은 원본에 근거가 있을 때만 고를 수 있다 (형식 때문에 사실을 지어내지 않게)
     const types = availableStoryTypes(walnut);
-    expect(types).toEqual(expect.arrayContaining(['compare', 'standard', 'why', 'quick', 'occasion', 'heritage']));
+    expect(availableStoryTypes(walnut, { realClips: 3 })).toContain('compare');
+    expect(types).toEqual(expect.arrayContaining(['standard', 'why', 'quick', 'occasion', 'heritage']));
     expect(types).not.toContain('one-fix'); // 흔한 실수가 없다
     expect(types).not.toContain('qa'); // 연구자 답변이 없다
     expect(types).not.toContain('season'); // 계절 말이 없다
@@ -52,6 +53,9 @@ describe('AI 이야기 대본', () => {
     expect(availableStoryTypes(walnut, { expertAnswers: ['수업에서는 데치는 물을 넉넉히 잡으라고 해요.'] })).toContain('qa');
     expect(availableStoryTypes({ ...walnut, tips: ['남은 정과는 밀폐해 보관해요.'] })).toContain('leftover');
     expect(availableStoryTypes({ ...walnut, story: '가을 햇호두가 나올 때 만들던 간식' })).toContain('season');
+    // 두 방법 비교는 실제 촬영이 2개 이상일 때만 (3D 비교는 설득력이 약했다)
+    expect(availableStoryTypes(walnut)).not.toContain('compare');
+    expect(availableStoryTypes(walnut, { realClips: 2 })).toContain('compare');
     // 형식마다 구성이 달라야 한다 (모두 같은 흐름이면 레파토리가 똑같아진다)
     expect(new Set(Object.values(STORY_TYPE_INFO).map((i) => i.beats)).size).toBe(Object.keys(STORY_TYPE_INFO).length);
     // 사용자 프롬프트에 형식의 구성과 맞는 시청자가 들어간다

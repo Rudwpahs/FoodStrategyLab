@@ -1044,7 +1044,9 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 12)
         .map((st) => ({ storyType: st.draft.storyType, title: st.draft.title, firstLine: st.draft.scenes[0]?.line ?? '' }));
-      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
+      // 연구자가 올린 실제 촬영 장면 수 (생성 AI 클립 '.ai.'은 빼고): 2개 이상이면 '두 방법 비교' 형식을 쓸 수 있다
+      const realClips = Object.values(project.sceneMedia ?? {}).filter((m) => !/\.ai\./.test(m.url)).length;
+      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, realClips, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
       const added = new Set(repo.addStories(pid, drafts, costUsd).map((s) => s.id));
       res.json({ stories: storyList(pid), added: [...added], costUsd });
     } finally {

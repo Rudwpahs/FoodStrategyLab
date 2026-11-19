@@ -55,7 +55,7 @@ export class StoryWriter {
     return this.call !== claudeStories || aiConfigured();
   }
 
-  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[] } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
+  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
     if (!this.available()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const system = storySystem();

@@ -263,12 +263,12 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 }
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
-export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[] }): string {
+export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number }): string {
   const source = storySourceData(recipe, opts.expertAnswers);
   const recent = opts.recent ?? [];
   const overused = overusedTypes(recent);
   // 다른 형식이 남아 있을 때만 최근에 많이 쓴 형식을 뺀다
-  const all = availableStoryTypes(recipe, { expertAnswers: opts.expertAnswers });
+  const all = availableStoryTypes(recipe, { expertAnswers: opts.expertAnswers, realClips: opts.realClips });
   const types = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 대본은 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
   const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
@@ -331,12 +331,19 @@ const SEASON_WORDS = /제철|봄|여름|가을|겨울|명절|설날|추석|김�
 const KEEPING_WORDS = /보관|냉장|냉동|남은|남으면|소분|손질|고르|고를|장볼|장 볼/;
 
 /** 원본에 근거가 있어야 쓸 수 있는 형식을 거른다 (형식을 위해 사실을 지어내지 않게) */
-export function availableStoryTypes(recipe: RecipeInput, opts: { expertAnswers?: string[] } = {}): StoryType[] {
+/**
+ * '두 방법 비교'는 실제로 두 방법을 찍은 영상이 있을 때만 (사용자 결정 2026-11-19: 3D 비교 화면은 차이가 약해 설득력이 없었다).
+ * realClips = 연구자가 올린 실제 촬영(사진·영상) 장면 수. 2개 이상이면 비교 형식을 열어 준다.
+ */
+export const COMPARE_MIN_REAL_CLIPS = 2;
+
+export function availableStoryTypes(recipe: RecipeInput, opts: { expertAnswers?: string[]; realClips?: number } = {}): StoryType[] {
   const text = [recipe.topic, recipe.dishName, recipe.principle, recipe.story, recipe.commonMistake, recipe.misconception, ...recipe.tips, ...recipe.steps].filter(Boolean).join(' ');
   return STORY_TYPES.filter((t) => {
     if (t === 'one-fix') return Boolean(recipe.commonMistake?.trim() || recipe.category === 'fix');
     if (t === 'standard') return Boolean(recipe.tips.length || recipe.commonMistake?.trim() || recipe.misconception?.trim());
-    if (t === 'why' || t === 'compare') return Boolean(recipe.principle?.trim());
+    if (t === 'why') return Boolean(recipe.principle?.trim());
+    if (t === 'compare') return Boolean(recipe.principle?.trim()) && (opts.realClips ?? 0) >= COMPARE_MIN_REAL_CLIPS;
     if (t === 'quick') return recipe.steps.length >= 2;
     if (t === 'season') return SEASON_WORDS.test(text);
     if (t === 'leftover') return KEEPING_WORDS.test(text);
