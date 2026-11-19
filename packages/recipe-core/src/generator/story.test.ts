@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '../samples.ts';
 import { formatIngredient } from '../format.ts';
 import { BRAND } from '../brand.ts';
+import { overusedTypes, repeatedMotifs, type RecentStory } from './story.ts';
 import { AI_STORY_STYLE, STORY_BANNED_PHRASES, StoryOutputSchema, availableStoryTypes, finalizeStory, storyBlocked, storySystem, storyUser, type StoryDraft } from './story.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
@@ -109,6 +110,26 @@ describe('AI 이야기 대본', () => {
     const noTips = finalizeStory({ ...walnut, tips: [] }, d, 'story-2');
     if ('error' in noTips) throw new Error(noTips.error);
     expect(noTips.script.scenes.some((s) => s.type === 'tip')).toBe(false);
+  });
+
+  it('계정의 최근 대본에서 많이 쓴 갈래·소재는 이번에 피하게 한다 (견본 4편이 모두 범인 찾기였다)', () => {
+    const recent: RecentStory[] = [
+      { storyType: 'mystery', title: '선물용 호두정과가 떫었던 진짜 범인', firstLine: '선물용 호두정과, 한 입 먹자마자 떫어요!' },
+      { storyType: 'mystery', title: '범인은 김치전 반죽 속에 있었다', firstLine: '방금 부친 김치전이 왜 벌써 축축해요?' },
+      { storyType: 'mystery', title: '들깨소스가 묽어진 범인은?', firstLine: '들깨소스가 왜 물처럼 묽죠?' },
+      { storyType: 'gift', title: '할머니 간식 호두, 왜 굳이 데칠까', firstLine: '할머니 간식 호두정과, 근데 왜 데쳐요?' },
+      { storyType: 'gift', title: '할머니께 바삭하게 닿은 김치전', firstLine: '할머니 김치전, 식어도 바삭할 수 있을까요?' },
+    ];
+    expect(overusedTypes(recent)).toEqual(['mystery']);
+    const motifs = repeatedMotifs(recent, [walnut.dishName, walnut.topic]);
+    expect(motifs).toContain('범인');
+    expect(motifs).toContain('할머니');
+    const user = storyUser(walnut, { count: 3, recent });
+    // 다른 갈래가 충분하면 추리는 고를 수 있는 갈래에서 빠진다
+    expect(user.split('## 원본 자료')[0]).not.toMatch(/mystery\(/);
+    expect(user).toContain('"범인"');
+    expect(user).toContain('최근 대본 5개');
+    expect(storySystem()).toContain('할머니만 쓰지 마');
   });
 
   it('재료 장면이 없으면 버린다', () => {

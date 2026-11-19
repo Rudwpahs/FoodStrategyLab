@@ -113,6 +113,7 @@ ${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENC
 1. 모든 대본은 진짜 이야기여야 해: 훅(첫 장면, 2초 안에 궁금하게) → 갈등(실수·의문·위기·내기) → 전환(선생님 노트의 원리로 깨달음) → 해결(핵심 조리) → 보상(완성·반응·여운). 장면마다 beat를 적어.
 2. 첫 대사는 사건이나 질문으로 시작하고 공백 빼고 25자 안으로 짧게 해 (첫 3초에 넘길지 정해진다). 첫 장면은 결과(visual "result")나 문제 순간("fail-closeup")을 바로 보여 줘. 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지.
 3. 대본끼리 이야기 갈래(storyType), 첫 대사, 장면 순서, 마지막 대사가 모두 달라야 해. 같은 문장 틀을 돌려 쓰지 마.
+3-1. "범인 찾기" 같은 추리 구도는 대본 여러 개 중 많아야 하나. 선물 갈래의 받는 사람은 매번 다르게 (할머니만 쓰지 마: 아이, 남편, 친구, 동료, 이웃, 손님 등).
 4. 맛조수의 성격이 드러나는 구체적인 말·행동을 넣어 (예: 냄새 맡고 놀라기, 혼잣말, 작은 허세). 설명문을 읽는 말투가 되면 안 돼.
 5. 재미(반전·과장된 리액션·웃긴 실수) 또는 감동(누군가를 위한 마음, 작은 성취) 중 적어도 하나가 확실해야 해.
 6. 아래 말은 쓰지 마 (예전 영상에서 너무 반복됐어): ${STORY_BANNED_PHRASES.map((p) => `"${p.trim()}"`).join(', ')}.
@@ -138,12 +139,21 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 }
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
-export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[] }): string {
+export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[] }): string {
   const source = storySourceData(recipe, opts.expertAnswers);
-  const types = availableStoryTypes(recipe);
+  const recent = opts.recent ?? [];
+  const overused = overusedTypes(recent);
+  // 다른 갈래가 남아 있을 때만 최근에 많이 쓴 갈래를 뺀다
+  const all = availableStoryTypes(recipe);
+  const types = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 이야기는 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
+  const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
+  const account = recent.length
+    ? `\n- 이 계정의 최근 대본 ${recent.length}개 (계정 전체가 같은 영상처럼 보이지 않게, 이것들과 다른 구도·첫 대사로):\n${recent.map((r) => `  - [${STORY_TYPE_INFO[r.storyType as StoryType]?.label ?? r.storyType}] ${r.title} / 첫 대사: ${r.firstLine}`).join('\n')}` +
+      (motifs.length ? `\n- 최근에 자주 나온 소재라 이번에는 쓰지 마: ${motifs.map((m) => `"${m}"`).join(', ')}` : '')
+    : '';
   return `아래 원본 자료로 이야기가 서로 다른 대본 ${opts.count}개를 써.
-- 고를 수 있는 이야기 갈래: ${types.map((t) => `${t}(${STORY_TYPE_INFO[t].label}: ${STORY_TYPE_INFO[t].guide})`).join(' / ')}${avoid}
+- 고를 수 있는 이야기 갈래: ${types.map((t) => `${t}(${STORY_TYPE_INFO[t].label}: ${STORY_TYPE_INFO[t].guide})`).join(' / ')}${avoid}${account}
 
 ## 원본 자료
 ${JSON.stringify(source, null, 2)}`;
@@ -164,6 +174,31 @@ export function storySourceData(recipe: RecipeInput, expertAnswers?: string[]) {
     이야기: recipe.story || undefined,
     전문가답변: expertAnswers?.length ? expertAnswers : undefined,
   };
+}
+
+/** 계정의 최근 대본 (다른 콘텐츠 것 포함): 계정 전체의 반복을 막는다 */
+export interface RecentStory {
+  storyType: string;
+  title: string;
+  firstLine: string;
+}
+
+/** 최근 대본에서 2번 넘게 쓴 갈래 (견본 4편이 모두 '범인 찾기' 추리였다) */
+export function overusedTypes(recent: RecentStory[]): StoryType[] {
+  const n: Record<string, number> = {};
+  for (const r of recent) n[r.storyType] = (n[r.storyType] ?? 0) + 1;
+  return STORY_TYPES.filter((t) => (n[t] ?? 0) > 2 || (recent.length >= 3 && (n[t] ?? 0) / recent.length > 0.4));
+}
+
+/** 최근 제목·첫 대사에 여러 번 나온 낱말 (요리 이름 제외). 예: "범인", "할머니" */
+export function repeatedMotifs(recent: RecentStory[], exclude: string[] = []): string[] {
+  const n = new Map<string, number>();
+  for (const r of recent) {
+    const words = new Set(`${r.title} ${r.firstLine}`.split(/[\s,.!?…~'"“”‘’()]+/).map((w) => w.replace(/(은|는|이|가|을|를|의|에|도|만|요|께|한테|으로|로|이에요|예요)$/, '')).filter((w) => w.length >= 2));
+    for (const w of words) n.set(w, (n.get(w) ?? 0) + 1);
+  }
+  const skip = exclude.filter(Boolean).flatMap((e) => e.split(/[\s,?!]+/)).filter((w) => w.length >= 2);
+  return [...n.entries()].filter(([w, c]) => c >= 2 && !skip.some((x) => x.includes(w) || w.includes(x))).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);
 }
 
 /** 원본에 재료가 있어야 쓸 수 있는 갈래를 거른다 */

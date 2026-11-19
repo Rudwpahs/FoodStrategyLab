@@ -1,0 +1,41 @@
+name: Story batch (scripts only)
+
+# 이야기 대본만 여러 요리로 차례로 써서(영상 없음) 계정 전체의 다양성을 본다. 손으로만 실행한다.
+# 앞 요리에서 쓴 대본을 '계정의 최근 대본'으로 넘기므로 실제 스튜디오와 같은 조건이다.
+# 비용: Claude 요리당 약 $0.1~0.3 (월 한도와 별도로 기록되지 않으니 꼭 필요할 때만).
+# 필요한 저장소 비밀값: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET. Modal의 matlab-studio 비밀값에 ANTHROPIC_API_KEY가 있어야 한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dishes:
+        description: '예시 레시피 요리 이름, 쉼표로 구분 (비우면 예시 레시피 전부)'
+        required: false
+        default: ''
+
+jobs:
+  stories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Modal 도구 설치
+        run: pip install -q modal==1.6.3
+      - name: 대본 쓰기
+        env:
+          DISHES: ${{ inputs.dishes }}
+        run: modal run deploy/modal/app.py::stories --dishes "$DISHES" --out out-stories
+      - name: 결과 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stories
+          path: out-stories
+          if-no-files-found: warn
+          retention-days: 14

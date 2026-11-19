@@ -1037,7 +1037,14 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     writingStories.add(pid);
     try {
       const avoidTitles = repo.getStories(pid).map((s) => s.draft.title).slice(0, 6);
-      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
+      // 계정 전체의 최근 대본 (다른 콘텐츠 것 포함, 새것부터 12개): 영상마다 같은 구도·소재가 되풀이되지 않게
+      const recent = repo
+        .listProjects()
+        .flatMap((p) => repo.getStories(p.id))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 12)
+        .map((st) => ({ storyType: st.draft.storyType, title: st.draft.title, firstLine: st.draft.scenes[0]?.line ?? '' }));
+      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
       const added = new Set(repo.addStories(pid, drafts, costUsd).map((s) => s.id));
       res.json({ stories: storyList(pid), added: [...added], costUsd });
     } finally {

@@ -452,3 +452,30 @@ def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample")
             failed.append(f"{name}: 확인 실패 (코드 {result['code']}, {folder}/summary.json)")
     if failed:
         raise SystemExit("견본 영상 확인에서 실패한 항목이 있어요: " + " / ".join(failed))
+
+
+# 이야기 대본만 여러 요리로 차례로 쓴다 (영상 없음). 계정 전체 다양성을 재려고 (tools/content-lab/story-batch.ts)
+@app.function(image=web_image, cpu=2.0, memory=4096, timeout=1800, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
+def story_batch(dishes: str = "") -> dict:
+    import tempfile
+
+    out = tempfile.mkdtemp(prefix="stories-")
+    env = _studio_env(None, "story-batch")
+    for k in ("MATLAB_DB_FILE", "KEEPALIVE", "PUBLIC_URL"):
+        env.pop(k, None)
+    env.update({"OUT": out, "DISHES": dishes, "MATLAB_DATA_DIR": tempfile.mkdtemp(prefix="story-data-")})
+    code = subprocess.run([TSX, "tools/content-lab/story-batch.ts"], cwd="/app", env=env).returncode
+    files = {str(p.relative_to(out)): p.read_bytes() for p in Path(out).rglob("*") if p.is_file()}
+    return {"code": code, "files": files}
+
+
+@app.local_entrypoint()
+def stories(dishes: str = "", out: str = "out-stories") -> None:
+    result = story_batch.remote(dishes)
+    for name, data in result["files"].items():
+        target = Path(out) / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    print(f"대본 파일 {len(result['files'])}개 → {out}")
+    if result["code"] != 0:
+        raise SystemExit(f"대본 쓰기에서 실패한 요리가 있어요 (코드 {result['code']}). {out} 안의 error.txt를 보세요.")
