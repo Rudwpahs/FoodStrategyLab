@@ -404,7 +404,7 @@ def web() -> None:
 # 실행: GitHub Actions의 'Render sample video' (수동) → modal run deploy/modal/app.py::sample --dish 호두정과
 # 이야기 대본(style="ai-story")은 Claude를 부르므로 운영과 같은 비밀값(matlab-studio의 ANTHROPIC_API_KEY)을 붙인다
 @app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
-def render_sample(dish: str = "호두정과", style: str = "") -> dict:
+def render_sample(dish: str = "호두정과", style: str = "", audience: str = "") -> dict:
     import sys
     import tempfile
 
@@ -423,7 +423,7 @@ def render_sample(dish: str = "호두정과", style: str = "") -> dict:
     # 데이터 폴더는 render.e2e.ts가 임시 폴더로 정한다. 운영용 DB 위치·깨워 두기·공개 주소는 쓰지 않는다
     for k in ("MATLAB_DB_FILE", "KEEPALIVE", "PUBLIC_URL"):
         env.pop(k, None)
-    env.update({"HOST": "127.0.0.1", "PORT": "5198", "E2E_OUT": out, "E2E_EXPECT_VOICE": "1", "E2E_DISH": dish, "E2E_STYLE": style})
+    env.update({"HOST": "127.0.0.1", "PORT": "5198", "E2E_OUT": out, "E2E_EXPECT_VOICE": "1", "E2E_DISH": dish, "E2E_STYLE": style, "E2E_AUDIENCE": audience})
     code = subprocess.run([TSX, "apps/studio/e2e/render.e2e.ts"], cwd="/app", env=env).returncode
     files = {p.name: p.read_bytes() for p in Path(out).iterdir() if p.is_file()}
     return {"code": code, "files": files}
@@ -431,10 +431,24 @@ def render_sample(dish: str = "호두정과", style: str = "") -> dict:
 
 @app.local_entrypoint()
 def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample") -> None:
-    result = render_sample.remote(dish, style)
-    Path(out).mkdir(parents=True, exist_ok=True)
-    for name, data in result["files"].items():
-        (Path(out) / name).write_bytes(data)
-    print(f"견본 파일 {len(result['files'])}개 → {out}: {', '.join(sorted(result['files']))}")
-    if result["code"] != 0:
-        raise SystemExit(f"견본 영상 확인에서 실패한 항목이 있어요 (코드 {result['code']}). 위 기록과 {out}/summary.json을 보세요.")
+    """dish는 쉼표로 여러 개 (예: "호두정과:hobby-learner,바삭한 김치전:young-home"). 여러 개면 동시에 만들고 out/번호-요리/에 나눠 담는다."""
+    jobs = []
+    for part in [p.strip() for p in dish.split(",") if p.strip()]:
+        name, _, audience = part.partition(":")
+        jobs.append((name.strip(), style, audience.strip()))
+    results = list(render_sample.starmap(jobs, return_exceptions=True))
+    failed = []
+    for i, ((name, _, audience), result) in enumerate(zip(jobs, results), start=1):
+        folder = Path(out) if len(jobs) == 1 else Path(out) / f"{i:02d}-{name.replace(' ', '_')}"
+        folder.mkdir(parents=True, exist_ok=True)
+        if isinstance(result, BaseException):
+            (folder / "error.txt").write_text(str(result))
+            failed.append(f"{name}: {result}")
+            continue
+        for fname, data in result["files"].items():
+            (folder / fname).write_bytes(data)
+        print(f"[{name}{' · ' + audience if audience else ''}] 견본 파일 {len(result['files'])}개 → {folder}")
+        if result["code"] != 0:
+            failed.append(f"{name}: 확인 실패 (코드 {result['code']}, {folder}/summary.json)")
+    if failed:
+        raise SystemExit("견본 영상 확인에서 실패한 항목이 있어요: " + " / ".join(failed))

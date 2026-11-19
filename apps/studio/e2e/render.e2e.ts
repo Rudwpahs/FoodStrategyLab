@@ -6,6 +6,7 @@
  *   E2E_OUT=폴더       결과 파일(영상·표지·카드·검사 결과)을 이 폴더에 복사한다
  *   E2E_EXPECT_VOICE=1 맛조수 목소리가 실제로 들어갔는지도 확인한다 (목소리 없이 만들어지면 실패)
  *   E2E_DISH=요리 이름  예시 레시피 고르기 (기본 호두정과)
+ *   E2E_AUDIENCE=대상  ai-story에서 이 시청 대상(young-home | hobby-learner) 대본을 먼저 고른다
  *   E2E_STYLE=연출     후보 영상과 같은 연출 대본으로 (예: before-after — 효과음이 들어간다). 없으면 기본 템플릿 대본
  *                     ai-story면 실제 Claude로 이야기 대본 3개를 받아 원본 대조를 통과한 첫 번째로 만든다 (ANTHROPIC_API_KEY 필요, 약 $0.1~0.3)
  */
@@ -51,7 +52,10 @@ try {
       if ('error' in st) console.log(`  · 버린 이야기: ${st.error}`);
       else console.log(`  · [${st.storyType}] ${st.script.title}${storyBlocked(st) ? ' (원본과 달라 막힘)' : ''}${st.warnings.length ? ` / 확인: ${st.warnings.join(', ')}` : ''}\n${st.script.scenes.map((sc) => `      ${sc.place ?? '-'} | ${sc.line}`).join('\n')}`);
     }
-    const pick = stories.find((st): st is Exclude<typeof st, { error: string }> => !('error' in st) && !storyBlocked(st));
+    const usable = stories.filter((st): st is Exclude<typeof st, { error: string }> => !('error' in st) && !storyBlocked(st));
+    // E2E_AUDIENCE가 있으면 그 시청 대상을 노린 대본을 먼저 고른다 (여러 편을 만들어 대상별로 비교하려고)
+    const want = process.env.E2E_AUDIENCE;
+    const pick = (want ? usable.find((st) => st.audience === want) : undefined) ?? usable[0];
     check(Boolean(pick), `원본 대조를 통과한 이야기 대본 (${stories.length}개 중, 약 $${costUsd.toFixed(2)})`);
     if (process.env.E2E_OUT) {
       fs.mkdirSync(process.env.E2E_OUT, { recursive: true });
@@ -102,7 +106,7 @@ try {
   if (out && fs.existsSync(dir)) {
     fs.mkdirSync(out, { recursive: true });
     for (const f of fs.readdirSync(dir)) if (/^(video\.mp4|cover\.jpg|recipe-card\.png|thumbnail\.png|qa\.json|carousel-\d+\.jpg)$/.test(f)) fs.copyFileSync(path.join(dir, f), path.join(out, f));
-    fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({ dish, style, status: r.status, error: r.error, minutes: Math.round((Date.now() - started) / 6000) / 10, fails }, null, 2));
+    fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify({ dish, style, audience: process.env.E2E_AUDIENCE || '', title: repo.latestScript(pid)?.script.title ?? '', status: r.status, error: r.error, minutes: Math.round((Date.now() - started) / 6000) / 10, fails }, null, 2));
     console.log(`결과 파일 복사: ${out}`);
   }
   console.log(`\n결과 폴더: ${dir}`);

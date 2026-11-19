@@ -1,4 +1,4 @@
-import type { StoryDraft } from '@mat-lab/recipe-core';
+import type { ReviseOutput, StoryDraft } from '@mat-lab/recipe-core';
 import type { ReviseCallFn } from '../server/scriptReviser.ts';
 
 /**
@@ -28,6 +28,6 @@ export const fakeReviseCall: ReviseCallFn = async ({ user }) => {
     ...(s.cardItems ? { cardItems: s.cardItems } : {}),
   }));
   if (request.includes('설탕')) scenes[1] = { ...scenes[1]!, line: `${scenes[1]!.line} 설탕은 10큰술 넣어요.` };
-  const story: StoryDraft = { title: keep ? current.title : `${current.title} (고침)`, storyType: current.storyType ?? 'mystery', logline: `수정 요청 반영: ${request}`, scenes };
+  const story: ReviseOutput['story'] = { title: keep ? current.title : `${current.title} (고침)`, storyType: current.storyType ?? 'mystery', audience: 'hobby-learner', logline: `수정 요청 반영: ${request}`, scenes };
   return { output: { story, changes: keep ? '바꾼 곳 없음' : `첫 장면을 더 궁금하게 바꿨어요 (요청: ${request})` }, usage: { inputTokens: 1500, outputTokens: 700, cacheWriteTokens: 0, cacheReadTokens: 0 }, stopReason: 'end_turn' };
 };

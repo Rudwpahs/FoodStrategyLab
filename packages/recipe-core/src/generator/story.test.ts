@@ -10,6 +10,7 @@ function draft(over: Partial<StoryDraft> = {}): StoryDraft {
   return {
     title: '떫은 호두의 범인을 찾아라',
     storyType: 'mystery',
+    audience: 'hobby-learner',
     logline: '떫은 호두정과에 놀란 맛조수가 선생님 노트에서 범인을 찾는다',
     scenes: [
       { beat: 'hook', type: 'intro', emotion: 'surprised', visual: 'fail-closeup', place: 'dining', line: '으악, 호두정과가 왜 이렇게 떫죠?' },
@@ -26,6 +27,10 @@ function draft(over: Partial<StoryDraft> = {}): StoryDraft {
 describe('AI 이야기 대본', () => {
   it('프롬프트에 원본 자료·규칙·반복 금지 문구가 들어간다', () => {
     const sys = storySystem();
+    // 시청 대상 두 무리(2030 주부, 4050 요리 배우는 분)를 프롬프트에 넣고, 대본마다 하나를 고르게 한다
+    expect(sys).toContain('2·30대 젊은 주부');
+    expect(sys).toContain('4·50대 요리 취미');
+    expect(sys).toContain('두 시청자가 모두');
     expect(sys).toContain(BRAND.labName);
     for (const p of STORY_BANNED_PHRASES) expect(sys).toContain(p.trim());
     const user = storyUser(walnut, { count: 3, avoidTitles: ['예전 제목'] });
@@ -44,6 +49,7 @@ describe('AI 이야기 대본', () => {
     if ('error' in c) throw new Error(c.error);
     expect(c.script.style).toBe(AI_STORY_STYLE);
     expect(c.script.hookType).toBe('mystery');
+    expect(c.audience).toBe('hobby-learner');
     expect(c.script.scenes[0]!.hook).toBe(true);
     expect(c.script.scenes.map((s) => s.id)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6']);
     expect(new Set(c.script.scenes.map((s) => s.place)).size).toBeGreaterThanOrEqual(3);

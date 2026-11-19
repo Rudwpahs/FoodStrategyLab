@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Player } from '@remotion/player';
-import { PLACE_LABELS } from '@mat-lab/recipe-core';
+import { AUDIENCE_INFO, PLACE_LABELS } from '@mat-lab/recipe-core';
 import { Character, ShortVideo, buildTimeline, totalFrames, videoSeconds, type VideoProps } from '@mat-lab/video';
 import { api, musicUrl, type ProjectDetail, type StoriesResponse, type StoryItem } from '../api.ts';
 import { useApp } from '../App.tsx';
@@ -111,6 +111,7 @@ const StoryCard: React.FC<{
     <div className={`option story-card ${chosen ? 'on' : ''}`}>
       <div className="row" style={{ gap: 6 }}>
         <span className="badge">{s.label}</span>
+        {s.audience && <span className="badge">{AUDIENCE_INFO[s.audience].short}</span>}
         {isNew && <span className="badge review">새로 씀</span>}
         {chosen && <span className="badge review">지금 대본</span>}
       </div>

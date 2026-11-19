@@ -27,6 +27,29 @@ export const STORY_TYPE_INFO: Record<StoryType, { label: string; guide: string }
   memory: { label: '추억', guide: '원본 자료의 "이야기"(음식에 얽힌 이야기)를 바탕으로 한다. 원본에 이야기가 있을 때만 고른다' },
 };
 
+/**
+ * 시청 대상 (사용자 지정, 2026-11-19): 2·30대 젊은 주부, 4·50대 요리 취미·배우는 사람.
+ * 첫 대사(훅)를 그 사람이 신경 쓰는 것으로 시작한다. 숫자(시간·가격 등)는 원본에 있을 때만.
+ */
+export const AUDIENCES = ['young-home', 'hobby-learner'] as const;
+export type Audience = (typeof AUDIENCES)[number];
+export const AUDIENCE_INFO: Record<Audience, { label: string; short: string; cares: string; voice: string; hookIdeas: string }> = {
+  'young-home': {
+    label: '2·30대 젊은 주부',
+    short: '2030 주부',
+    cares: '실패 없이 한 번에 성공하기, 가족·아이 반찬과 간식, 재료를 버리지 않기, 손이 덜 가는 방법, 이것 하나만 지키면 되는 요령',
+    voice: '친구처럼 빠르고 공감하는 말투 ("저만 이래요?", "이거 하나면 돼요")',
+    hookIdeas: '"매번 망하던 그거, 이유가 있었어요" / "아이가 남기던 반찬이 달라진 이유" / "이 단계 빼면 꼭 실패해요" 같은 공감·실패 방지형',
+  },
+  'hobby-learner': {
+    label: '4·50대 요리 취미·배우는 사람',
+    short: '4050 요리 배우는 분',
+    cares: '왜 그렇게 하는지 원리, 제대로 된 정석, 조리기능장의 방법, 많이들 틀리는 지점, 전통 음식·손님상, 깊은 맛',
+    voice: '차분하게 궁금증을 짚는 말투, 전문가 시선 ("조리기능장은 여기서 다르게 해요")',
+    hookIdeas: '"대부분 여기서 틀려요" / "조리기능장은 왜 이걸 먼저 할까요?" / "정석은 따로 있었어요" 같은 원리·정석형',
+  },
+};
+
 /** 예전 템플릿에서 너무 자주 나와 영상이 다 똑같이 들리게 만든 말 (이야기 대본에서는 쓰지 않는다) */
 export const STORY_BANNED_PHRASES = [
   '오늘의 실험',
@@ -53,11 +76,13 @@ export const StorySceneDraftSchema = z.object({
 export const StoryDraftSchema = z.object({
   title: z.string().describe('영상 제목 (궁금하게, 25자 안팎)'),
   storyType: z.enum(STORY_TYPES),
+  audience: z.enum(AUDIENCES).describe('이 대본이 노리는 시청자'),
   logline: z.string().describe('이 이야기를 한 문장으로'),
   scenes: z.array(StorySceneDraftSchema),
 });
 export const StoryOutputSchema = z.object({ stories: z.array(StoryDraftSchema) });
-export type StoryDraft = z.infer<typeof StoryDraftSchema>;
+/** Claude에게는 audience를 꼭 받지만, 예전에 저장한 초안·수정 요청 초안에는 없을 수 있다 */
+export type StoryDraft = Omit<z.infer<typeof StoryDraftSchema>, 'audience'> & { audience?: Audience };
 
 /** 팬·불이 있는 무대 (조리 장면은 여기서만) */
 const FIRE_PLACES: readonly Place[] = ['kitchen', 'lab'];
@@ -78,6 +103,11 @@ export function storySystem(): string {
 ## 등장인물
 - ${BRAND.character}: 연구소의 3D 캐릭터 조수. 호기심 많고 성급하고, 자신만만하다가 자주 실수하지만 금방 배운다. 시청자 대신 질문하고, 리액션이 크다. 친근한 해요체.
 - ${BRAND.callName}: ${BRAND.researcherTitle} ${BRAND.researcher}. 화면에 직접 나오지 않고, 맛조수가 "${BRAND.callName}"이라고 부르며 선생님의 노트·팁을 전한다.
+
+## 시청자 (누구를 위한 영상인지 정하고 써)
+${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENCE_INFO[a].cares}. 말투 — ${AUDIENCE_INFO[a].voice}. 훅 예 — ${AUDIENCE_INFO[a].hookIdeas}`).join('\n')}
+- 대본마다 audience를 하나 정하고, 첫 대사부터 그 사람의 관심사로 말을 걸어. 대본을 여러 개 쓰면 두 시청자가 모두 들어가야 해.
+- 훅 예시는 방향만 보여 주는 거야. 그대로 베끼지 말고 이 요리에 맞게 새로 써. "10분", "천 원" 같은 시간·가격은 원본에 있을 때만.
 
 ## 이야기 규칙 (가장 중요)
 1. 모든 대본은 진짜 이야기여야 해: 훅(첫 장면, 2초 안에 궁금하게) → 갈등(실수·의문·위기·내기) → 전환(선생님 노트의 원리로 깨달음) → 해결(핵심 조리) → 보상(완성·반응·여운). 장면마다 beat를 적어.
@@ -149,6 +179,8 @@ export interface StoryCandidate {
   /** 'story-1'처럼 프로젝트 안에서 고유 */
   id: string;
   storyType: StoryType;
+  /** 노리는 시청자 (예전에 저장한 초안에는 없을 수 있다) */
+  audience?: Audience;
   logline: string;
   script: Script;
   seconds: number;
@@ -214,6 +246,7 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   return {
     id,
     storyType: draft.storyType,
+    ...(draft.audience ? { audience: draft.audience } : {}),
     logline: draft.logline.trim(),
     script,
     seconds: Math.round(seconds),

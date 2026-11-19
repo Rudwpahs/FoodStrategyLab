@@ -12,6 +12,7 @@ export function fakeStoryDrafts(recipe: RecipeInput): StoryDraft[] {
   const base = (title: string, storyType: StoryDraft['storyType'], hook: string, end: string): StoryDraft => ({
     title,
     storyType,
+    audience: storyType === 'gift' ? 'young-home' : 'hobby-learner',
     logline: `${dish}에 얽힌 맛조수의 ${storyType} 이야기`,
     scenes: [
       { beat: 'hook', type: 'intro', emotion: 'surprised', visual: 'fail-closeup', place: 'dining', line: hook },
