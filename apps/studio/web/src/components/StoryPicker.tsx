@@ -46,7 +46,7 @@ export const StoryPicker: React.FC<{ project: ProjectDetail; onMade: (p: Project
       <div className="card-head">
         <h2>AI 이야기 대본</h2>
         <span className="muted">
-          Claude가 이 레시피로 이야기가 서로 다른 대본 3개를 써요 (추리·구출·선물·내기…). 재료·분량·순서는 원본 그대로 지키고, 원본에 없는 숫자를 말하는 대본은 만들 수 없게 막아요.
+          Claude가 이 레시피로 형식이 서로 다른 대본 3개를 써요 (이 단계는 왜?·두 방법 비교·조리기능장의 정석·언제 내면 좋을까…). 재료·분량·순서는 원본 그대로 지키고, 원본에 없는 숫자를 말하는 대본은 만들 수 없게 막아요.
         </span>
       </div>
       {!data.available ? (

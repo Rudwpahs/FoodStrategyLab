@@ -53,11 +53,11 @@ describe('AI 이야기 대본 API', () => {
     const wrote = await call('POST', `/projects/${pid}/stories`);
     expect(wrote.status).toBe(200);
     expect(wrote.body.added).toEqual(['story-1', 'story-2', 'story-3']);
-    const [mystery, gift, bad] = wrote.body.stories;
-    expect(mystery.script.scenes[0].hook).toBe(true);
-    expect(mystery.script.scenes.find((s: { type: string }) => s.type === 'ingredients').cardItems).toEqual(walnut.ingredients.map(formatIngredient));
-    expect(mystery.blocked).toBe(false);
-    expect(gift.label).toBe('선물');
+    const [why, occasion, bad] = wrote.body.stories;
+    expect(why.script.scenes[0].hook).toBe(true);
+    expect(why.script.scenes.find((s: { type: string }) => s.type === 'ingredients').cardItems).toEqual(walnut.ingredients.map(formatIngredient));
+    expect(why.blocked).toBe(false);
+    expect(occasion.label).toBe('언제 내면 좋을까');
     // 원본에 없는 분량(설탕 99큰술)을 지어낸 대본은 만들 수 없다 (원칙 1)
     expect(bad.blocked).toBe(true);
     expect((await call('POST', `/projects/${pid}/stories/${bad.id}/make`)).status).toBe(400);
@@ -66,12 +66,12 @@ describe('AI 이야기 대본 API', () => {
     const usage = repo.db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE purpose = 'story'").get() as { n: number };
     expect(usage.n).toBe(1);
 
-    const made = await call('POST', `/projects/${pid}/stories/${mystery.id}/make`);
+    const made = await call('POST', `/projects/${pid}/stories/${why.id}/make`);
     expect(made.status).toBe(202);
     expect(made.body.project.latest.source).toBe('ai-story');
-    expect(made.body.project.latest.script.title).toBe(mystery.script.title);
+    expect(made.body.project.latest.script.title).toBe(why.script.title);
     const listed = await call('GET', `/projects/${pid}/stories`);
-    expect(listed.body.currentTitle).toBe(mystery.script.title);
+    expect(listed.body.currentTitle).toBe(why.script.title);
 
     // 다시 쓰면 앞의 제목을 피하라고 알려 주고, 번호가 이어진다
     const again = await call('POST', `/projects/${pid}/stories`);

@@ -22,9 +22,13 @@ function evalExpr(expr: string, t: number): number {
 
 describe('배경 음악', () => {
   it('이야기 분위기에 맞는 곡을 고른다', () => {
+    expect(musicFor({ style: 'ai-story', hookType: 'heritage' })).toBe('musicbox');
+    expect(musicFor({ style: 'ai-story', hookType: 'why' })).toBe('pizzicato');
+    expect(musicFor({ style: 'ai-story', hookType: 'quick' })).toBe('upbeat');
+    expect(musicFor({ style: 'ai-story', hookType: 'one-fix' })).toBe('ukulele');
+    // 예전에 저장된 갈래도 그대로
     expect(musicFor({ style: 'ai-story', hookType: 'gift' })).toBe('musicbox');
     expect(musicFor({ style: 'ai-story', hookType: 'mystery' })).toBe('pizzicato');
-    expect(musicFor({ style: 'ai-story', hookType: 'race' })).toBe('upbeat');
     expect(musicFor({ style: 'comedy', hookType: 'question' })).toBe('pizzicato');
     expect(musicFor({})).toBe('ukulele');
   });

@@ -12,6 +12,7 @@
 | [character-brand-research.md](character-brand-research.md) · [character-brand-guide.md](character-brand-guide.md) | 맛조수·이희재 브랜드 연구와 운영 기준 |
 | [blog-research.md](blog-research.md) · [blog-writing-guide.md](blog-writing-guide.md) | 네이버 블로그 21건 분석·공식 가이드, 작성 기준 |
 | [experiments.md](experiments.md) | 호두정과 릴스 A/B/C·블로그 A/B 비교와 실측 |
+| [audience-story-2026-11.md](audience-story-2026-11.md) | 2026-11-19 시청자 심층 분석(2030 젊은 주부·4050 요리 배우는 사람), 말투 기준, AI 이야기 대본 형식 10가지와 근거 |
 | [implementation-status.md](implementation-status.md) | 코드 적용 내역, 리뷰 결과, 다음 세션 이어하기 |
 
 ---

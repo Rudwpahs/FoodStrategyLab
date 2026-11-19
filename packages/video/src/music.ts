@@ -19,21 +19,33 @@ export const MUSIC_LABELS: Record<MusicTrack, string> = {
 };
 
 /**
- * 이야기 분위기에 맞는 곡. 이야기 대본은 갈래(hookType), 연출 대본은 연출(style)로 고른다.
- * 감동(선물·추억) → 오르골, 추리·오해·코미디 → 피치카토, 시간 싸움·내기·구출 → 신나는 리듬, 나머지 → 우쿨렐레
+ * 영상 분위기에 맞는 곡. 이야기 대본은 형식(hookType), 연출 대본은 연출(style)로 고른다.
+ * - 따뜻함(음식 이야기·쓰임 상황·제철) → 오르골
+ * - 궁금증(이 단계는 왜?·두 방법 비교·선생님께 묻다) → 피치카토
+ * - 빠른 호흡(한눈에 레시피·보관·남은 재료) → 신나는 리듬
+ * - 나머지(실패 원인 하나·조리기능장의 정석 등) → 우쿨렐레
+ * 2026-11-19 전에 저장된 대본의 갈래(추리·선물 등)도 예전처럼 고른다.
  */
 export function musicFor(script: Pick<Script, 'style' | 'hookType'>): MusicTrack {
   const kind = script.style === 'ai-story' ? script.hookType : script.style;
   switch (kind) {
+    case 'heritage':
+    case 'occasion':
+    case 'season':
     case 'gift':
     case 'memory':
     case 'story':
       return 'musicbox';
+    case 'why':
+    case 'compare':
+    case 'qa':
     case 'mystery':
     case 'myth':
     case 'comedy':
     case 'problem':
       return 'pizzicato';
+    case 'quick':
+    case 'leftover':
     case 'race':
     case 'bet':
     case 'rescue':

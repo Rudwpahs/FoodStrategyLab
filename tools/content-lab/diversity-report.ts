@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { AUDIENCE_INFO, STORY_TYPE_INFO, storyDiversity, type Audience, type DiversityItem, type Script, type StoryType } from '@mat-lab/recipe-core';
+import { AUDIENCE_INFO, storyDiversity, storyTypeLabel, type Audience, type DiversityItem, type Script, type StoryType } from '@mat-lab/recipe-core';
 
 function find(dir: string, name: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -43,15 +43,17 @@ const lines = [
   `- 대본끼리 문장 겹침(0~1): 평균 **${r.similarity.mean}**, 최대 ${r.similarity.max} · 많이 겹치는 쌍(0.35 초과) ${r.similarity.similarPairs.length}개`,
   `- 첫 대사 길이(공백 제외): ${r.firstLineChars.min}~${r.firstLineChars.max}자, 평균 ${r.firstLineChars.mean}자`,
   `- 예전 반복 문구가 들어간 대본: ${r.bannedHits}편`,
-  `- 이야기 갈래: ${Object.entries(r.storyTypes).map(([k, n]) => `${label(k, STORY_TYPE_INFO)} ${n}`).join(', ')}`,
+  `- 유치하게 들릴 수 있는 구도(범인·내기 등)가 들어간 대본: ${r.childishHits}편`,
+  `- 장면 구성이 서로 다른 비율: **${pct(r.uniqueStructures)}** · 실패로 시작하는 대본 ${r.failOpenings}편`,
+  `- 형식: ${Object.entries(r.storyTypes).map(([k, n]) => `${storyTypeLabel(k)} ${n}`).join(', ')}`,
   `- 시청 대상: ${Object.entries(r.audiences).map(([k, n]) => `${label(k, AUDIENCE_INFO)} ${n}`).join(', ')}`,
   `- 무대(장면 수): ${Object.entries(r.places).map(([k, n]) => `${k} ${n}`).join(', ')}`,
   '',
   '## 대본별 첫 대사',
   '',
-  '| 요리 | 대상 | 갈래 | 제목 | 첫 대사 | 영상 |',
+  '| 요리 | 대상 | 형식 | 제목 | 첫 대사 | 영상 |',
   '| --- | --- | --- | --- | --- | --- |',
-  ...items.map((i) => `| ${i.dish} | ${i.audience ? AUDIENCE_INFO[i.audience as Audience].short : '-'} | ${label(i.storyType ?? '', STORY_TYPE_INFO)} | ${i.title} | ${i.script.scenes[0]?.line ?? ''} | ${i.picked ? '✓' : ''} |`),
+  ...items.map((i) => `| ${i.dish} | ${i.audience ? AUDIENCE_INFO[i.audience as Audience].short : '-'} | ${storyTypeLabel(i.storyType)} | ${i.title} | ${i.script.scenes[0]?.line ?? ''} | ${i.picked ? '✓' : ''} |`),
   ...(r.similarity.similarPairs.length ? ['', '## 많이 겹치는 쌍', '', ...r.similarity.similarPairs.map((p) => `- ${items[p.a]!.dish} "${items[p.a]!.title}" ↔ ${items[p.b]!.dish} "${items[p.b]!.title}": ${p.score}`)] : []),
 ];
 console.log(lines.join('\n'));

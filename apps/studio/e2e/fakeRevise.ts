@@ -18,7 +18,7 @@ export const fakeReviseCall: ReviseCallFn = async ({ user }) => {
   const current = JSON.parse(between(user, '지금_대본')) as { title: string; storyType?: StoryDraft['storyType']; scenes: CurrentScene[] };
   const keep = request.includes('그대로');
   const scenes: StoryDraft['scenes'] = current.scenes.map((s, i) => ({
-    beat: i === 0 ? 'hook' : i === current.scenes.length - 1 ? 'payoff' : 'solve',
+    beat: i === 0 ? 'hook' : i === current.scenes.length - 1 ? 'close' : 'method',
     type: s.type,
     emotion: s.emotion,
     ...(s.visual ? { visual: s.visual } : {}),
@@ -28,6 +28,6 @@ export const fakeReviseCall: ReviseCallFn = async ({ user }) => {
     ...(s.cardItems ? { cardItems: s.cardItems } : {}),
   }));
   if (request.includes('설탕')) scenes[1] = { ...scenes[1]!, line: `${scenes[1]!.line} 설탕은 10큰술 넣어요.` };
-  const story: ReviseOutput['story'] = { title: keep ? current.title : `${current.title} (고침)`, storyType: current.storyType ?? 'mystery', audience: 'hobby-learner', logline: `수정 요청 반영: ${request}`, scenes };
+  const story: ReviseOutput['story'] = { title: keep ? current.title : `${current.title} (고침)`, storyType: current.storyType ?? 'why', audience: 'hobby-learner', logline: `수정 요청 반영: ${request}`, scenes };
   return { output: { story, changes: keep ? '바꾼 곳 없음' : `첫 장면을 더 궁금하게 바꿨어요 (요청: ${request})` }, usage: { inputTokens: 1500, outputTokens: 700, cacheWriteTokens: 0, cacheReadTokens: 0 }, stopReason: 'end_turn' };
 };

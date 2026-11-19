@@ -9,25 +9,25 @@ export function fakeStoryDrafts(recipe: RecipeInput): StoryDraft[] {
   const dish = recipe.dishName || recipe.topic;
   const ingredients = recipe.ingredients.map(formatIngredient);
   const steps = recipe.steps.slice(0, 5);
-  const base = (title: string, storyType: StoryDraft['storyType'], hook: string, end: string): StoryDraft => ({
+  const base = (title: string, storyType: StoryDraft['storyType'], audience: StoryDraft['audience'], hook: string, end: string): StoryDraft => ({
     title,
     storyType,
-    audience: storyType === 'gift' ? 'young-home' : 'hobby-learner',
-    logline: `${dish}에 얽힌 맛조수의 ${storyType} 이야기`,
+    audience,
+    logline: `${dish}를 ${storyType} 형식으로 짚는 영상`,
     scenes: [
-      { beat: 'hook', type: 'intro', emotion: 'surprised', visual: 'fail-closeup', place: 'dining', line: hook },
-      { beat: 'conflict', type: 'mistake', emotion: 'embarrassed', place: 'pantry', line: '제가 순서를 대충 건너뛰었거든요.' },
-      { beat: 'turn', type: 'explain', emotion: 'curious', place: 'lab', line: '선생님 노트에 답이 있었어요!', cardTitle: BRAND.notePhrase, cardItems: [recipe.principle] },
-      { beat: 'solve', type: 'ingredients', emotion: 'confident', place: 'market', line: '재료부터 다시 챙겨요.', cardTitle: '재료', cardItems: ingredients },
-      { beat: 'solve', type: 'steps', emotion: 'confident', visual: 'sizzle', place: 'kitchen', line: '이번엔 순서대로 차근차근 해요.', cardItems: steps },
-      { beat: 'payoff', type: 'outro', emotion: 'joy', visual: 'result', place: 'dining', line: end },
+      { beat: 'hook', type: 'intro', emotion: 'curious', visual: 'sizzle', place: 'kitchen', line: hook },
+      { beat: 'context', type: 'question', emotion: 'curious', place: 'pantry', line: '정석은 지켜야 할 순서가 있어요.' },
+      { beat: 'point', type: 'explain', emotion: 'curious', place: 'lab', line: '선생님 노트를 보면 이유가 나와요.', cardTitle: BRAND.notePhrase, cardItems: [recipe.principle] },
+      { beat: 'method', type: 'ingredients', emotion: 'confident', place: 'market', line: '재료는 이렇게 준비해요.', cardTitle: '재료', cardItems: ingredients },
+      { beat: 'method', type: 'steps', emotion: 'confident', visual: 'sizzle', place: 'kitchen', line: '순서대로 차근차근 해요.', cardItems: steps },
+      { beat: 'close', type: 'outro', emotion: 'joy', visual: 'result', place: 'dining', line: end },
     ],
   });
-  const bad = base('분량을 지어낸 이야기', 'race', `${dish}, 시간이 없어요!`, `${BRAND.labName}에서 다음에 또 봐요.`);
-  bad.scenes[1] = { ...bad.scenes[1]!, line: '설탕을 99큰술이나 넣었거든요!' };
+  const bad = base('분량을 지어낸 이야기', 'quick', 'young-home', `${dish}, 한눈에 정리해요.`, `${BRAND.labName}에서 다음에 또 봐요.`);
+  bad.scenes[1] = { ...bad.scenes[1]!, line: '설탕을 99큰술이나 넣었거든요.' };
   return [
-    base(`${dish}의 범인을 찾아라`, 'mystery', `으악, ${dish}가 왜 이렇죠?`, `이번엔 성공! 범인은 저였네요. ${BRAND.labName} 사건 해결!`),
-    base(`할머니께 드릴 ${dish}`, 'gift', `할머니 생신에 ${dish}를 드리고 싶어요!`, `할머니가 웃으셨어요. ${BRAND.labName}에서 배운 덕분이에요.`),
+    base(`${dish}, 이 단계는 왜 할까`, 'why', 'hobby-learner', `${dish}, 이 단계는 왜 할까요?`, `이유를 알면 정석이 쉬워져요. ${BRAND.labName}였어요.`),
+    base(`손님상에 낼 ${dish}`, 'occasion', 'young-home', `손님 오는 날, ${dish} 어때요?`, `차려 내기 좋은 요리, ${BRAND.labName}에서 짚어 봤어요.`),
     bad,
   ];
 }

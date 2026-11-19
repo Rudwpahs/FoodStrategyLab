@@ -7,9 +7,9 @@ const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 const asDraft = (script: Script, change: (d: StoryDraft) => void = () => undefined): StoryDraft => {
   const d: StoryDraft = {
     title: script.title,
-    storyType: 'mystery',
+    storyType: 'why',
     logline: '고친 대본',
-    scenes: script.scenes.map((s) => ({ beat: 'solve', type: s.type, emotion: s.emotion, place: s.place ?? 'kitchen', line: s.line, ...(s.visual ? { visual: s.visual } : {}), ...(s.cardTitle ? { cardTitle: s.cardTitle } : {}), ...(s.cardItems ? { cardItems: s.cardItems } : {}) })),
+    scenes: script.scenes.map((s) => ({ beat: 'method', type: s.type, emotion: s.emotion, place: s.place ?? 'kitchen', line: s.line, ...(s.visual ? { visual: s.visual } : {}), ...(s.cardTitle ? { cardTitle: s.cardTitle } : {}), ...(s.cardItems ? { cardItems: s.cardItems } : {}) })),
   };
   change(d);
   return d;

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, finalizeStory, generateTemplateScript, storyBlocked, STORY_TYPE_INFO, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
+import { HOOK_INFO, SAMPLE_RECIPES, STYLE_INFO, applyHook, buildAiPrompt, buildReelPromptPack, buildStyledScript, canRender, checkScript, estimateScriptSeconds, finalizeStory, generateTemplateScript, storyBlocked, storyTypeLabel, contentCandidates, instagramCaption, isHookType, isStyleId, parseAiScript, repetitionWarning, scriptForCandidate, suggestHooks, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, IM_NOT_AI_COMMIT, blogQuantityIssues, buildBlogPost, buildExpertBlog, buildSocialCopy, blogStylePair, checkConsistency, findAiTells, isPolishableLine, lintBlog, polishPost, polishableBlogLines, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { BRAND } from '@mat-lab/recipe-core';
 import { Humanizer, verifyRewrites } from './humanize.ts';
@@ -1021,7 +1021,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     return repo.getStories(pid).map((st) => {
       const c = finalizeStory(recipe, st.draft, st.id);
       if ('error' in c) return { id: st.id, createdAt: st.createdAt, error: c.error };
-      return { ...c, createdAt: st.createdAt, label: STORY_TYPE_INFO[c.storyType]?.label ?? c.storyType, blocked: storyBlocked(c) };
+      return { ...c, createdAt: st.createdAt, label: storyTypeLabel(c.storyType), blocked: storyBlocked(c) };
     });
   };
   api.get('/projects/:id/stories', (req, res) => {
