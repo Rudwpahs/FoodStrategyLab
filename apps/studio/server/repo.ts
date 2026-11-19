@@ -106,8 +106,14 @@ export interface ProjectPhoto {
   color: string;
 }
 
-/** 장면별로 올린 생성 AI 클립·이미지 (장면 id → 파일) */
-export type SceneMedia = Record<string, { file: string; url: string; kind: 'video' | 'image' }>;
+/**
+ * 장면별로 올린 실제 촬영 영상·사진 또는 생성 AI 클립 (장면 id → 파일).
+ * sound: 휴대폰 촬영 영상이면 촬영 소리를 목소리 밑에 작게 깐다. 생성 AI 클립(파일 이름 '장면.ai.확장자')은 대사가 섞여 있을 수 있어 끈다.
+ */
+export type SceneMedia = Record<string, { file: string; url: string; kind: 'video' | 'image'; sound: boolean }>;
+
+/** 생성 AI 클립 파일 이름 표시 ('s3.ai.mp4'). 표(scene_media)를 바꾸지 않고 파일 이름으로 구분한다 */
+export const isAiClipFile = (file: string) => /\.ai\.[a-z0-9]+$/i.test(file);
 
 export interface Publication {
   id: number;
@@ -469,7 +475,9 @@ export class Repo {
     const rows = this.db.prepare('SELECT scene_id, file, kind, created_at FROM scene_media WHERE project_id = ?').all(id) as Row[];
     const out: SceneMedia = {};
     for (const r of rows) {
-      out[String(r.scene_id)] = { file: String(r.file), kind: r.kind as 'video' | 'image', url: `/media/${String(r.file)}?v=${encodeURIComponent(String(r.created_at))}` };
+      const file = String(r.file);
+      const kind = r.kind as 'video' | 'image';
+      out[String(r.scene_id)] = { file, kind, sound: kind === 'video' && !isAiClipFile(file), url: `/media/${file}?v=${encodeURIComponent(String(r.created_at))}` };
     }
     return out;
   }
@@ -480,13 +488,13 @@ export class Repo {
       .prepare('INSERT INTO scene_media (project_id, scene_id, file, kind, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id, scene_id) DO UPDATE SET file = excluded.file, kind = excluded.kind, created_at = excluded.created_at')
       .run(id, sceneId, file, kind, now());
     this.db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now(), id);
-    this.logEvent(id, 'media', `장면 ${sceneId}에 ${kind === 'video' ? 'AI 클립' : '이미지'} 등록`);
+    this.logEvent(id, 'media', `장면 ${sceneId}에 ${isAiClipFile(file) ? 'AI 클립' : kind === 'video' ? '촬영 영상' : '사진'} 등록`);
   }
 
   deleteSceneMedia(id: number, sceneId: string): string | null {
     const row = this.db.prepare('SELECT file FROM scene_media WHERE project_id = ? AND scene_id = ?').get(id, sceneId) as Row | undefined;
     this.db.prepare('DELETE FROM scene_media WHERE project_id = ? AND scene_id = ?').run(id, sceneId);
-    if (row) this.logEvent(id, 'media', `장면 ${sceneId}의 AI 클립 삭제`);
+    if (row) this.logEvent(id, 'media', `장면 ${sceneId}의 ${isAiClipFile(String(row.file)) ? 'AI 클립' : '촬영 영상·사진'} 삭제`);
     return row ? String(row.file) : null;
   }
 

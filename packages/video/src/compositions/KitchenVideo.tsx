@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, clipGroups, ingredientProps, type Scene } from '@mat-lab/recipe-core';
+import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { BRAND, ingredientProps, type Scene } from '@mat-lab/recipe-core';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { captionKeywords, type CaptionKeywords } from '../captionStyle.ts';
@@ -10,19 +10,22 @@ import { musicGain, speechIntervals } from '../music.ts';
 import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
 import { BrandBadge, DraftWatermark } from '../components/Stage.tsx';
+import { Narrator } from '../components/Narrator.tsx';
+import { PREVIEW_LEVEL, clipSoundGain } from '../clipSound.ts';
+import { badgeOpacity, clipLayers, clipPlayback, kenBurns, layerAt, openingCardVisible, photoLayers, type ClipLayer } from '../realFootage.ts';
 import { ensureFonts } from '../fonts.ts';
 import { CAPTION_SAFE_BOTTOM, COLORS, FONT_FAMILY } from '../theme.ts';
 import { KitchenScene, foodFor } from '../three/KitchenScene.tsx';
 import { propPositions } from '../three/layout.ts';
 import { placeTransitionAt } from '../three/places.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
-import { totalFrames, type SceneTiming, type VideoProps } from '../timeline.ts';
+import { FPS, totalFrames, type SceneTiming, type VideoProps } from '../timeline.ts';
 
 ensureFonts();
 
 
 /** 3D 주방 숏폼: 캐릭터가 직접 조리하고, 음식은 레시피로 만든 3D 모델로 보여준다. */
-export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {}, musicSrc }) => {
+export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, reviewer, cleanDraft, recipe, photoUrl, photoColor, sceneMedia = {}, musicSrc, liveClipSound }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
@@ -35,9 +38,14 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
   const music = useMemo(() => ({ intervals: speechIntervals(timings), total: totalFrames(timings) }), [timings]);
-  const clipNow = clips.some((c) => frame >= c.from && frame < c.from + c.duration);
+  // 실제 완성 사진을 화면 가득: 첫 장면(훅)과 '완성 음식 먼저' 장면 (그 장면에 촬영 영상이 있으면 영상이 우선)
+  const photos = useMemo(() => photoLayers(script, timings, photoUrl, clips), [script, timings, photoUrl, clips]);
+  const real = layerAt(clips, frame) ?? layerAt(photos, frame);
   const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
-  const captionBottom = state && !clipNow && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
+  const captionBottom = state && !real && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
+  const now = sceneAt(script, timings, frame);
+  // 첫 화면에는 로고를 두지 않는다: 브랜드 배지는 첫 장면이 끝난 뒤 나타난다
+  const openingEnd = timings[0] ? timings[0].from + timings[0].durationInFrames : 0;
   // 장소가 바뀌는 장면 경계: 화면을 옆으로 휙 넘기며(가로 흐림) 바꾼다 — 끊김이 아니라 일부러 넘긴 것처럼
   const whip = placeTransitionAt(script, timings, frame);
   // 나가는 화면은 왼쪽으로 밀려나고 들어오는 화면은 오른쪽에서 들어온다. 살짝 키워서 가장자리가 비지 않게
@@ -60,6 +68,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
       <AbsoluteFill style={{ transform: whipTransform }}>
         {state &&
           !compare &&
+          !real &&
           props.map((p, i) => {
             const pop = state.propPop[i] ?? 0;
             if (pop < 0.3) return null;
@@ -93,10 +102,15 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
             );
           })}
       </AbsoluteFill>
-      {/* 생성 AI 클립: 묶음 첫 장면에 올리면 약 8초 묶음 전체를 덮는다 */}
+      {/* 실제 촬영 영상(또는 생성 AI 클립): 묶음 첫 장면에 올리면 약 8초 묶음 전체를 화면 가득 덮는다 */}
       {clips.map((c) => (
         <Sequence key={c.key} from={c.from} durationInFrames={c.duration} name={`clip ${c.key}`}>
-          <SceneClip media={c.media} />
+          <SceneClip layer={c} speech={music.intervals} live={Boolean(liveClipSound)} />
+        </Sequence>
+      ))}
+      {photos.map((p) => (
+        <Sequence key={`photo-${p.sceneId}`} from={p.from} durationInFrames={p.duration} name={`photo ${p.sceneId}`}>
+          <ResultPhoto url={photoUrl!} />
         </Sequence>
       ))}
       {whip.amount > 0 && <AbsoluteFill style={{ backgroundColor: '#FFF6E8', opacity: whip.amount * 0.32, pointerEvents: 'none' }} />}
@@ -106,7 +120,19 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
         if (!timing) return null;
         return (
           <Sequence key={scene.id} from={timing.from} durationInFrames={timing.durationInFrames} name={`${scene.id} ${scene.type}`}>
-            <Overlay scene={scene} timing={timing} topic={script.title} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} photoUrl={photoUrl} captionBottom={captionBottom} keywords={keywords} />
+            <Overlay
+              scene={scene}
+              timing={timing}
+              topic={script.title}
+              reviewed={reviewed}
+              reviewer={reviewer}
+              cleanDraft={cleanDraft}
+              photoUrl={photoUrl}
+              captionBottom={captionBottom}
+              keywords={keywords}
+              realMedia={Boolean(layerAt(clips, timing.from) ?? layerAt(photos, timing.from))}
+              opening={timing.from === 0}
+            />
             <SpeechAudio timing={timing} />
           </Sequence>
         );
@@ -123,7 +149,18 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
       })}
       {/* 배경 음악 (미리보기에서만: 서버 렌더는 품질 검사 뒤에 ffmpeg로 같은 규칙대로 섞는다, music.ts) */}
       {musicSrc && <Audio src={musicSrc} loop volume={(f) => musicGain(f, music.intervals, music.total)} />}
-      <BrandBadge />
+      {/* 실제 영상·사진 위에서는 맛조수가 왼쪽 아래 작은 원에서 말한다 (자막·카드를 가리지 않는 자리) */}
+      {real && now && (
+        <Narrator
+          emotion={now.scene.emotion}
+          frame={frame}
+          talking={now.local < now.timing.speechFrames}
+          enter={real.from === 0 ? 1 : spring({ frame: frame - real.from, fps: FPS, config: { damping: 13 } })}
+        />
+      )}
+      <div style={{ opacity: badgeOpacity(frame, openingEnd) }}>
+        <BrandBadge />
+      </div>
       {!reviewed && !cleanDraft && <DraftWatermark />}
     </AbsoluteFill>
   );
@@ -137,30 +174,6 @@ const WhipFilter: React.FC<{ amount: number }> = ({ amount }) => (
     </filter>
   </svg>
 );
-
-type Media = { url: string; kind: 'video' | 'image' };
-
-/** 올린 클립이 덮을 구간: 묶음 첫 장면이면 묶음 전체, 아니면 그 장면만 */
-function clipLayers(script: VideoProps['script'], timings: SceneTiming[], media: Record<string, Media>) {
-  const t = new Map(timings.map((x) => [x.sceneId, x]));
-  const layers: { key: string; from: number; duration: number; media: Media }[] = [];
-  for (const group of clipGroups(script)) {
-    group.forEach((id, k) => {
-      const m = media[id];
-      const start = t.get(id);
-      if (!m || !start) return;
-      // 묶음 안 다른 장면에 따로 올린 클립이 있으면 그 앞에서 멈춘다
-      let endId = id;
-      if (k === 0) for (const g of group.slice(1)) {
-        if (media[g]) break;
-        endId = g;
-      }
-      const end = t.get(endId)!;
-      layers.push({ key: id, from: start.from, duration: end.from + end.durationInFrames - start.from, media: m });
-    });
-  }
-  return layers;
-}
 
 /** 가장자리 어둡게(비네트) + 은은한 필름 질감 */
 const PostFx: React.FC<{ frame: number }> = ({ frame }) => {
@@ -184,30 +197,63 @@ const GRAIN_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
 const GRAIN_OFFSETS = Array.from({ length: 12 }, (_, i) => [(i * 97) % GRAIN_TILE, (i * 151) % GRAIN_TILE] as const);
 
 /**
- * 생성 AI로 만든 장면 클립(또는 첫 프레임 이미지)을 3D 장면 대신 보여준다.
- * 클립 소리는 끈다: 목소리는 검수된 대사로 만든 스튜디오 음성을 쓴다.
+ * 실제 촬영 영상·사진(또는 생성 AI 클립)이 화면을 꽉 채운다 (가운데 맞춰 자르기 + 천천히 다가가는 확대).
+ * 휴대폰 촬영 소리는 목소리 밑에 작게 깐다: 미리보기는 여기서 바로(live), 서버 렌더는 품질 검사 뒤 ffmpeg로 섞는다 (clipSound.ts).
+ * 생성 AI 클립은 대사가 섞여 있을 수 있어 소리를 끈다 (sound 없음).
  */
-const SceneClip: React.FC<{ media: { url: string; kind: 'video' | 'image' } }> = ({ media }) => {
+const SceneClip: React.FC<{ layer: ClipLayer; speech: [number, number][]; live: boolean }> = ({ layer, speech, live }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-  if (media.kind === 'video') {
+  const { media, duration } = layer;
+  const zoom = kenBurns(frame, duration, media.kind);
+  const fill: React.CSSProperties = { width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})` };
+  if (media.kind === 'image') {
     return (
-      <AbsoluteFill style={{ backgroundColor: '#000' }}>
-        <OffthreadVideo src={media.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <AbsoluteFill style={{ backgroundColor: '#000', overflow: 'hidden' }}>
+        <Img src={media.url} style={fill} />
+        <CaptionShade />
       </AbsoluteFill>
     );
   }
-  // 이미지는 천천히 확대 (켄 번스 효과)
-  const zoom = interpolate(frame, [0, Math.max(1, durationInFrames)], [1.0, 1.08]);
+  const { playbackRate, loopFrames } = clipPlayback(media.seconds, duration);
+  const withSound = live && Boolean(media.sound);
+  const video = (
+    <OffthreadVideo
+      src={media.url}
+      muted={!withSound}
+      volume={withSound ? clipSoundGain(layer.from + frame, speech) * PREVIEW_LEVEL : 0}
+      playbackRate={playbackRate}
+      style={fill}
+    />
+  );
   return (
     <AbsoluteFill style={{ backgroundColor: '#000', overflow: 'hidden' }}>
-      <Img src={media.url} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})` }} />
+      {loopFrames ? <Loop durationInFrames={loopFrames}>{video}</Loop> : video}
+      <CaptionShade />
     </AbsoluteFill>
   );
 };
 
+/** 실제 영상 위 자막이 어떤 배경에서도 읽히게 아래쪽을 살짝 어둡게 */
+const CaptionShade: React.FC = () => (
+  <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,0.32) 78%, rgba(0,0,0,0.12) 100%)', pointerEvents: 'none' }} />
+);
+
 /** 3D 화면을 가리지 않도록 카드를 작게, 위쪽에 띄운다 */
-const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; reviewed: boolean; reviewer?: string; cleanDraft?: boolean; photoUrl?: string; captionBottom: number; keywords: CaptionKeywords }> = ({
+const Overlay: React.FC<{
+  scene: Scene;
+  timing: SceneTiming;
+  topic: string;
+  reviewed: boolean;
+  reviewer?: string;
+  cleanDraft?: boolean;
+  photoUrl?: string;
+  captionBottom: number;
+  keywords: CaptionKeywords;
+  /** 이 장면이 실제 촬영 영상·완성 사진으로 시작하는지 */
+  realMedia: boolean;
+  /** 영상 첫 장면(훅) */
+  opening: boolean;
+}> = ({
   scene,
   timing,
   topic,
@@ -217,16 +263,19 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
   photoUrl,
   captionBottom,
   keywords,
+  realMedia,
+  opening,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  // 결과 선공개 장면에 실제 완성 사진이 있으면 3D 모델 대신 사진을 크게 보여 준다 (실물 증거)
-  const realResult = Boolean(photoUrl) && scene.visual === 'result';
-  const showPhoto = photoUrl && !realResult && (scene.type === 'tip' || scene.type === 'outro');
+  // 실제 완성 사진(화면 가득)은 KitchenVideo의 photoLayers가 그린다. 팁·마무리 장면은 3D 위에 작은 사진 카드로
+  const showPhoto = photoUrl && !realMedia && scene.visual !== 'result' && (scene.type === 'tip' || scene.type === 'outro');
+  // 첫 장면: 자막과 같은 문장을 위 카드에 또 띄우지 않는다. 실제 사진·영상으로 시작하면 음식과 큰 자막만
+  const card = !opening || openingCardVisible(scene, topic, realMedia);
   return (
     <AbsoluteFill>
-      {realResult && <ResultPhoto url={photoUrl!} frame={frame} duration={timing.durationInFrames} />}
-      {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && <IllustrationTag />}
+      {/* 3D 실패 장면 표시. 실제 사진·영상이 덮으면 그건 연출이 아니므로 붙이지 않는다 ('실제 완성 사진' 표시가 대신 나온다) */}
+      {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && !realMedia && <IllustrationTag />}
       {scene.visual === 'compare' ? (
         <CompareOverlay scene={scene} frame={frame} fps={fps} />
       ) : scene.visual === 'signature' ? (
@@ -235,11 +284,11 @@ const Overlay: React.FC<{ scene: Scene; timing: SceneTiming; topic: string; revi
         <StepTicker scene={scene} frame={frame} duration={timing.durationInFrames} />
       ) : scene.type === 'ingredients' ? (
         <TitleChip text={scene.cardTitle ?? '준비물'} frame={frame} fps={fps} />
-      ) : (
+      ) : card ? (
         <div style={{ position: 'absolute', inset: 0, transform: 'translateY(40px) scale(0.8)', transformOrigin: '50% 8%' }}>
           <SceneCard scene={scene} topic={topic} frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} />
         </div>
-      )}
+      ) : null}
       {showPhoto && <PhotoInset url={photoUrl} frame={frame} fps={fps} />}
       <Captions
         line={scene.line}
@@ -362,11 +411,15 @@ const IllustrationTag: React.FC = () => (
   <div style={{ position: 'absolute', right: 40, top: 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>설명용 연출</div>
 );
 
-const ResultPhoto: React.FC<{ url: string; frame: number; duration: number }> = ({ url, frame, duration }) => {
-  const zoom = interpolate(frame, [0, Math.max(1, duration)], [1.06, 1.0]);
+/** 실제 완성 사진을 화면 가득 (천천히 다가가는 확대). 첫 프레임부터 바로 보인다 */
+const ResultPhoto: React.FC<{ url: string }> = ({ url }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const zoom = kenBurns(frame, durationInFrames, 'image');
   return (
     <AbsoluteFill style={{ backgroundColor: '#000', overflow: 'hidden' }}>
       <Img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})` }} />
+      <CaptionShade />
       <div style={{ position: 'absolute', right: 40, top: 860, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>
         실제 완성 사진
       </div>

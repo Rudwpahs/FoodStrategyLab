@@ -39,6 +39,23 @@ export function sceneAt(script: Script, timings: SceneTiming[], frame: number): 
   return null;
 }
 
+/**
+ * 첫 장면은 이미 움직이는 중에서 시작한다: 0프레임이 멈춘 접시 화면이 되지 않게 카메라 움직임과 맛조수 등장을 이만큼 앞당긴다.
+ * (카메라 이동은 처음과 끝이 느린 곡선이라, 앞당기지 않으면 첫 몇 프레임이 거의 멈춰 있다)
+ */
+export const OPENING_HEAD_START = 8;
+/**
+ * 첫 장면 시작에는 카메라가 조금 먼 곳에서 빠르게 다가오며 멈춘다 (처음이 가장 빠름 → 0프레임부터 움직임이 보인다).
+ * OPENING_PUSH만큼 더 먼 거리에서 시작해 OPENING_PUSH_FRAMES 동안 원래 구도로 들어온다.
+ */
+export const OPENING_PUSH = 0.22;
+export const OPENING_PUSH_FRAMES = 40;
+/** 첫 장면 local 프레임에서 카메라 거리 배율 (1 = 원래 구도) */
+export function openingPush(local: number): number {
+  const rest = Math.max(0, 1 - local / OPENING_PUSH_FRAMES);
+  return 1 + OPENING_PUSH * rest * rest;
+}
+
 /** 프레임 → 3D 장면 상태 (카메라·캐릭터·음식·소품). 순수 함수라 테스트할 수 있다. */
 export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, propCount: number, variant: 'main' | 'compare-fail' = 'main'): StageState | null {
   const at = sceneAt(script, timings, frame);
@@ -49,9 +66,12 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   // 장소와 구도는 대본 전체를 보고 한 번에 정한다 (이어지는 장면이 같은 구도가 되지 않게)
   const sceneIndex = script.scenes.indexOf(scene);
   const place = placePlan(script)[sceneIndex] ?? 'kitchen';
-  const beat = beatAt(scene, sameTypeBefore, local, timing.durationInFrames, { variant: shotPlan(script)[sceneIndex] ?? 0, place });
+  const head = index === 0 ? OPENING_HEAD_START : 0;
+  const beat = beatAt(scene, sameTypeBefore, local + head, timing.durationInFrames + head, { variant: shotPlan(script)[sceneIndex] ?? 0, place });
   const shot = variant === 'compare-fail' ? compareFailShot(beat.shot) : beat.shot;
-  const cam = cameraAt(shot, beat.progress);
+  const raw = cameraAt(shot, beat.progress);
+  const push = index === 0 ? openingPush(local) : 1;
+  const cam = push === 1 ? raw : { target: raw.target, pos: raw.pos.map((v, k) => raw.target[k]! + (v - raw.target[k]!) * push) as Vec3 };
 
   const ingredientsIndex = script.scenes.findIndex((s) => s.type === 'ingredients');
   const propPop = Array.from({ length: propCount }, (_, i) => {
@@ -77,7 +97,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     flip,
     plated: shot.plated,
     propPop,
-    chefPop: index === 0 ? popIn(local / 10) : 1,
+    chefPop: index === 0 ? popIn((local + head) / 10) : 1,
     mood: shot.mood,
     place,
     dayTime: videoLook(script.title).dayTime,

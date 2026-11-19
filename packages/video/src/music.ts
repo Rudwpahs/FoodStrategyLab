@@ -58,19 +58,30 @@ export function speechIntervals(timings: SceneTiming[]): [number, number][] {
   return timings.filter((t) => t.speechFrames > 0).map((t) => [t.from, t.from + t.speechFrames]);
 }
 
-/** 프레임 f에서 음악 크기 (0~1, 곡 파일 크기 대비) */
-export function musicGain(f: number, intervals: [number, number][], total: number): number {
+/** 프레임 f에서 대사 때문에 줄이는 정도 (0 = 그대로, 1 = 대사 중). 대사 앞뒤 DUCK_RAMP 프레임 동안 천천히 바뀐다. 촬영 소리(clipSound.ts)도 같은 규칙 */
+export function duckAmount(f: number, intervals: [number, number][]): number {
   let duck = 0;
   for (const [a, b] of intervals) duck = Math.max(duck, Math.min(1, Math.max(0, Math.min((f - (a - DUCK_RAMP)) / DUCK_RAMP, (b + DUCK_RAMP - f) / DUCK_RAMP))));
+  return duck;
+}
+
+/** duckAmount와 같은 값을 내는 ffmpeg 식 (t = 초) */
+export function duckExpr(intervals: [number, number][], fps = FPS): string {
+  const r = DUCK_RAMP / fps;
+  const traps = intervals.map(([a, b]) => `clip(min((t-(${(a / fps - r).toFixed(3)}))/${r.toFixed(4)},(${(b / fps + r).toFixed(3)}-t)/${r.toFixed(4)}),0,1)`);
+  return traps.length ? traps.reduce((acc, x) => `max(${acc},${x})`) : '0';
+}
+
+/** 프레임 f에서 음악 크기 (0~1, 곡 파일 크기 대비) */
+export function musicGain(f: number, intervals: [number, number][], total: number): number {
+  const duck = duckAmount(f, intervals);
   const fade = Math.max(0, Math.min(1, f / FADE_IN, (total - f) / FADE_OUT));
   return (MUSIC_GAIN_GAP - (MUSIC_GAIN_GAP - MUSIC_GAIN_SPEECH) * duck) * fade;
 }
 
 /** 같은 규칙을 ffmpeg volume 필터 식으로 (t = 초). musicGain과 같은 값을 낸다 (테스트로 확인) */
 export function musicVolumeExpr(intervals: [number, number][], total: number, fps = FPS): string {
-  const r = DUCK_RAMP / fps;
-  const traps = intervals.map(([a, b]) => `clip(min((t-(${(a / fps - r).toFixed(3)}))/${r.toFixed(4)},(${(b / fps + r).toFixed(3)}-t)/${r.toFixed(4)}),0,1)`);
-  const duck = traps.length ? traps.reduce((acc, x) => `max(${acc},${x})`) : '0';
+  const duck = duckExpr(intervals, fps);
   const fade = `clip(min(t/${(FADE_IN / fps).toFixed(4)},(${(total / fps).toFixed(3)}-t)/${(FADE_OUT / fps).toFixed(4)}),0,1)`;
   return `(${MUSIC_GAIN_GAP}-${(MUSIC_GAIN_GAP - MUSIC_GAIN_SPEECH).toFixed(2)}*${duck})*${fade}`;
 }

@@ -441,6 +441,22 @@ describe('장면별 AI 클립', () => {
     const removed = await call('DELETE', `/projects/${pid}/scenes/s3/media`);
     expect(removed.body.sceneMedia).toEqual({});
   });
+
+  it('휴대폰 촬영 영상(아이폰 MOV)은 촬영 소리를 켜고, 생성 AI 클립은 소리를 끈다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const clip = Buffer.from('fake video');
+    const phone = await fetch(`${base}/projects/${pid}/scenes/s1/media`, { method: 'PUT', headers: { 'content-type': 'video/quicktime' }, body: clip });
+    expect(phone.status).toBe(200);
+    const ai = await fetch(`${base}/projects/${pid}/scenes/s3/media?source=ai`, { method: 'PUT', headers: { 'content-type': 'video/mp4' }, body: clip });
+    expect(ai.status).toBe(200);
+    const media = (await call('GET', `/projects/${pid}/preview`)).body.props.sceneMedia;
+    expect(media.s1).toMatchObject({ kind: 'video', sound: true });
+    expect(media.s1.url).toMatch(/\/media\/clips\/\d+\/s1\.mov/);
+    expect(media.s3).toMatchObject({ kind: 'video', sound: false });
+    // 올린 MOV는 화면·렌더러가 받아 갈 수 있다
+    expect((await fetch(`${base.replace('/api', '')}${media.s1.url}`)).status).toBe(200);
+  });
 });
 
 describe('미디어 파일 보내기', () => {

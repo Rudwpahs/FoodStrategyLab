@@ -1,5 +1,6 @@
 import type { RecipeInput, Script } from '@mat-lab/recipe-core';
 import { estimateSpeechSeconds } from '@mat-lab/recipe-core';
+import type { SceneMediaItem } from './realFootage.ts';
 
 export const FPS = 30;
 /** 대사 뒤 여유 (음성이 있든 없든 말하는 시간에 더한다) */
@@ -57,10 +58,12 @@ export interface VideoProps {
   /** 완성 사진 URL과 사진의 대표 색 (있으면 음식 색에 반영) */
   photoUrl?: string;
   photoColor?: string;
-  /** 장면별 생성 AI 클립·이미지 (있으면 그 장면은 3D 대신 이것을 보여준다) */
-  sceneMedia?: Record<string, { url: string; kind: 'video' | 'image' }>;
+  /** 장면별 실제 촬영 영상·사진 (생성 AI 클립 포함). 있으면 그 묶음은 3D 대신 이것이 화면을 채우고 맛조수는 구석에서 말한다 */
+  sceneMedia?: Record<string, SceneMediaItem>;
   /** 배경 음악 주소 (브라우저 미리보기에서만 넘긴다. 서버 렌더는 검사 뒤 따로 섞는다) */
   musicSrc?: string;
+  /** 촬영 소리를 화면에서 바로 튼다 (브라우저 미리보기에서만. 서버 렌더는 품질 검사 뒤 따로 섞는다, clipSound.ts) */
+  liveClipSound?: boolean;
   [key: string]: unknown;
 }
 

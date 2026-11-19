@@ -255,7 +255,7 @@ export const api = {
   expertNotes: (id: number) => request<{ notes: ExpertNotes; questions: ExpertQuestion[]; styles: Record<BlogStyle, BlogStyleInfo> }>('GET', `/projects/${id}/expert-notes`),
   saveExpertNotes: (id: number, answers: ExpertNotes['answers'], confirmBy?: string) => request<{ notes: ExpertNotes }>('PUT', `/projects/${id}/expert-notes`, { answers, confirmBy }),
   uploadPhoto: (id: number, file: File, color: string) => upload<ProjectDetail>(`/projects/${id}/photo?color=${encodeURIComponent(color)}`, file),
-  uploadSceneMedia: (id: number, sceneId: string, file: File) => upload<ProjectDetail>(`/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`, file),
+  uploadSceneMedia: (id: number, sceneId: string, file: File, source?: 'ai') => upload<ProjectDetail>(`/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media${source ? '?source=ai' : ''}`, file),
   deleteSceneMedia: (id: number, sceneId: string) => request<ProjectDetail>('DELETE', `/projects/${id}/scenes/${encodeURIComponent(sceneId)}/media`),
   deletePhoto: (id: number) => request<ProjectDetail>('DELETE', `/projects/${id}/photo`),
   reelPrompts: (id: number) =>

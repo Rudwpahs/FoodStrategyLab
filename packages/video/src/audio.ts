@@ -204,3 +204,52 @@ export async function mixMusic(input: string, music: string, output: string, vol
     path.resolve(output),
   ]);
 }
+
+/**
+ * 촬영 영상 정보: 길이(초), 소리가 있는지, 소리의 평균 크기(dBFS). 촬영 소리를 깔기 전에 잰다 (clipSound.ts).
+ * 소리가 없거나 읽지 못하면 hasAudio false.
+ */
+export async function mediaInfo(file: string): Promise<{ seconds?: number; hasAudio: boolean; meanDb?: number }> {
+  let seconds: number | undefined;
+  let hasAudio = true;
+  try {
+    const res = await RenderInternals.callFf({
+      bin: 'ffprobe',
+      args: ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', path.resolve(file)],
+      indent: false,
+      logLevel: 'error',
+      binariesDirectory: null,
+      cancelSignal: undefined,
+    });
+    const info = JSON.parse(String(res.stdout)) as { format?: { duration?: string }; streams?: { codec_type?: string }[] };
+    const d = Number(info.format?.duration);
+    seconds = d > 0 ? d : undefined;
+    hasAudio = (info.streams ?? []).some((s) => s.codec_type === 'audio');
+  } catch {
+    // 길이를 몰라도 소리는 읽어 본다
+  }
+  if (!hasAudio) return { seconds, hasAudio: false };
+  try {
+    const pcm = await decodePcm(file);
+    if (pcm.length === 0) return { seconds, hasAudio: false };
+    let sum = 0;
+    for (let i = 0; i < pcm.length; i++) sum += pcm[i]! * pcm[i]!;
+    const rms = Math.sqrt(sum / pcm.length) / 32768;
+    return { seconds: seconds ?? pcm.length / RATE, hasAudio: true, meanDb: rms > 0 ? 20 * Math.log10(rms) : -100 };
+  } catch {
+    return { seconds, hasAudio: false };
+  }
+}
+
+/** 완성 영상에 촬영 소리를 섞는다 (화면은 다시 인코딩하지 않음). filter는 clipSound.ts의 clipSoundFilter로 만든다 */
+export async function mixClipSound(input: string, clips: string[], output: string, filter: string): Promise<void> {
+  await ff([
+    '-hide_banner', '-y',
+    '-i', path.resolve(input),
+    ...clips.flatMap((c) => ['-stream_loop', '-1', '-i', path.resolve(c)]),
+    '-filter_complex', filter,
+    '-map', '0:v', '-map', '[a]',
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart',
+    path.resolve(output),
+  ]);
+}
