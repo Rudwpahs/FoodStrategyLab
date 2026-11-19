@@ -17,6 +17,8 @@ import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } fro
 import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
 import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd, recentCostByPurpose } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
+import { auditFacts, buildAudit, collectAuditInput } from './audit.ts';
+import { AuditSummarizer, lastAuditSummary } from './auditSummary.ts';
 import { Auth, authGuard, clientIp, isDirectLocal, publicOrigin, readCookie, sessionCookie, setupCode, type User } from './auth.ts';
 import { HttpError, creditedReviewer, publicRender, type ProjectDetail, type Publication, type Repo, type Review } from './repo.ts';
 import { describeVoice, lastVoice, resetTtsDetection, synthesize, ttsProvider, voiceTempo, voicestudioVoice } from './tts.ts';
@@ -74,6 +76,8 @@ export interface AppDeps {
   humanizer?: Humanizer;
   /** AI 이야기 대본 작가 (테스트에서는 가짜 Claude로 바꾼다) */
   storyWriter?: StoryWriter;
+  /** 계정 진단 요약 (테스트에서는 가짜 Claude로 바꾼다) */
+  auditSummarizer?: AuditSummarizer;
 }
 
 /** 연구자 답변 원문 (윤문하지 않는다 — 원칙 4) */
@@ -1125,6 +1129,25 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       metrics[k] = n;
     }
     res.json(repo.setPublicationMetrics(id(req), metrics));
+  });
+
+  // ── 계정 진단: 규칙으로 센 진단(0원) + Claude 요약 한 문단(버튼을 눌렀을 때만) ──
+  const auditSummarizer = deps.auditSummarizer ?? new AuditSummarizer(repo.db);
+  const auditResponse = () => {
+    const audit = buildAudit(collectAuditInput(repo));
+    const last = lastAuditSummary(repo.db);
+    return {
+      audit,
+      summary: last ? { text: last.text, createdAt: last.createdAt, costUsd: last.costUsd, stale: last.facts !== auditFacts(audit) } : null,
+      ai: { available: auditSummarizer.available(), writing: auditSummarizer.writing() },
+    };
+  };
+  api.get('/audit', (_req, res) => {
+    res.json(auditResponse());
+  });
+  api.post('/audit/summary', async (_req, res) => {
+    await auditSummarizer.summarize(auditFacts(buildAudit(collectAuditInput(repo))));
+    res.json(auditResponse());
   });
 
   app.use('/api', api);

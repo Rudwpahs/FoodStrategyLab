@@ -438,7 +438,8 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
   .topbar .who { margin-left: auto; }
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    display: grid; grid-template-columns: repeat(3, 1fr);
+    /* 메뉴 수가 늘어도 한 줄에 같은 너비로 */
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
     height: calc(var(--tabbar-h) + var(--safe-b));
     padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
     background: var(--paper); border-top: 1px solid var(--line);
@@ -519,3 +520,15 @@ pre.copy { white-space: pre-wrap; background: var(--paper-sunk); border: 1px sol
 @media (max-width: 680px), (pointer: coarse) {
   input, select, textarea, .scene-head select { font-size: 16px; }
 }
+
+/* ── 계정 진단 (#/audit) ── */
+.audit-finding { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--r-control); background: #fff; min-width: 0; }
+.audit-finding.good { border-left-color: var(--celadon); }
+.audit-finding.hold { border-left-color: #d9a842; }
+.audit-finding-title { font-weight: 760; letter-spacing: -0.01em; }
+.audit-numbers { display: flex; flex-wrap: wrap; gap: 6px; }
+.audit-numbers .badge { white-space: normal; font-weight: 600; }
+.audit-numbers .badge b { color: var(--soy); }
+.audit-tips { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14.5px; }
+.audit-reason { color: var(--soy-soft); margin-top: 6px; line-height: 1.5; }
+.audit-summary p { margin: 0; line-height: 1.7; }

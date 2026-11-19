@@ -7,6 +7,7 @@ import { AccountPage } from './pages/AccountPage.tsx';
 import { NewProjectPage } from './pages/NewProjectPage.tsx';
 import { ProjectList } from './pages/ProjectList.tsx';
 import { ProjectPage } from './pages/ProjectPage.tsx';
+import { AuditPage } from './pages/AuditPage.tsx';
 import { LogoMark } from './components/LogoMark.tsx';
 
 type Toast = { text: string; error?: boolean } | null;
@@ -108,9 +109,10 @@ export const App: React.FC = () => {
   else if (hash.startsWith('#/new')) page = <NewProjectPage />;
   else if (hash.startsWith('#/character')) page = <CharacterPage />;
   else if (hash.startsWith('#/account')) page = <AccountPage />;
+  else if (hash.startsWith('#/audit')) page = <AuditPage />;
   else page = <ProjectList />;
 
-  const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : hash.startsWith('#/account') ? 'account' : 'list';
+  const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : hash.startsWith('#/account') ? 'account' : hash.startsWith('#/audit') ? 'audit' : 'list';
   // 콘텐츠 한 편을 연 동안 '콘텐츠'는 지금 화면(page)이 아니라 지금 있는 묶음(true)
   const listCurrent = tab === 'list' ? (project ? 'true' : 'page') : undefined;
   const logout = async () => {
@@ -129,6 +131,7 @@ export const App: React.FC = () => {
           <a href="#/" className={tab === 'list' ? 'active' : ''} aria-current={listCurrent}>콘텐츠</a>
           <a href="#/new" className={tab === 'new' ? 'active' : ''} aria-current={tab === 'new' ? 'page' : undefined}>새로 만들기</a>
           <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>맛조수·목소리</a>
+          <a href="#/audit" className={tab === 'audit' ? 'active' : ''} aria-current={tab === 'audit' ? 'page' : undefined}>계정 진단</a>
         </nav>
         {auth.user && (
           <div className="who">
@@ -153,6 +156,10 @@ export const App: React.FC = () => {
         <a href="#/character" className={tab === 'character' ? 'active' : ''} aria-current={tab === 'character' ? 'page' : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M9 3h6M10 3v5l-5 10a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3L14 8V3" /><path d="M7.5 15h9" /></svg>
           맛조수
+        </a>
+        <a href="#/audit" className={tab === 'audit' ? 'active' : ''} aria-current={tab === 'audit' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+          계정 진단
         </a>
       </nav>
       <div aria-live="polite" role="status">
