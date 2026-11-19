@@ -41,8 +41,9 @@ test('F1 계정 진단: 잘하는 점·발목 잡는 점·다음 영상 3개, �
 
   // 휴대폰: 가로 넘침 없음, 아래 메뉴 4칸이 한 줄에, '계정 진단'이 지금 화면
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  // 아래 메뉴 5칸(콘텐츠·계획·새로 만들기·맛조수·계정 진단)이 390px 한 줄에 들어간다
   const tabs = page.locator('nav.tabbar a');
-  await expect(tabs).toHaveCount(4);
+  await expect(tabs).toHaveCount(5);
   const tops = await tabs.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
   expect(new Set(tops).size).toBe(1);
   await expect(page.locator('nav.tabbar a[href="#/audit"]')).toHaveAttribute('aria-current', 'page');
