@@ -147,7 +147,7 @@ function reelChecks(render: { outputDir: string }, approval: Review): IgCheck[] 
 const MEDIA_TYPES = new Map<string, RegExp>([
   ['audio', /\.(mp3|wav)$/i],
   ['photos', /\.(jpe?g|png|webp)$/i],
-  ['clips', /\.(mp4|webm|jpe?g|png|webp)$/i],
+  ['clips', /\.(mp4|mov|webm|jpe?g|png|webp)$/i],
   ['renders', /\.(mp4|jpe?g|png|webp)$/i],
   ['sources', /\.(jpe?g|png|webp|gif|pdf|txt)$/i],
 ]);
@@ -645,20 +645,21 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     });
   });
 
-  // 장면별 생성 AI 클립(MP4·WEBM) 또는 첫 프레임 이미지
-  api.put('/projects/:id/scenes/:sceneId/media', express.raw({ type: ['video/mp4', 'video/webm', 'image/jpeg', 'image/png', 'image/webp'], limit: '300mb' }), (req, res) => {
+  // 장면별 실제 촬영 영상(휴대폰 MP4·MOV)·사진, 또는 생성 AI 클립(?source=ai: 소리를 끈다)
+  api.put('/projects/:id/scenes/:sceneId/media', express.raw({ type: ['video/mp4', 'video/webm', 'video/quicktime', 'image/jpeg', 'image/png', 'image/webp'], limit: '300mb' }), (req, res) => {
     const pid = id(req);
     const sceneId = String(req.params.sceneId);
     if (!/^[\w-]{1,40}$/.test(sceneId)) throw new HttpError(400, '잘못된 장면 번호입니다.');
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'MP4·WEBM 영상이나 JPG·PNG·WEBP 이미지를 올려 주세요.');
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'MP4·MOV·WEBM 영상이나 JPG·PNG·WEBP 사진을 올려 주세요.');
     const type = String(req.headers['content-type'] ?? '');
     const kind = type.startsWith('video/') ? 'video' : 'image';
-    const ext = type.includes('webm') ? '.webm' : type.includes('mp4') ? '.mp4' : type.includes('png') ? '.png' : type.includes('webp') ? '.webp' : '.jpg';
+    const ext = type.includes('webm') ? '.webm' : type.includes('quicktime') ? '.mov' : type.includes('mp4') ? '.mp4' : type.includes('png') ? '.png' : type.includes('webp') ? '.webp' : '.jpg';
+    const ai = req.query.source === 'ai' ? '.ai' : '';
     const dir = path.join(DATA_DIR, 'clips', String(pid));
     fs.mkdirSync(dir, { recursive: true });
     const old = repo.deleteSceneMedia(pid, sceneId);
     if (old) fs.rmSync(path.join(DATA_DIR, old), { force: true });
-    const file = `clips/${pid}/${sceneId}${ext}`;
+    const file = `clips/${pid}/${sceneId}${ai}${ext}`;
     fs.writeFileSync(path.join(DATA_DIR, file), req.body);
     repo.setSceneMedia(pid, sceneId, file, kind);
     res.json(repo.getProject(pid));

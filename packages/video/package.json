@@ -10,7 +10,9 @@
     "./audio": "./src/audio.ts",
     "./cards": "./src/cardPages.ts",
     "./qa": "./src/qa.ts",
-    "./music": "./src/music.ts"
+    "./music": "./src/music.ts",
+    "./clipSound": "./src/clipSound.ts",
+    "./realFootage": "./src/realFootage.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

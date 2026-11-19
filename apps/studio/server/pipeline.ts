@@ -3,7 +3,9 @@ import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { FPS, buildTimeline, captionGroups, totalFrames, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, mediaInfo, mixClipSound, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { clipLevelDb, clipSoundFilter, clipSoundVolumeExpr, soundLayers } from '@mat-lab/video/clipSound';
+import { clipLayers } from '@mat-lab/video/realFootage';
 import { musicFor, musicVolumeExpr, speechIntervals } from '@mat-lab/video/music';
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPlan } from '@mat-lab/video/cards';
@@ -266,6 +268,11 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     await checkVoiceLines(script, qa, () => job.canceled);
     let { timings } = await previewTimeline(script, origin);
     const photo = repo.getPhoto(projectId);
+    // 촬영 영상의 길이(짧으면 천천히 틀거나 반복)와 소리(있으면 목소리 밑에 작게 깔기)를 미리 잰다
+    const media = repo.getSceneMedia(projectId);
+    const clipInfo = new Map<string, Awaited<ReturnType<typeof mediaInfo>>>();
+    for (const [sceneId, m] of Object.entries(media))
+      if (m.kind === 'video') clipInfo.set(sceneId, await mediaInfo(path.join(DATA_DIR, m.file)).catch(() => ({ hasAudio: false })));
     const props: VideoProps = {
       script,
       timings,
@@ -276,7 +283,9 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
       recipe,
       photoUrl: photo ? renderUrl(origin, photo.url) : undefined,
       photoColor: photo?.color || undefined,
-      sceneMedia: Object.fromEntries(Object.entries(repo.getSceneMedia(projectId)).map(([k, m]) => [k, { kind: m.kind, url: renderUrl(origin, m.url) }])),
+      sceneMedia: Object.fromEntries(
+        Object.entries(media).map(([k, m]) => [k, { kind: m.kind, url: renderUrl(origin, m.url), sound: m.sound && Boolean(clipInfo.get(k)?.hasAudio), seconds: clipInfo.get(k)?.seconds }]),
+      ),
     };
 
     set('렌더러 준비', 0.08);
@@ -328,6 +337,22 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     qa.issues.push(...audit.issues);
     qa.checked.push(...audit.checked);
     if (loudnessSkipped) qa.issues.push({ level: 'warning', code: 'skipped', message: '음량 맞추기(-14 LUFS)를 하지 못해 원래 음량 그대로예요.' });
+    // 휴대폰 촬영 소리(지글지글)도 품질 검사가 끝난 뒤에 섞는다: 렌더 때는 꺼 두어 대사 잘림 검사가 흐려지지 않게 (clipSound.ts)
+    const sounds = soundLayers(clipLayers(script, timings, props.sceneMedia ?? {}));
+    if (sounds.length) {
+      set('촬영 소리 넣기', 0.835);
+      const video = path.join(outDir, 'video.mp4');
+      const mixed = path.join(outDir, 'video-clipsound.mp4');
+      const inputs = sounds.map((l) => ({ file: path.join(DATA_DIR, media[l.key]!.file), start: l.from / FPS, duration: l.duration / FPS, gainDb: clipLevelDb(clipInfo.get(l.key)?.meanDb) }));
+      try {
+        await mixClipSound(video, inputs.map((i) => i.file), mixed, clipSoundFilter(inputs, clipSoundVolumeExpr(speechIntervals(timings))));
+        fs.renameSync(mixed, video);
+      } catch (e) {
+        console.warn('[촬영 소리] 섞기 실패:', (e as Error).message);
+        fs.rmSync(mixed, { force: true });
+        qa.issues.push({ level: 'warning', code: 'skipped', message: '촬영 영상의 소리를 넣지 못해 촬영 소리 없이 만들었어요.' });
+      }
+    }
     // 배경 음악은 품질 검사가 끝난 뒤에 섞는다 (음악이 대사 잘림·무음 검사를 흐리지 않게). 대사 중에는 줄인다 (music.ts)
     if (process.env.BGM !== 'off') {
       set('배경 음악 넣기', 0.84);

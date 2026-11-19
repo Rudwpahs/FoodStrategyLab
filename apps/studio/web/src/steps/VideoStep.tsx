@@ -4,7 +4,6 @@ import { ShortVideo, totalFrames, videoSeconds, type VideoProps } from '@mat-lab
 import { api, musicUrl, photoColor, type RenderStatus } from '../api.ts';
 import { QaPanel } from '../components/QaPanel.tsx';
 import { ConnectionNote } from '../components/ConnectionNote.tsx';
-import { Fold } from '../components/Fold.tsx';
 import { poll } from '../poll.ts';
 import { PHOTO_ACCEPT, heicToJpeg } from '../heic.ts';
 import { ClipUploads } from '../components/ClipUploads.tsx';
@@ -30,7 +29,8 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
     const my = ++previewReq.current;
     const r = await run(() => api.preview(project.id));
     if (my !== previewReq.current) return;
-    if (r) setPreview({ props: { ...r.props, musicSrc: musicUrl(r.props.script) }, voiced: r.voiced });
+    // 촬영 소리는 미리보기에서 바로 튼다 (서버 렌더는 품질 검사 뒤에 섞는다)
+    if (r) setPreview({ props: { ...r.props, musicSrc: musicUrl(r.props.script), liveClipSound: true }, voiced: r.voiced });
     else setPreviewFailed(true);
   };
 
@@ -132,7 +132,7 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             <h2>완성 사진</h2>
             <span className="muted">선택</span>
           </div>
-          <div className="muted small">실제 완성 요리 사진을 올리면 영상 끝부분에 '완성 사진'으로 나오고, 3D 음식 색도 사진 색에 맞춰집니다.</div>
+          <div className="muted small">실제 완성 요리 사진을 올리면 영상 첫 장면에 화면 가득 나오고(진짜 음식으로 시작), 끝부분에도 '완성 사진'으로 나와요. 3D 음식 색도 사진 색에 맞춰집니다.</div>
           <div className="row">
             {project.photo && (
               <>
@@ -167,9 +167,13 @@ export const VideoStep: React.FC<StepProps> = ({ project, setProject, reload, go
             )}
           </div>
         </div>
-        <Fold title={`생성 AI 클립 올리기 (선택${clips ? ` · ${clips}개 사용 중` : ''})`}>
+        <div className="card stack">
+          <div className="card-head">
+            <h2>실제 촬영 영상 넣기</h2>
+            <span className="muted">추천{clips ? ` · ${clips}개 넣음` : ''}</span>
+          </div>
           <ClipUploads project={project} setProject={setProject} />
-        </Fold>
+        </div>
         <div className="card stack">
           <h2>{approved ? '영상 만들기' : '검수용 영상 만들기'}</h2>
           {!approved ? (
