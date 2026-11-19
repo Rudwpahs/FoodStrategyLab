@@ -14,6 +14,7 @@ import { isMusicTrack } from '@mat-lab/video/music';
 import type { IgCheck } from '@mat-lab/recipe-core';
 import { AUDIO_DIR, approvedRender, cancelRender, candidateVoiceJob, exportPackage, generateVoice, instagramText, keepAwake, previewTimeline, removeProject, startCandidateVoices, startRender } from './pipeline.ts';
 import { Instagram, activeIgJob, checkCaption, getIgJob, resolvePublicLink } from './instagram.ts';
+import { AutoPilot, autoRoutes } from './autoPilot.ts';
 import { MAX_FILES, RecipeReader, type UploadFile } from './recipeReader.ts';
 import { DEFAULT_MODEL, aiConfigured, monthSpentUsd, monthlyBudgetUsd, recentCostByPurpose } from './claudeUsage.ts';
 import { METRIC_KEYS, formatInsights } from './insights.ts';
@@ -74,6 +75,8 @@ export interface AppDeps {
   humanizer?: Humanizer;
   /** AI 이야기 대본 작가 (테스트에서는 가짜 Claude로 바꾼다) */
   storyWriter?: StoryWriter;
+  /** 자동 게시(예약)·댓글 답장 (테스트에서 시각을 정해 직접 돌린다) */
+  autoPilot?: AutoPilot;
 }
 
 /** 연구자 답변 원문 (윤문하지 않는다 — 원칙 4) */
@@ -1126,6 +1129,11 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
     }
     res.json(repo.setPublicationMetrics(id(req), metrics));
   });
+
+  // ── 자동 게시(예약)·댓글 답장 (autoPilot.ts). 기본은 꺼짐, 켜기·규칙은 연구자 계정만 ──
+  const autoPilot = deps.autoPilot ?? new AutoPilot(repo, ig);
+  app.locals.autoPilot = autoPilot;
+  api.use('/auto', autoRoutes(autoPilot, ig, (res) => auth.researcherCount() === 0 || (res.locals.user as User | undefined)?.role === 'researcher'));
 
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));

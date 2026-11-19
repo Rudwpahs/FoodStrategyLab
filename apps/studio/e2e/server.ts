@@ -17,6 +17,7 @@ import { RecipeReader, type ExtractedRecipe, type ParseFn, type TopicsFn } from 
 import { Humanizer, type RewriteFn } from '../server/humanize.ts';
 import { StoryWriter } from '../server/storyWriter.ts';
 import { fakeStoryCall } from './fakeStories.ts';
+import { fakeMetaRouter, newFakeMetaState } from '../server/fakeMeta.ts';
 import type { RenderQaIssue } from '../server/repo.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -114,6 +115,18 @@ const rewrite: RewriteFn = async ({ user }) => {
 };
 
 const port = Number(process.env.PORT ?? 5199);
+
+// ── 가짜 Meta (자동 게시·댓글 답장 시나리오 08에서만 켠다. 다른 시나리오는 '인스타그램 설정 전' 그대로) ──
+const meta = newFakeMetaState();
+const IG_ENV = {
+  INSTAGRAM_APP_ID: 'e2e-app',
+  INSTAGRAM_APP_SECRET: 'e2e-app-secret-not-real',
+  INSTAGRAM_GRAPH_URL: `http://127.0.0.1:${port}/__e2e/meta`,
+  INSTAGRAM_OAUTH_URL: `http://127.0.0.1:${port}/__e2e/meta`,
+  INSTAGRAM_AUTHORIZE_URL: `http://127.0.0.1:${port}/__e2e/meta/oauth/authorize`,
+  IG_ALLOW_HTTP: '1',
+  IG_POLL_MS: '50',
+};
 await startServer(port, {
   deps: (repo) => ({
     startRender: (r, pid, origin, keepAlive) => startRender(r, pid, origin, keepAlive, { renderer, audit }),
@@ -121,12 +134,25 @@ await startServer(port, {
     humanizer: new Humanizer(repo.db, rewrite),
     storyWriter: new StoryWriter(repo.db, fakeStoryCall),
   }),
-  extend: (app) => {
+  extend: (app, repo) => {
     app.use('/__e2e', express.json());
     app.post('/__e2e/next-audit', (req, res) => {
       control.nextAudit = (req.body?.issues ?? null) as RenderQaIssue[] | null;
       res.json({ ok: true });
     });
+    app.use('/__e2e/meta', fakeMetaRouter(meta));
+    // 가짜 Meta를 켜고 끈다 (끄면 연결도 지운다). 인스타그램 설정은 부를 때마다 환경 변수를 읽는다
+    app.post('/__e2e/instagram', (req, res) => {
+      const on = req.body?.on === true;
+      for (const [k, v] of Object.entries(IG_ENV)) {
+        if (on) process.env[k] = v;
+        else delete process.env[k];
+      }
+      if (!on) repo.db.prepare('DELETE FROM instagram_account').run();
+      res.json({ ok: true });
+    });
+    // Meta를 몇 번 불렀는지 ('먼저 시험'이 Meta를 부르지 않는지 확인)
+    app.get('/__e2e/meta-calls', (_req, res) => res.json({ calls: meta.calls.length, published: meta.published, replies: meta.replies.length, dms: meta.dms.length }));
     app.post('/__e2e/hold', (req, res) => {
       control.hold = req.body?.hold === true;
       if (!control.hold) for (const f of control.release.splice(0)) f();

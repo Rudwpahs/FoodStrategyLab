@@ -4,6 +4,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer } from 'vite';
 import { createApp, type AppDeps } from './app.ts';
+import type { AutoPilot } from './autoPilot.ts';
 import { startRender } from './pipeline.ts';
 import { DATA_DIR, DB_FILE, DB_SNAPSHOT, PORT } from './config.ts';
 import { restoreSnapshot, startSnapshots, type Snapshots } from './dbSnapshot.ts';
@@ -31,6 +32,8 @@ export async function startServer(port = PORT, test: { deps?: (repo: Repo) => Pa
   }
   const app = createApp(repo, { startRender, ...test.deps?.(repo), auth });
   test.extend?.(app, repo);
+  // 자동 게시(예약)·댓글 답장 확인 (60초마다, 설정에서 켜고 인스타그램이 연결됐을 때만 움직인다)
+  (app.locals.autoPilot as AutoPilot).start();
   // --production: 미리 만든 화면 묶음(dist)을 바로 보낸다 (개발 모드보다 훨씬 빠름, 휴대폰 접속용)
   const production = process.argv.includes('--production');
   const dist = path.join(here, '../dist');

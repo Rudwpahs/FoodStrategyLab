@@ -4,6 +4,7 @@ import { api, type AuthState, type Meta } from './api.ts';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { CharacterPage } from './pages/CharacterPage.tsx';
 import { AccountPage } from './pages/AccountPage.tsx';
+import { AutoPage } from './pages/AutoPage.tsx';
 import { NewProjectPage } from './pages/NewProjectPage.tsx';
 import { ProjectList } from './pages/ProjectList.tsx';
 import { ProjectPage } from './pages/ProjectPage.tsx';
@@ -108,6 +109,7 @@ export const App: React.FC = () => {
   else if (hash.startsWith('#/new')) page = <NewProjectPage />;
   else if (hash.startsWith('#/character')) page = <CharacterPage />;
   else if (hash.startsWith('#/account')) page = <AccountPage />;
+  else if (hash.startsWith('#/auto')) page = <AutoPage />;
   else page = <ProjectList />;
 
   const tab = hash.startsWith('#/new') ? 'new' : hash.startsWith('#/character') ? 'character' : hash.startsWith('#/account') ? 'account' : 'list';
