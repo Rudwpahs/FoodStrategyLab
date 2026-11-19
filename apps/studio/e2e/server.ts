@@ -17,6 +17,8 @@ import { RecipeReader, type ExtractedRecipe, type ParseFn, type TopicsFn } from 
 import { Humanizer, type RewriteFn } from '../server/humanize.ts';
 import { StoryWriter } from '../server/storyWriter.ts';
 import { fakeStoryCall } from './fakeStories.ts';
+import { AuditSummarizer } from '../server/auditSummary.ts';
+import { fakeAuditCall } from './fakeAudit.ts';
 import type { RenderQaIssue } from '../server/repo.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -120,6 +122,7 @@ await startServer(port, {
     recipeReader: new RecipeReader(repo.db, parse, topics),
     humanizer: new Humanizer(repo.db, rewrite),
     storyWriter: new StoryWriter(repo.db, fakeStoryCall),
+    auditSummarizer: new AuditSummarizer(repo.db, fakeAuditCall),
   }),
   extend: (app) => {
     app.use('/__e2e', express.json());

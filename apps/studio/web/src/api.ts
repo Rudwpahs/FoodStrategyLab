@@ -8,6 +8,7 @@ import type { ProjectDetail, ProjectSummary, PublicRender, Publication } from '.
 import type { FormatInsight } from '../../server/insights.ts';
 import type { HumanizeResult } from '../../server/humanize.ts';
 import type { MeasuredCost } from '../../server/claudeUsage.ts';
+import type { AuditFinding, AuditResult, AuditSuggestion } from '../../server/audit.ts';
 
 export type { CandidateVoiceJob, FormatInsight, HumanizeResult, MeasuredCost, ProjectDetail, ProjectSummary, Publication };
 /** 화면이 받는 영상 기록 (서버 폴더 경로는 오지 않는다) */
@@ -312,3 +313,16 @@ export interface StoriesResponse {
 
 /** 미리보기 배경 음악 주소 (서버 렌더와 같은 곡: music.ts의 musicFor) */
 export const musicUrl = (script: Pick<Script, 'style' | 'hookType'>) => `/api/music/${musicFor(script)}.mp3`;
+
+/** 계정 진단 (규칙 진단은 0원, 요약은 Claude) */
+export interface AuditResponse {
+  audit: AuditResult;
+  /** 마지막으로 받은 요약. stale = 그 뒤로 진단 숫자가 바뀜 */
+  summary: { text: string; createdAt: string; costUsd: number; stale: boolean } | null;
+  ai: { available: boolean; writing: boolean };
+}
+export type { AuditFinding, AuditResult, AuditSuggestion };
+export const auditApi = {
+  get: () => request<AuditResponse>('GET', '/audit'),
+  summarize: () => request<AuditResponse>('POST', '/audit/summary', {}),
+};
