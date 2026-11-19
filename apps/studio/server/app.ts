@@ -7,6 +7,8 @@ import { BLOG_STYLES, BLOG_STYLE_INFO, EXPERT_QUESTIONS, IM_NOT_AI_COMMIT, blogQ
 import { BRAND } from '@mat-lab/recipe-core';
 import { Humanizer, verifyRewrites } from './humanize.ts';
 import { StoryWriter } from './storyWriter.ts';
+import { ScriptReviser } from './scriptReviser.ts';
+import { mountPlanApi } from './planApi.ts';
 import { DATA_DIR } from './config.ts';
 import { FPS, type SceneTiming } from '@mat-lab/video/timeline';
 import { musicFile, toJpeg } from '@mat-lab/video/audio';
@@ -81,6 +83,8 @@ export interface AppDeps {
   auditSummarizer?: AuditSummarizer;
   /** 자동 게시(예약)·댓글 답장 (테스트에서 시각을 정해 직접 돌린다) */
   autoPilot?: AutoPilot;
+  /** 쉬운 말 수정 요청 반영 (테스트에서는 가짜 Claude로 바꾼다) */
+  scriptReviser?: ScriptReviser;
 }
 
 /** 연구자 답변 원문 (윤문하지 않는다 — 원칙 4) */
@@ -608,6 +612,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
       if (errs.length) notes.push(`자동 검사 오류 ${errs.length}건을 직접 확인하고 승인 (${errs.map((e) => e.message).join(' / ').slice(0, 300)})`);
     }
     repo.addReview(pid, { version: Number(body.version), reviewer, checklist: body.checklist, decision: String(body.decision), note: notes.filter(Boolean).join(' — '), byResearcher: (res.locals.user as User | undefined)?.role === 'researcher' });
+    plan.sync(pid);
     res.json({ ...repo.getProject(pid), ...(warning ? { warning } : {}) });
   });
 
@@ -1156,6 +1161,8 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   const autoPilot = deps.autoPilot ?? new AutoPilot(repo, ig);
   app.locals.autoPilot = autoPilot;
   api.use('/auto', autoRoutes(autoPilot, ig, (res) => auth.researcherCount() === 0 || (res.locals.user as User | undefined)?.role === 'researcher'));
+  // ── 주간 계획·승인 대기열·쉬운 말 수정 요청 (planApi.ts) ──
+  const plan = mountPlanApi(api, { repo, reviser: deps.scriptReviser ?? new ScriptReviser(repo.db), startRender: deps.startRender, detachChangedMedia, expertAnswers: (pid) => answerTexts(repo.getExpertNotes(pid)) });
 
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));

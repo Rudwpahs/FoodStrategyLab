@@ -109,7 +109,19 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
 export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[] }): string {
-  const source = {
+  const source = storySourceData(recipe, opts.expertAnswers);
+  const types = availableStoryTypes(recipe);
+  const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 이야기는 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
+  return `아래 원본 자료로 이야기가 서로 다른 대본 ${opts.count}개를 써.
+- 고를 수 있는 이야기 갈래: ${types.map((t) => `${t}(${STORY_TYPE_INFO[t].label}: ${STORY_TYPE_INFO[t].guide})`).join(' / ')}${avoid}
+
+## 원본 자료
+${JSON.stringify(source, null, 2)}`;
+}
+
+/** Claude에게 보내는 원본 자료 (이야기 쓰기·수정 요청 반영이 같이 쓴다) */
+export function storySourceData(recipe: RecipeInput, expertAnswers?: string[]) {
+  return {
     주제: recipe.topic,
     요리: recipe.dishName,
     분류: CATEGORY_LABELS[recipe.category],
@@ -120,15 +132,8 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
     흔한실수: recipe.commonMistake || undefined,
     흔한오해: recipe.misconception || undefined,
     이야기: recipe.story || undefined,
-    전문가답변: opts.expertAnswers?.length ? opts.expertAnswers : undefined,
+    전문가답변: expertAnswers?.length ? expertAnswers : undefined,
   };
-  const types = availableStoryTypes(recipe);
-  const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 이야기는 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
-  return `아래 원본 자료로 이야기가 서로 다른 대본 ${opts.count}개를 써.
-- 고를 수 있는 이야기 갈래: ${types.map((t) => `${t}(${STORY_TYPE_INFO[t].label}: ${STORY_TYPE_INFO[t].guide})`).join(' / ')}${avoid}
-
-## 원본 자료
-${JSON.stringify(source, null, 2)}`;
 }
 
 /** 원본에 재료가 있어야 쓸 수 있는 갈래를 거른다 */

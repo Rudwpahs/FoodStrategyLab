@@ -1,7 +1,7 @@
 /**
  * E2E 시험 서버 (docs/testing/E2E_PLAN.md 3절). 운영 서버(startServer)와 같은 코드에 바깥 연결만 바꿔 끼운다.
  * - 렌더러: 작은 영상·그림 파일을 쓰는 가짜 (runRender의 진행·품질 검사 기록·카드·표지 JPEG는 진짜 코드)
- * - Claude(레시피 읽기·주제 더 보기·윤문): 정해진 답을 주는 가짜 — 돈이 들지 않는다
+ * - Claude(레시피 읽기·주제 더 보기·윤문·이야기 대본·수정 요청 반영): 정해진 답을 주는 가짜 — 돈이 들지 않는다
  * - 시험용 주소 /__e2e/* 는 이 서버에만 있다 (운영 코드에는 없음)
  * 실행: playwright.config.ts의 webServer가 띄운다. 환경 변수(데이터 폴더·포트·설정 코드)는 그쪽에서 정한다.
  */
@@ -20,6 +20,8 @@ import { fakeStoryCall } from './fakeStories.ts';
 import { AuditSummarizer } from '../server/auditSummary.ts';
 import { fakeAuditCall } from './fakeAudit.ts';
 import { fakeMetaRouter, newFakeMetaState } from '../server/fakeMeta.ts';
+import { ScriptReviser } from '../server/scriptReviser.ts';
+import { fakeReviseCall } from './fakeRevise.ts';
 import type { RenderQaIssue } from '../server/repo.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -136,6 +138,7 @@ await startServer(port, {
     humanizer: new Humanizer(repo.db, rewrite),
     storyWriter: new StoryWriter(repo.db, fakeStoryCall),
     auditSummarizer: new AuditSummarizer(repo.db, fakeAuditCall),
+    scriptReviser: new ScriptReviser(repo.db, fakeReviseCall),
   }),
   extend: (app, repo) => {
     app.use('/__e2e', express.json());

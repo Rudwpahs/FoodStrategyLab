@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 
 test('E1·E2 모든 화면: 가로 넘침 없음, (휴대폰) 입력칸 16px 이상', async ({ page }, info) => {
   const { id } = await projectWithRender(page.request);
-  const pages = ['/#/', '/#/new', '/#/character', '/#/account', `/#/p/${id}/script`, `/#/p/${id}/video`, `/#/p/${id}/review`, `/#/p/${id}/publish`];
+  const pages = ['/#/', '/#/new', '/#/character', '/#/account', '/#/plan', `/#/p/${id}/script`, `/#/p/${id}/video`, `/#/p/${id}/review`, `/#/p/${id}/publish`];
   for (const p of pages) {
     await page.goto(p);
     await page.waitForLoadState('networkidle');

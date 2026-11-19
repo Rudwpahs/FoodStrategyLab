@@ -8,6 +8,7 @@ import { cleanRules, dmMessage, matchRule, type CommentRule } from './commentRul
 import { IG_COMMENT_SCOPES, IG_DAILY_LIMIT, Instagram, checkCaption, igConfig } from './instagram.ts';
 import { approvedRender, instagramText, keepAwake } from './pipeline.ts';
 import { HttpError, type Repo } from './repo.ts';
+import { PlanStore } from './planSlots.ts';
 
 /**
  * 자동 게시(예약) + 댓글 답장.
@@ -367,13 +368,21 @@ export class AutoPilot {
 
   /** 시각이 된 승인 칸 (계획 화면에서 승인된 칸만 자동으로 올린다. 실제 승인은 올릴 때 다시 확인) */
   dueSlots(now = new Date()): PlanSlot[] {
+    // 칸 상태(승인됨 등)는 계획 화면이 다시 계산한다: 읽기 전에 최신으로 맞춘다 (실제 승인은 올릴 때 approvedRender로 다시 확인)
+    if (this.hasSlots()) {
+      try {
+        new PlanStore(this.repo).sync();
+      } catch (e) {
+        console.warn('[자동 게시] 계획 칸 상태를 맞추지 못했어요:', (e as Error).message);
+      }
+    }
     return this.slots(['approved']).filter((s) => ms(s.at) <= now.getTime());
   }
 
   private markSlotPosted(slotId: number | null) {
     if (slotId === null || !this.hasSlots()) return;
     try {
-      this.db.prepare("UPDATE plan_slots SET status = 'posted' WHERE id = ? AND status = 'approved'").run(slotId);
+      this.db.prepare("UPDATE plan_slots SET status = 'posted', updated_at = ? WHERE id = ? AND status = 'approved'").run(new Date().toISOString(), slotId);
     } catch {
       /* 칸 표의 모양이 다르면 칸 상태는 계획 화면에서 고친다 */
     }

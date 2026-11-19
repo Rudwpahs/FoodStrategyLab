@@ -21,7 +21,7 @@ const TYPE_LABELS: Record<Scene['type'], string> = {
   tip: '한 줄 팁',
   outro: '엔딩',
 };
-const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', 'ai-story': 'AI 이야기', edit: '직접 수정' } as const;
+const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', 'ai-story': 'AI 이야기', 'ai-revise': 'AI 수정', edit: '직접 수정' } as const;
 
 export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reload }) => {
   const { run } = useApp();

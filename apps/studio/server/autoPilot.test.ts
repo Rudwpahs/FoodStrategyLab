@@ -318,16 +318,17 @@ describe('예약 게시', () => {
     expect(meta.published).toBe(before);
   });
 
-  it('주간 계획 표(plan_slots)가 없으면 빈 목록, 생기면 승인된 칸을 한 번만 올리고 칸을 posted로 바꾼다', async () => {
+  it('주간 계획의 승인된 칸을 시각이 되면 한 번만 올리고 칸을 posted로 바꾼다', async () => {
     expect(auto.dueSlots(inMin(60))).toEqual([]);
-    repo.db.exec(`CREATE TABLE plan_slots (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, at TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN ('planned','waiting','approved','change-requested','posted','skipped')))`);
     const { pid } = await approvedProject(4);
-    const { pid: waitingPid } = await approvedProject(5);
+    // 승인 전 콘텐츠 (칸 상태를 맞추면 'waiting'·'planned'로 남는다)
+    const waitingPid = Number((await call('POST', '/projects', { recipe: SAMPLE_RECIPES[5 % SAMPLE_RECIPES.length] })).json.id);
+    await call('POST', `/projects/${waitingPid}/script/template`);
     // 시각은 한국 시각(+09:00)으로 적혀 있다
     const kstAt = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().replace('Z', '+09:00');
-    const slot = Number(repo.db.prepare("INSERT INTO plan_slots (project_id, at, status) VALUES (?, ?, 'approved')").run(pid, kstAt(inMin(1))).lastInsertRowid);
-    repo.db.prepare("INSERT INTO plan_slots (project_id, at, status) VALUES (?, ?, 'waiting')").run(waitingPid, kstAt(inMin(1)));
+    const t = new Date().toISOString();
+    const slot = Number(repo.db.prepare("INSERT INTO plan_slots (project_id, at, status, created_at, updated_at) VALUES (?, ?, 'approved', ?, ?)").run(pid, kstAt(inMin(1)), t, t).lastInsertRowid);
+    repo.db.prepare("INSERT INTO plan_slots (project_id, at, status, created_at, updated_at) VALUES (?, ?, 'waiting', ?, ?)").run(waitingPid, kstAt(inMin(1)), t, t);
     expect(auto.dueSlots(inMin(2)).map((s) => s.id)).toEqual([slot]);
     const dry = auto.dryRun(new Date());
     expect(dry.posts.find((x) => x.projectId === waitingPid)?.verdict).toBe('blocked');
