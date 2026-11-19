@@ -32,6 +32,9 @@ describe('AI 이야기 대본', () => {
     expect(sys).toContain('2·30대 젊은 주부');
     expect(sys).toContain('4·50대 요리 취미');
     expect(sys).toContain('두 시청자가 모두');
+    // 개수 말(한 장·한 알)로 대본이 버려지지 않게, 4050 대본에는 조리기능장 시선 훅을
+    expect(sys).toContain('한 장·한 알');
+    expect(sys).toContain('조리기능장의 방법·정석');
     expect(sys).toContain(BRAND.labName);
     for (const p of STORY_BANNED_PHRASES) expect(sys).toContain(p.trim());
     const user = storyUser(walnut, { count: 3, avoidTitles: ['예전 제목'] });
