@@ -151,8 +151,12 @@ export async function engineInfo(url: string): Promise<EngineInfo> {
 
 /** 맛조수 목소리 설계: 밝고 높은 톤의 귀여운 젊은 목소리 */
 export const MASCOT_VOICE_DESCRIPTION = 'A cute, bright young female voice, cheerful and energetic, slightly high pitch, friendly cartoon assistant';
-/** 기준 녹음에 쓰는 문장 (프로필에 대본으로 함께 저장) */
-export const MASCOT_REFERENCE_TEXT = '이희재의 맛 연구소에서 오늘도 실험! 오늘의 질문, 호두정과는 왜 데쳤다가 튀길까요?';
+/**
+ * 기준 녹음에 쓰는 문장 (프로필에 대본으로 함께 저장).
+ * 평서문으로 끝난다: 목소리 엔진이 기준 녹음에 '이어 말하기'로 대사를 만들어 녹음의 끝 억양을 따라가므로,
+ * 예전처럼 질문("…튀길까요?")으로 끝나면 평서문 끝도 올라갔다 (docs/research/content-strategy/prosody-sync-2026-11.md 9장)
+ */
+export const MASCOT_REFERENCE_TEXT = '맛 연구소에 오신 걸 환영해요. 오늘도 맛있는 요리 비밀을 차근차근 알려 드릴게요.';
 
 /**
  * 맛조수 목소리 만들기.
