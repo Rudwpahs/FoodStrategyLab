@@ -111,7 +111,7 @@ describe('VoiceStudio 음성', () => {
     const a = await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     expect(a.seconds).toBeCloseTo(1.2, 5);
     // 비상업 OmniVoice가 활성이어도 상업 이용 가능한 VoxCPM2로 요청한다
-    expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: preset.voiceName, language: 'ko', response_format: 'mp3', input: '이히재에 맛 연구소에서 오늘도 실험!' }); // 목소리에는 발음을 고친 글자를 보낸다 (pronounce)
+    expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: preset.voiceName, language: 'ko', response_format: 'mp3', input: '이 희재의 맛 연구소에서 오늘도 실험!' }); // 목소리에는 발음을 고친 글자를 보낸다 (pronounce)
   });
 
   it('말투 지시문(VOICESTUDIO_INSTRUCT)은 기본으로 보내지 않고, 넣으면 요청에 담아 다른 음성 캐시로 만든다', async () => {
@@ -386,12 +386,10 @@ describe('말 빠르기 바꾸기 (ffmpeg)', () => {
 });
 
 describe('발음 고치기', () => {
-  it('"이희재의"를 소리 나는 대로 바꾸고 어절 수는 그대로 둔다', async () => {
+  it('"이희재의"는 성 뒤를 띄워 목소리에 보낸다 (자막 어절 맞추기는 alignSpokenWords가 어절마다 붙여서 한다)', async () => {
     const { pronounce } = await import('./tts.ts');
     const line = '이희재의 맛 연구소였어요. 희재 선생님 노트!';
-    const said = pronounce(line);
-    expect(said).toBe('이히재에 맛 연구소였어요. 히재 선생님 노트!');
-    expect(said.split(/\s+/).length).toBe(line.split(/\s+/).length);
+    expect(pronounce(line)).toBe('이 희재의 맛 연구소였어요. 희재 선생님 노트!');
     expect(pronounce('호두정과')).toBe('호두정과');
   });
   it('숫자·단위와 겹받침 ㄼ도 읽는 말로 바꾸고, 음성 파일 이름도 읽는 말을 따른다', async () => {
