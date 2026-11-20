@@ -8,6 +8,7 @@
  *   E2E_DISH=요리 이름  예시 레시피 고르기 (기본 호두정과)
  *   E2E_AUDIENCE=대상  ai-story에서 이 시청 대상(young-home | hobby-learner) 대본을 먼저 고른다
  *   E2E_TYPE=형식      ai-story에서 이 형식(why·one-fix·standard·quick·occasion 등) 대본을 먼저 고른다 (여러 편이 같은 형식이 되지 않게)
+ *   E2E_STORY=JSON     ai-story에서 이미 고른 대본(tools/content-lab/pick-stories.ts의 picks.json 한 칸)으로 만든다 (Claude를 다시 부르지 않음)
  *   E2E_STYLE=연출     후보 영상과 같은 연출 대본으로 (예: before-after — 효과음이 들어간다). 없으면 기본 템플릿 대본
  *                     ai-story면 실제 Claude로 이야기 대본 3개를 받아 원본 대조를 통과한 첫 번째로 만든다 (ANTHROPIC_API_KEY 필요, 약 $0.1~0.3)
  */
@@ -27,6 +28,7 @@ process.env.TTS_PROVIDER ??= 'none';
 const { startServer } = await import('../server/index.ts');
 const { startRender } = await import('../server/pipeline.ts');
 const { SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, finalizeStory, generateTemplateScript, storyBlocked } = await import('@mat-lab/recipe-core');
+const { pickStory } = await import('./pickStory.ts');
 const { StoryWriter } = await import('../server/storyWriter.ts');
 
 const fails: string[] = [];
@@ -45,7 +47,12 @@ try {
   const pid = repo.createProject(recipe);
   const style = process.env.E2E_STYLE || '';
   if (style && style !== 'ai-story' && !(STYLE_IDS as readonly string[]).includes(style)) throw new Error(`연출 "${style}"가 없어요 (ai-story, ${STYLE_IDS.join(', ')})`);
-  if (style === 'ai-story') {
+  if (style === 'ai-story' && process.env.E2E_STORY) {
+    // 차례로 써서 미리 고른 대본 (여러 편이 서로를 알고 쓰였다). 원본 대조는 여기서 다시 확인한다
+    const given = JSON.parse(process.env.E2E_STORY) as NonNullable<ReturnType<typeof pickStory>>;
+    check(!storyBlocked(given), `미리 고른 이야기 대본이 원본 대조를 통과 (${given.script.title})`);
+    repo.addScriptVersion(pid, given.script, 'ai-story', `E2E 실제 렌더 (AI 이야기: ${given.script.title})`);
+  } else if (style === 'ai-story') {
     // 실제 Claude로 이야기 대본 3개를 받아, 원본 대조를 통과한 첫 번째로 만든다
     const { drafts, costUsd } = await new StoryWriter(repo.db).write(recipe);
     const stories = drafts.map((d, i) => finalizeStory(recipe, d, `story-${i + 1}`));
@@ -53,15 +60,8 @@ try {
       if ('error' in st) console.log(`  · 버린 이야기: ${st.error}`);
       else console.log(`  · [${st.storyType}] ${st.script.title}${storyBlocked(st) ? ' (원본과 달라 막힘)' : ''}${st.warnings.length ? ` / 확인: ${st.warnings.join(', ')}` : ''}\n${st.script.scenes.map((sc) => `      ${sc.place ?? '-'} | ${sc.line}`).join('\n')}`);
     }
-    const usable = stories.filter((st): st is Exclude<typeof st, { error: string }> => !('error' in st) && !storyBlocked(st));
-    // E2E_AUDIENCE가 있으면 그 시청 대상을 노린 대본을 먼저 고른다 (여러 편을 만들어 대상별로 비교하려고)
-    const want = process.env.E2E_AUDIENCE;
-    const wantType = process.env.E2E_TYPE;
-    const pick =
-      (want && wantType ? usable.find((st) => st.audience === want && st.storyType === wantType) : undefined) ??
-      (wantType ? usable.find((st) => st.storyType === wantType) : undefined) ??
-      (want ? usable.find((st) => st.audience === want) : undefined) ??
-      usable[0];
+    // E2E_AUDIENCE·E2E_TYPE이 있으면 그 시청 대상·형식 대본을 먼저 고른다 (여러 편을 만들어 비교하려고)
+    const pick = pickStory(stories, process.env.E2E_AUDIENCE, process.env.E2E_TYPE);
     check(Boolean(pick), `원본 대조를 통과한 이야기 대본 (${stories.length}개 중, 약 $${costUsd.toFixed(2)})`);
     if (process.env.E2E_OUT) {
       fs.mkdirSync(process.env.E2E_OUT, { recursive: true });

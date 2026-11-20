@@ -194,6 +194,8 @@ describe('AI 이야기 대본', () => {
     ];
     expect(overusedTypes(recent)).toContain('one-fix');
     expect(overusedTypes([{ storyType: 'why', title: 'a', firstLine: 'a' }])).not.toContain('one-fix');
+    // 직전 영상과 같은 형식은 이번에 피한다 (견본 4편 중 3편이 '이 단계는 왜?')
+    expect(overusedTypes([{ storyType: 'why', title: 'a', firstLine: 'a' }])).toEqual(['why']);
   });
 
   it('재료 장면이 없으면 버린다', () => {
@@ -238,5 +240,8 @@ describe('대본끼리 되풀이된 표현 (2026-11-20 견본 4편 모두 "선�
   it('출처 문장을 매번 같은 틀로 쓰지 말라고 시스템 지시에 적혀 있다', () => {
     expect(storySystem()).toContain('매번 같은 틀("선생님 노트를 보면")을 쓰지 말고');
     expect(storySystem()).toContain('첫 대사의 첫 어절도 대본끼리 겹치지 않게');
+    // 따옴표 예시는 그대로 베껴져 새 클리셰가 됐다 ("노트에 적힌 이유는" 3/4편): 예시 문장 대신 설명만
+    expect(storySystem()).not.toContain('노트에 적힌 이유는');
+    expect(storySystem()).not.toContain('"조리기능장은 이 단계를');
   });
 });

@@ -404,7 +404,7 @@ def web() -> None:
 # 실행: GitHub Actions의 'Render sample video' (수동) → modal run deploy/modal/app.py::sample --dish 호두정과
 # 이야기 대본(style="ai-story")은 Claude를 부르므로 운영과 같은 비밀값(matlab-studio의 ANTHROPIC_API_KEY)을 붙인다
 @app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
-def render_sample(dish: str = "호두정과", style: str = "", audience: str = "", story_type: str = "") -> dict:
+def render_sample(dish: str = "호두정과", style: str = "", audience: str = "", story_type: str = "", story: str = "") -> dict:
     import sys
     import tempfile
 
@@ -423,7 +423,7 @@ def render_sample(dish: str = "호두정과", style: str = "", audience: str = "
     # 데이터 폴더는 render.e2e.ts가 임시 폴더로 정한다. 운영용 DB 위치·깨워 두기·공개 주소는 쓰지 않는다
     for k in ("MATLAB_DB_FILE", "KEEPALIVE", "PUBLIC_URL"):
         env.pop(k, None)
-    env.update({"HOST": "127.0.0.1", "PORT": "5198", "E2E_OUT": out, "E2E_EXPECT_VOICE": "1", "E2E_DISH": dish, "E2E_STYLE": style, "E2E_AUDIENCE": audience, "E2E_TYPE": story_type})
+    env.update({"HOST": "127.0.0.1", "PORT": "5198", "E2E_OUT": out, "E2E_EXPECT_VOICE": "1", "E2E_DISH": dish, "E2E_STYLE": style, "E2E_AUDIENCE": audience, "E2E_TYPE": story_type, "E2E_STORY": story})
     code = subprocess.run([TSX, "apps/studio/e2e/render.e2e.ts"], cwd="/app", env=env).returncode
     files = {p.name: p.read_bytes() for p in Path(out).iterdir() if p.is_file()}
     return {"code": code, "files": files}
@@ -437,8 +437,22 @@ def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample")
         name, _, rest = part.partition(":")
         audience, _, story_type = rest.partition(":")
         jobs.append((name.strip(), style, audience.strip(), story_type.strip()))
-    results = list(render_sample.starmap(jobs, return_exceptions=True))
     failed = []
+    stories = [""] * len(jobs)
+    if style == "ai-story" and len(jobs) > 1:
+        # 이야기 대본은 실제 스튜디오처럼 차례로 쓴다 (앞 영상의 대본을 '최근 대본'으로 넘겨 같은 말·형식이 되풀이되지 않게).
+        # 따로따로 동시에 쓰면 서로를 몰라 4편 중 3편이 같은 출처 문장·형식이었다 (2026-11-20). 렌더는 그 뒤에 동시에 한다
+        written = write_stories.remote(json.dumps([{"dish": n, "audience": a, "type": t} for n, _, a, t in jobs], ensure_ascii=False))
+        for name, data in written["files"].items():
+            target = Path(out) / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        picks = json.loads(written["files"].get("picks.json", b"[]") or b"[]")
+        for i, pick in enumerate(picks[: len(jobs)]):
+            stories[i] = json.dumps(pick, ensure_ascii=False) if pick else ""
+        if written["code"] != 0:
+            failed.append(f"대본 쓰기: 원본 대조를 통과한 대본이 없는 요리가 있어요 ({out}/picks.json)")
+    results = list(render_sample.starmap([(*job, story) for job, story in zip(jobs, stories)], return_exceptions=True))
     for i, ((name, _, audience, _t), result) in enumerate(zip(jobs, results), start=1):
         folder = Path(out) if len(jobs) == 1 else Path(out) / f"{i:02d}-{name.replace(' ', '_')}"
         folder.mkdir(parents=True, exist_ok=True)
@@ -453,6 +467,21 @@ def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample")
             failed.append(f"{name}: 확인 실패 (코드 {result['code']}, {folder}/summary.json)")
     if failed:
         raise SystemExit("견본 영상 확인에서 실패한 항목이 있어요: " + " / ".join(failed))
+
+
+# 견본 여러 편의 이야기 대본을 차례로 쓰고 고른다 (tools/content-lab/pick-stories.ts). sample이 렌더 전에 부른다
+@app.function(image=web_image, cpu=2.0, memory=4096, timeout=1800, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
+def write_stories(jobs_json: str = "[]") -> dict:
+    import tempfile
+
+    out = tempfile.mkdtemp(prefix="picks-")
+    env = _studio_env(None, "pick-stories")
+    for k in ("MATLAB_DB_FILE", "KEEPALIVE", "PUBLIC_URL"):
+        env.pop(k, None)
+    env.update({"OUT": out, "JOBS": jobs_json, "MATLAB_DATA_DIR": tempfile.mkdtemp(prefix="pick-data-")})
+    code = subprocess.run([TSX, "tools/content-lab/pick-stories.ts"], cwd="/app", env=env).returncode
+    files = {str(p.relative_to(out)): p.read_bytes() for p in Path(out).rglob("*") if p.is_file()}
+    return {"code": code, "files": files}
 
 
 # 이야기 대본만 여러 요리로 차례로 쓴다 (영상 없음). 계정 전체 다양성을 재려고 (tools/content-lab/story-batch.ts)

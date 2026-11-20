@@ -1,0 +1,47 @@
+/**
+ * 견본 영상 여러 편의 이야기 대본을 실제 스튜디오처럼 차례로 쓰고 고른다 (실제 Claude 호출 — ANTHROPIC_API_KEY 필요, 요리당 약 $0.1~0.3).
+ * 앞 요리에서 쓴 대본을 '계정의 최근 대본'으로 넘기므로, 같은 출처 문장·첫 어절·형식이 영상마다 되풀이되지 않는지 볼 수 있다
+ * (따로따로 동시에 쓰면 서로를 몰라 4편 중 3편이 같은 말로 시작했다: 2026-11-20 견본).
+ * 실행: OUT=폴더 JOBS='[{"dish":"호두정과","audience":"hobby-learner","type":"why"}]' npx tsx tools/content-lab/pick-stories.ts
+ * 결과: 폴더/번호-요리/stories.json (쓴 대본 전부) + 폴더/picks.json (요리마다 고른 대본, 렌더에 넘긴다)
+ */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+process.env.MATLAB_DATA_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'pick-stories-'));
+const { SAMPLE_RECIPES, finalizeStory } = await import('@mat-lab/recipe-core');
+const { openDb } = await import('../../apps/studio/server/db.ts');
+const { StoryWriter } = await import('../../apps/studio/server/storyWriter.ts');
+const { pickStory } = await import('../../apps/studio/e2e/pickStory.ts');
+
+interface Job {
+  dish: string;
+  audience?: string;
+  type?: string;
+}
+const out = process.env.OUT || 'out-picks';
+const jobs = JSON.parse(process.env.JOBS || '[]') as Job[];
+if (!jobs.length) throw new Error('JOBS가 비었어요');
+const writer = new StoryWriter(openDb(':memory:'));
+const recent: { storyType: string; title: string; firstLine: string; lines: string[] }[] = [];
+const picks: unknown[] = [];
+let total = 0;
+for (const [i, job] of jobs.entries()) {
+  const recipe = SAMPLE_RECIPES.find((r) => r.dishName === job.dish);
+  if (!recipe) throw new Error(`예시 레시피에 "${job.dish}"가 없어요`);
+  const dir = path.join(out, `${String(i + 1).padStart(2, '0')}-${job.dish.replace(/\s/g, '_')}`);
+  fs.mkdirSync(dir, { recursive: true });
+  const { drafts, costUsd } = await writer.write(recipe, { recent: recent.slice(0, 12) });
+  total += costUsd;
+  const stories = drafts.map((d, k) => finalizeStory(recipe, d, `story-${k + 1}`));
+  fs.writeFileSync(path.join(dir, 'stories.json'), JSON.stringify(stories, null, 2));
+  const pick = pickStory(stories, job.audience, job.type);
+  picks.push(pick ?? null);
+  // 스튜디오처럼 쓴 대본 전부가 다음 요리의 '최근 대본'이 된다
+  for (const d of drafts) recent.unshift({ storyType: d.storyType, title: d.title, firstLine: d.scenes[0]?.line ?? '', lines: d.scenes.map((sc) => sc.line) });
+  console.log(`${pick ? '✓' : '✘'} ${job.dish}: ${pick ? `[${pick.storyType}/${pick.audience}] ${pick.script.title}` : '원본 대조를 통과한 대본 없음'} ($${costUsd.toFixed(2)})`);
+}
+fs.writeFileSync(path.join(out, 'picks.json'), JSON.stringify(picks, null, 2));
+console.log(`합계 약 $${total.toFixed(2)}`);
+process.exit(picks.every(Boolean) ? 0 : 1);
