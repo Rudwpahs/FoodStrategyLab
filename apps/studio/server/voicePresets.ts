@@ -24,7 +24,7 @@ interface ManifestEntry {
 }
 
 export interface VoicePreset extends ManifestEntry {
-  /** VoiceStudio 목소리 프로필 이름 (예: 맛조수-6f2213) */
+  /** VoiceStudio 목소리 프로필 이름 (이름-기준 녹음 sha1 앞 6자, 예: 맛조수-6f2213). 기준 녹음이 바뀌면 이름이 바뀌어 프로필·음성 캐시를 새로 만든다 */
   voiceName: string;
   wav: Buffer;
 }
@@ -55,7 +55,12 @@ export function presetVoiceName(name: string, wav: Buffer): string {
 }
 
 export const presetById = (id: string) => voicePresets().find((p) => p.id === id) ?? null;
-export const presetByVoiceName = (voiceName: string) => voicePresets().find((p) => p.voiceName === voiceName) ?? null;
+/**
+ * 목소리 프로필 이름 → 목소리. 기준 녹음을 바꾸면 이름 뒤 지문(6자)이 바뀌므로,
+ * 예전 지문으로 저장된 선택(설정 파일의 '맛조수-6f2213' 등)도 같은 목소리(이름 앞부분)로 찾아 계속 쓴다.
+ */
+export const presetByVoiceName = (voiceName: string) =>
+  voicePresets().find((p) => p.voiceName === voiceName) ?? voicePresets().find((p) => voiceName.replace(/-[0-9a-f]{6}$/, '') === p.name && /-[0-9a-f]{6}$/.test(voiceName)) ?? null;
 
 /** 기본 목소리 (목록의 첫 번째: 맛조수) */
 export const defaultPreset = () => voicePresets()[0] ?? null;

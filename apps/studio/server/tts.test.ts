@@ -183,6 +183,28 @@ describe('VoiceStudio 음성', () => {
     expect(requests.at(-1)).toMatchObject({ voice: preset.voiceName, input: '맛조수 목소리 시험' });
   });
 
+  it('기준 녹음 문장은 평서문으로 끝난다 (이어 말하기가 녹음 끝 억양을 따라가므로 질문으로 끝나면 대사 끝도 올라간다)', () => {
+    expect(voicePresets()).toHaveLength(6);
+    for (const p of voicePresets()) {
+      expect(p.refText.trim()).toMatch(/[요다]\.$/);
+      expect(p.refText).not.toContain('?');
+    }
+  });
+
+  it('기준 녹음을 바꾼 뒤에도 예전 지문으로 저장된 선택은 같은 목소리(새 기준 녹음)로 이어진다', async () => {
+    const other = voicePresets()[2]!;
+    // 예전 기준 녹음으로 만든 이름 (지문만 다름)
+    writeVoiceSettings({ voicestudioVoice: `${other.name}-000000` });
+    expect(voicestudioVoice()).toBe(other.voiceName);
+    const identity = await voiceIdentity('voicestudio');
+    expect(identity).toContain(other.voiceName);
+    expect(identity).not.toContain(`${other.name}-000000`);
+    // 지문 꼴이 아닌 이름은 여전히 받지 않는다
+    writeVoiceSettings({ voicestudioVoice: `${other.name}x` });
+    expect(voicestudioVoice()).toBe(preset.voiceName);
+    writeVoiceSettings({ voicestudioVoice: preset.voiceName });
+  });
+
   it('같은 이름으로 목소리를 다시 만들면 예전 음성을 다시 쓰지 않는다', async () => {
     await synthesize('다시 만든 목소리 시험', audioDir);
     const before = requests.length;

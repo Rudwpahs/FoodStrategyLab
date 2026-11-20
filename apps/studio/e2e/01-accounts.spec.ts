@@ -101,6 +101,7 @@ test('A4 화면: 도우미가 검수 화면에서 승인을 누르면 거절 문
   await login(page.request, HELPER);
   const { id } = await projectWithRender(page.request);
   await page.goto(`/#/p/${id}/review`);
+  await expect(page.locator('label.check input').first()).toBeVisible();
   for (const box of await page.locator('label.check input').all()) await box.check();
   await page.locator('button.primary', { hasText: '승인' }).click();
   await expect(page.locator('.toast.error')).toContainText('연구자 계정만');

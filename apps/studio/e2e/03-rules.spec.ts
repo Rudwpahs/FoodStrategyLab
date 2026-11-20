@@ -58,6 +58,7 @@ test('C4 품질 검사에서 대사 잘림이 나온 영상은 확인창을 거�
   expect(done.qa.issues.map((i: { code: string }) => i.code)).toContain('cut');
   await page.goto(`/#/p/${id}/review`);
   await expect(page.getByText('장면 2 대사 끝이 잘렸어요').first()).toBeVisible();
+  await expect(page.locator('label.check input').first()).toBeVisible();
   for (const box of await page.locator('label.check input').all()) await box.check();
   // 확인창에서 '취소'를 누르면 승인되지 않는다
   page.once('dialog', (d) => d.dismiss());

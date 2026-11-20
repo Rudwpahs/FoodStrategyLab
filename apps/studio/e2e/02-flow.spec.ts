@@ -99,6 +99,7 @@ test('B5 승인 전에는 내보내기·게시 기록이 막힌다 (원칙 2)', 
 test('B6 검수 체크 → 승인 → ZIP: 연구자 검토 문구와 원본 재료·분량', async ({ page }) => {
   await page.goto(`/#/p/${id}/review`);
   await noOverflow(page, '검수');
+  await expect(page.locator('label.check input').first()).toBeVisible();
   for (const box of await page.locator('label.check input').all()) await box.check();
   await page.locator('button.primary', { hasText: '승인' }).click();
   await expect(page.locator('.toast').last()).toContainText('승인했습니다');

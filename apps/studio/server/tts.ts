@@ -35,7 +35,12 @@ export function resetTtsDetection() {
  */
 export function voicestudioVoice(): string {
   const wanted = [ttsSettings().voicestudio.voiceOverride, readVoiceSettings().voicestudioVoice];
-  return wanted.find((v) => v && presetByVoiceName(v)) ?? defaultPreset()?.voiceName ?? 'default';
+  // 예전 기준 녹음의 이름으로 저장된 선택도 지금 기준 녹음의 이름으로 바꿔 쓴다 (프로필·캐시는 새 녹음으로)
+  for (const v of wanted) {
+    const p = v ? presetByVoiceName(v) : null;
+    if (p) return p.voiceName;
+  }
+  return defaultPreset()?.voiceName ?? 'default';
 }
 
 /** 말 빠르기 배수 (설정 화면에서 고름, 1 = 보통) */
