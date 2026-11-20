@@ -133,10 +133,12 @@ describe('VoiceStudio 음성', () => {
     }
   });
 
-  it('받아쓰기로 어절별 실제 시간을 잰다 (어절 수가 맞을 때만)', async () => {
+  it('받아쓰기로 어절별 실제 시간을 잰다 (어절 수가 달라도 글자를 맞춰서, 많이 다르면 쓰지 않음)', async () => {
     const a = await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     const words = await measuredWords(a.file, '이희재의 맛 연구소에서 오늘도 실험!');
     expect(words).toEqual([[0.1, 0.5], [0.5, 0.7], [0.7, 1.2], [1.2, 1.5], [1.5, 1.9]]);
+    // 자막은 붙여 썼는데 받아쓰기는 나눠 적은 경우: 받아쓴 두 어절이 자막 한 어절이 된다
+    expect(await measuredWords(a.file, '이희재의 맛연구소에서 오늘도 실험!')).toEqual([[0.1, 0.5], [0.5, 1.2], [1.2, 1.5], [1.5, 1.9]]);
     const b = await synthesize('다른 문장', audioDir);
     expect(await measuredWords(b.file, '다른 문장')).toBeUndefined();
   });
@@ -350,5 +352,10 @@ describe('발음 고치기', () => {
     expect(said).toBe('이히재에 맛 연구소였어요. 히재 선생님 노트!');
     expect(said.split(/\s+/).length).toBe(line.split(/\s+/).length);
     expect(pronounce('호두정과')).toBe('호두정과');
+  });
+  it('숫자·단위와 겹받침 ㄼ도 읽는 말로 바꾸고, 음성 파일 이름도 읽는 말을 따른다', async () => {
+    const { pronounce } = await import('./tts.ts');
+    expect(pronounce('설탕 1컵, 물엿 1/2컵, 3~4분')).toBe('설탕 한 컵, 물엿 반 컵, 삼사 분');
+    expect(pronounce('떫은맛이 줄어요')).toBe('떨븐맛이 줄어요');
   });
 });

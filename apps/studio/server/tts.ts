@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { alignWordTimes, speakable, type HeardWord } from '@mat-lab/recipe-core';
 import { changeTempo, readFreshCache, removeAudioCaches, writeCache } from '@mat-lab/video/audio';
 import { ttsSettings } from './config.ts';
 import { VOICE_TEMPOS, defaultPreset, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
@@ -197,7 +198,8 @@ export function postSlow(target: string, body: string, headers: Record<string, s
 /** 음성 받아쓰기 결과 (VoiceStudio의 Whisper 계열) */
 export interface Transcript {
   text: string;
-  words: { start: number; end: number }[];
+  /** text: 받아쓴 어절 (예전 캐시에는 없다) */
+  words: { start: number; end: number; text?: string }[];
 }
 
 /**
@@ -221,8 +223,8 @@ export async function transcribeAudio(file: string): Promise<Transcript | undefi
     form.append('timestamp_granularities[]', 'word');
     const res = await slowFetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} }, Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000);
     if (!res.ok) return undefined;
-    const data = (await res.json()) as { text?: string; words?: { start: number; end: number }[] };
-    const t: Transcript = { text: String(data.text ?? ''), words: (data.words ?? []).map((w) => ({ start: Number(w.start), end: Number(w.end) })) };
+    const data = (await res.json()) as { text?: string; words?: { start: number; end: number; word?: string }[] };
+    const t: Transcript = { text: String(data.text ?? ''), words: (data.words ?? []).map((w) => ({ start: Number(w.start), end: Number(w.end), text: String(w.word ?? '').trim() })) };
     writeCache(cache, file, t);
     return t;
   } catch {
@@ -233,13 +235,26 @@ export async function transcribeAudio(file: string): Promise<Transcript | undefi
 
 /**
  * 실제 음성의 어절별 시간 (받아쓰기 결과에서).
- * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다.
+ * 받아쓴 단어 수가 대사 어절 수와 같으면 그대로 쓰고, 다르면(목소리는 "1/2컵"을 "반 컵"으로 읽고,
+ * 받아쓰기는 "맛연구소"처럼 붙여 적기도 한다) 받아쓴 글자를 대사 글자에 맞춰 나눈다 (alignWordTimes).
  */
 export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
   const t = await transcribeAudio(file);
   if (!t) return undefined;
   const expected = line.trim().split(/\s+/).filter(Boolean).length;
-  return t.words.length === expected ? t.words.map((w) => [w.start, w.end]) : undefined;
+  if (t.words.length === expected) return t.words.map((w) => [w.start, w.end]);
+  if (!t.words.length || t.words.some((w) => !w.text)) return undefined;
+  return alignWordTimes(line, t.words as HeardWord[]);
+}
+
+/**
+ * 목소리 엔진에 넘길 글자 (화면 자막·대본은 그대로, 목소리에만).
+ * 숫자+단위를 읽는 말로 풀고(설탕 1컵 → 설탕 한 컵, 3~4분 → 삼사 분), 엔진이 잘못 읽은 겹받침 'ㄼ'(떫은맛)과
+ * 이름을 소리 나는 대로 바꾼다. 규칙과 근거: recipe-core speakable.ts, docs/research/content-strategy/tts-pronunciation-2026-11.md
+ * 읽는 말은 어절 수가 자막과 다를 수 있다: 자막 어절 시간은 받아쓴 글자를 대사 글자에 맞춰 정한다 (measuredWords).
+ */
+export function pronounce(text: string): string {
+  return speakable(text);
 }
 
 /**
@@ -248,19 +263,6 @@ export async function measuredWords(file: string, line: string): Promise<[number
  * regenerate: 캐시가 있어도 새로 만든다 (받아쓰기로 끊긴 음성을 찾았을 때). 다 만들 때까지 옛 파일을 그대로 두고
  *   한 번에 바꿔치기하므로, 그 파일을 읽던 다른 작업이 빈 파일이나 반쯤 쓴 파일을 보지 않는다.
  */
-/**
- * 목소리 엔진이 잘못 읽는 말을 소리 나는 대로 바꾼다 (화면 자막·대본은 그대로, 목소리에만).
- * 어절 수를 바꾸지 않는다 (받아쓰기 어절 시간을 자막 어절에 맞추므로).
- * - "이희재의"를 "이제의"처럼 '희'를 빼고 읽었다 (2026-11-18 견본 받아쓰기) → 표준 발음 [이히재에]
- */
-const PRONUNCIATION: [RegExp, string][] = [
-  [/희재의(?=[\s.,!?…]|$)/g, '히재에'],
-  [/희재/g, '히재'],
-];
-export function pronounce(text: string): string {
-  return PRONUNCIATION.reduce((t, [re, to]) => t.replace(re, to), text);
-}
-
 export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}, opts: { regenerate?: boolean } = {}): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');
