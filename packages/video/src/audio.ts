@@ -39,8 +39,10 @@ export async function decodePcm(file: string): Promise<Int16Array> {
 }
 
 export { speechBounds, type SpeechBounds } from './speech.ts';
-import { speechBounds, type SpeechBounds } from './speech.ts';
+import { speechBounds, speechPauses, type SpeechBounds } from './speech.ts';
 import { QA_STEP, rmsDb } from './qa.ts';
+import { mouthTrack } from './lipSync.ts';
+import { FPS } from './timeline.ts';
 
 /** 음성 파일의 크기·수정 시각 (옆에 저장한 분석 결과가 이 파일 것인지 확인용) */
 export function fileStamp(file: string): string {
@@ -74,7 +76,7 @@ export function removeAudioWithCache(file: string) {
 
 /** 음성 파일 옆의 분석 결과만 지운다 (음성 파일은 그대로. 새 파일로 바꿔치기하기 직전에 쓴다) */
 export function removeAudioCaches(file: string) {
-  for (const f of [`${file}.bounds3.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
+  for (const f of [`${file}.bounds3.json`, `${file}.shape1.json`, `${file}.bounds2.json`, `${file}.words.json`, `${file}.words2.json`, `${file}.asr.json`]) fs.rmSync(f, { force: true });
 }
 
 /**
@@ -89,6 +91,24 @@ export async function cachedSpeechBounds(file: string): Promise<SpeechBounds> {
   const bounds = speechBounds(await decodePcm(file));
   writeCache(meta, file, bounds);
   return bounds;
+}
+
+/** 음성 파일의 모양: 프레임별 입 벌림(lipSync.ts)과 말 사이 쉼(초, speech.ts speechPauses) */
+export interface SpeechShape {
+  fps: number;
+  mouth: string;
+  pauses: [number, number][];
+}
+
+/** 음성 파일의 입 벌림·쉼. 결과는 음성 파일 옆에 저장해 두고 다시 쓴다 (한 번 풀어서 둘 다 잰다) */
+export async function cachedSpeechShape(file: string, fps = FPS): Promise<SpeechShape> {
+  const meta = `${file}.shape1.json`;
+  const cached = readFreshCache<SpeechShape>(meta, file);
+  if (cached && cached.fps === fps) return cached;
+  const pcm = await decodePcm(file);
+  const shape: SpeechShape = { fps, mouth: mouthTrack(pcm, RATE, fps), pauses: speechPauses(pcm, RATE) };
+  writeCache(meta, file, shape);
+  return shape;
 }
 
 /** 최종 영상 음량을 -14 LUFS로 맞춘다 (화면은 다시 인코딩하지 않음) */

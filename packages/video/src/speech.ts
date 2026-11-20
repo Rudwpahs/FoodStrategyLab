@@ -33,3 +33,31 @@ export function speechBounds(pcm: Int16Array, rate = RATE, thresholdDb = SPEECH_
   if (first === -1) return { start: 0, end: total, silent: true };
   return { start: Math.max(0, first * 0.01 - 0.03), end: Math.min(total, (last + 1) * 0.01 + 0.08), silent: false };
 }
+
+/**
+ * 말소리 사이의 쉼 [시작, 끝] (초). 10ms 칸 음량이 기준보다 작은 구간이 minGap초 넘게 이어지면 쉼으로 본다.
+ * 문장·쉼표 사이의 숨 고르기를 찾아 자막 어절 시간을 다듬는 데 쓴다 (wordAlign.ts snapToSpeech).
+ */
+export function speechPauses(pcm: Int16Array, rate = RATE, minGap = 0.12, thresholdDb = SPEECH_THRESHOLD_DB): [number, number][] {
+  const win = Math.round(rate * 0.01);
+  const loud: boolean[] = [];
+  for (let i = 0; i + win <= pcm.length; i += win) {
+    let sum = 0;
+    for (let j = i; j < i + win; j++) sum += pcm[j]! * pcm[j]!;
+    loud.push(20 * Math.log10(Math.sqrt(sum / win) / 32768 + 1e-9) > thresholdDb);
+  }
+  const first = loud.indexOf(true);
+  const last = loud.lastIndexOf(true);
+  const out: [number, number][] = [];
+  if (first === -1) return out;
+  let gapStart = -1;
+  for (let w = first; w <= last; w++) {
+    if (!loud[w]) {
+      if (gapStart === -1) gapStart = w;
+    } else if (gapStart !== -1) {
+      if ((w - gapStart) * 0.01 >= minGap) out.push([gapStart * 0.01, w * 0.01]);
+      gapStart = -1;
+    }
+  }
+  return out;
+}

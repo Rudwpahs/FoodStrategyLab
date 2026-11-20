@@ -31,6 +31,11 @@ export function ttsSettings() {
       /** 목소리 프로필 이름을 강제로 지정할 때만 (보통은 스튜디오 화면에서 고른다) */
       voiceOverride: e.VOICESTUDIO_VOICE ?? '',
       speed: Number(e.VOICESTUDIO_SPEED ?? '1.05'),
+      /**
+       * 말투 지시문 (영어 권장, 예: "natural conversational tone"). 비어 있으면(기본) 기준 녹음에 '이어 말하기'로 만든다.
+       * 넣으면 VoxCPM2가 기준 녹음에서 음색만 따고 이 지시문대로 말하는 '조절 복제'로 바뀐다 (docs/research/content-strategy/prosody-sync-2026-11.md)
+       */
+      instruct: (e.VOICESTUDIO_INSTRUCT ?? '').trim(),
       apiKey: e.VOICESTUDIO_API_KEY ?? '',
     },
   };

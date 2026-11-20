@@ -121,6 +121,7 @@ GitHub 저장소 → **Actions → Deploy to Modal → Run workflow** → 브랜
 | `IG_AI_LABEL` | (켜짐) | `0`이면 인스타그램 AI 정보 라벨 요청을 끔 |
 | `PUBLIC_URL` | 자동 | 스튜디오 공개 주소. 자동으로 못 알아낼 때만 넣기 |
 | `VOICE_PARALLEL` | `3` | 후보 목소리를 동시에 만들 GPU 수(1~3). 줄이면 느려지지만 총비용은 거의 같아요 |
+| `VOICESTUDIO_INSTRUCT` | (비어 있음) | 맛조수 말투 지시문(영어). 넣으면 목소리 엔진이 기준 녹음에 '이어 말하기' 대신 음색만 따서 이 지시문대로 말해요. 모든 대사 음성을 새로 만들어요. 근거·예시 값: `docs/research/content-strategy/prosody-sync-2026-11.md` 8장 |
 
 예전에 GitHub 비밀값으로 `CLAUDE_MONTHLY_BUDGET_USD`·`CLAUDE_MODEL`을 넣어 두었다면 그 값도 계속 쓰지만, `matlab-settings`에 같은 이름이 있으면 **`matlab-settings`가 이깁니다.**
 

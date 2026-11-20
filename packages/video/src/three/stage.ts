@@ -5,6 +5,7 @@ import type { StageState } from './KitchenScene.tsx';
 import type { Vec3 } from './layout.ts';
 import { PLACE_HAS_STOVE, placePlan, videoLook } from './places.ts';
 import { beatAt, cameraAt, compareFailShot, shotPlan } from './shots.ts';
+import { mouthAt } from '../lipSync.ts';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -89,6 +90,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     camera: { pos: cam.pos as Vec3, target: cam.target as Vec3, fov: shot.fov },
     emotion: scene.emotion,
     talking: local < timing.speechFrames,
+    mouth: mouthAt(timing.mouth, local),
     action: shot.action,
     face: shot.face,
     burnerOn: shot.burnerOn,

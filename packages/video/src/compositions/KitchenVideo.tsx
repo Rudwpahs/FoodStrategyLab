@@ -20,6 +20,7 @@ import { propPositions } from '../three/layout.ts';
 import { placeTransitionAt } from '../three/places.ts';
 import { projectToScreen, sceneAt, stageAt } from '../three/stage.ts';
 import { FPS, totalFrames, type SceneTiming, type VideoProps } from '../timeline.ts';
+import { mouthAt } from '../lipSync.ts';
 
 ensureFonts();
 
@@ -155,6 +156,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
           emotion={now.scene.emotion}
           frame={frame}
           talking={now.local < now.timing.speechFrames}
+          mouth={mouthAt(now.timing.mouth, now.local)}
           enter={real.from === 0 ? 1 : spring({ frame: frame - real.from, fps: FPS, config: { damping: 13 } })}
         />
       )}
