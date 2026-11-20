@@ -40,6 +40,7 @@ const lines = [
   '',
   `- 첫 대사가 서로 다른 비율: **${pct(r.uniqueFirstLines)}**`,
   `- 같은 첫 어절 반복: ${r.repeatedOpenings.length ? r.repeatedOpenings.map((o) => `"${o.word}" ${o.count}번`).join(', ') : '없음'}`,
+  `- 대본 절반 이상에 되풀이된 표현: ${r.repeatedPhrases.length ? r.repeatedPhrases.map((x) => `"${x}"`).join(', ') : '없음'}`,
   `- 대본끼리 문장 겹침(0~1): 평균 **${r.similarity.mean}**, 최대 ${r.similarity.max} · 많이 겹치는 쌍(0.35 초과) ${r.similarity.similarPairs.length}개`,
   `- 첫 대사 길이(공백 제외): ${r.firstLineChars.min}~${r.firstLineChars.max}자, 평균 ${r.firstLineChars.mean}자`,
   `- 예전 반복 문구가 들어간 대본: ${r.bannedHits}편`,

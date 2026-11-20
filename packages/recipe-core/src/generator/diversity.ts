@@ -1,5 +1,5 @@
 import type { Script } from '../types.ts';
-import { STORY_BANNED_PHRASES, findChildishFraming } from './story.ts';
+import { STORY_BANNED_PHRASES, findChildishFraming, repeatedPhrases } from './story.ts';
 
 /**
  * 대본 여러 개가 서로 얼마나 다른지 숫자로 본다 (영상 하나로 판단하지 않으려고, 사용자 요청 2026-11-19).
@@ -22,6 +22,8 @@ export interface DiversityReport {
   uniqueFirstLines: number;
   /** 첫 어절 기준 같은 시작이 몇 번 나왔는지 (2번 이상만) */
   repeatedOpenings: { word: string; count: number }[];
+  /** 대본 절반 이상에 되풀이된 두 어절 표현 (예: "선생님 노트를") */
+  repeatedPhrases: string[];
   /** 대본 쌍의 문장 유사도: 평균·최대, 0.35 넘는 쌍 */
   similarity: { mean: number; max: number; similarPairs: { a: number; b: number; score: number }[] };
   storyTypes: Record<string, number>;
@@ -76,6 +78,11 @@ export function storyDiversity(items: DiversityItem[]): DiversityReport {
       .filter(([, n]) => n > 1)
       .map(([word, n]) => ({ word, count: n }))
       .sort((x, y) => y.count - x.count),
+    repeatedPhrases: repeatedPhrases(
+      items.map((it) => it.script.scenes.map((s) => s.line)),
+      [],
+      Math.max(2, Math.ceil(items.length / 2)),
+    ),
     similarity: {
       mean: scores.length ? round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
       max: scores.length ? Math.max(...scores) : 0,

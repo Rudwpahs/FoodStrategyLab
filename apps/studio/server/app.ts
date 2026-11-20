@@ -1043,7 +1043,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
         .flatMap((p) => repo.getStories(p.id))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 12)
-        .map((st) => ({ storyType: st.draft.storyType, title: st.draft.title, firstLine: st.draft.scenes[0]?.line ?? '' }));
+        .map((st) => ({ storyType: st.draft.storyType, title: st.draft.title, firstLine: st.draft.scenes[0]?.line ?? '', lines: st.draft.scenes.map((sc) => sc.line) }));
       // 연구자가 올린 실제 촬영 장면 수 (생성 AI 클립 '.ai.'은 빼고): 2개 이상이면 '두 방법 비교' 형식을 쓸 수 있다
       const realClips = Object.values(project.sceneMedia ?? {}).filter((m) => !/\.ai\./.test(m.url)).length;
       const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, realClips, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });

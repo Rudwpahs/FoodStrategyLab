@@ -16,7 +16,7 @@ const { StoryWriter } = await import('../../apps/studio/server/storyWriter.ts');
 const out = process.env.OUT || 'out-stories';
 const dishes = (process.env.DISHES || SAMPLE_RECIPES.map((r) => r.dishName).join(',')).split(',').map((d) => d.trim()).filter(Boolean);
 const writer = new StoryWriter(openDb(':memory:'));
-const recent: { storyType: string; title: string; firstLine: string }[] = [];
+const recent: { storyType: string; title: string; firstLine: string; lines: string[] }[] = [];
 let total = 0;
 let failed = 0;
 for (const [i, dish] of dishes.entries()) {
@@ -30,7 +30,7 @@ for (const [i, dish] of dishes.entries()) {
     const stories = drafts.map((d, k) => finalizeStory(recipe, d, `story-${k + 1}`));
     fs.writeFileSync(path.join(dir, 'stories.json'), JSON.stringify(stories, null, 2));
     fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ dish, costUsd, recentGiven: Math.min(recent.length, 12) }, null, 2));
-    for (const d of drafts) recent.unshift({ storyType: d.storyType, title: d.title, firstLine: d.scenes[0]?.line ?? '' });
+    for (const d of drafts) recent.unshift({ storyType: d.storyType, title: d.title, firstLine: d.scenes[0]?.line ?? '', lines: d.scenes.map((sc) => sc.line) });
     console.log(`✓ ${dish}: ${drafts.map((d) => `[${d.storyType}/${d.audience}] ${d.title}`).join(' | ')} ($${costUsd.toFixed(2)})`);
   } catch (e) {
     failed++;

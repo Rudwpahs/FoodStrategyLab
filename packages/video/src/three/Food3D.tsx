@@ -195,14 +195,14 @@ const Medley: React.FC<{ food: FoodProfile; cook: number; jiggle?: number; radiu
   const cookStep = Math.round(cook * 20) / 20;
   const groups = useMemo(() => layoutPieces(pieces, { radius, mound, cook: cookStep, garnish, size, amount }), [pieces, radius, mound, cookStep, garnish, size, amount]);
   const nutty = pieces[0]?.shape === 'nut';
-  // 견과를 조리는 시럽은 투명한 호박색으로 진해진다 (밝은 색이면 반사가 더해져 분홍빛 판처럼 보였다)
-  const sauceColor = nutty ? mix(mix(food.rawColor, food.cookedColor, cook), '#7A3E0C', 0.5) : mix(food.rawColor, food.cookedColor, cook);
+  const sauceColor = mix(food.rawColor, food.cookedColor, cook);
   return (
     // 볶을 때 조각이 들썩인다
     <group position={[Math.sin(jiggle) * 0.006, Math.abs(Math.sin(jiggle * 1.3)) * 0.008, Math.cos(jiggle * 0.8) * 0.005]}>
-      {sauce && (
+      {/* 견과(호두정과)는 시럽 판을 깔지 않는다: 알맹이 윤기만으로 조린 느낌을 내고, 판은 팬 가득 주황 원판처럼 보였다 (2026-11-20 견본) */}
+      {sauce && !nutty && (
         // 양념은 익을수록 넓게 퍼지고 진해진다 (처음엔 기름만 살짝)
-        <mesh geometry={sauceGeometry(7)} scale={[radius * (0.55 + 0.45 * cook), Math.max(0.004, mound * (nutty ? 0.4 : 0.8) * (0.3 + 0.7 * cook)), radius * (0.55 + 0.45 * cook)]} receiveShadow>
+        <mesh geometry={sauceGeometry(7)} scale={[radius * (0.55 + 0.45 * cook), Math.max(0.004, mound * 0.8 * (0.3 + 0.7 * cook)), radius * (0.55 + 0.45 * cook)]} receiveShadow>
           <Glossy color={sauceColor} gloss={0.35 + 0.55 * cook} rough={0.55} />
         </mesh>
       )}

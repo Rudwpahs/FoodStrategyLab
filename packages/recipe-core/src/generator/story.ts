@@ -222,7 +222,8 @@ export function storySystem(): string {
   return `너는 요리 숏폼 채널 "${BRAND.labName}"의 구성 작가야. 30~40초짜리 세로 영상 대본을 써. 시청자는 어른이야.
 
 ## 등장인물 (말투 기준)
-- ${BRAND.character}: 연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다. 시청자가 궁금해할 것을 대신 묻고, 선생님 노트를 정확히 전한다. 지식의 주인처럼 단정하지 않고 "선생님 노트를 보면"처럼 전한다.
+- ${BRAND.character}: 연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다. 시청자가 궁금해할 것을 대신 묻고, 선생님 노트를 정확히 전한다. 지식의 주인처럼 단정하지 않고 선생님의 방법으로 전한다.
+  - 출처 말하기: 원리 카드에 이미 "${BRAND.notePhrase}"가 뜨므로 대사로 출처를 말하는 건 대본 하나에 많아야 한 번. 말할 때도 매번 같은 틀("선생님 노트를 보면")을 쓰지 말고 대본마다 다르게 ("희재 선생님은 ~해요", "조리기능장 방식은 ~", "노트에 적힌 이유는 ~", 또는 출처 없이 원리만). 대본 여러 개에서 같은 출처 문장이 되풀이되면 안 돼.
   - 말투 (마케팅 연구 근거, 2026-11-19 사용자 결정 "마케팅학에 나온 대로"): 두 시청자 모두 해요체. 해요체가 합쇼체보다 호감이 높고 음성에서 차이가 더 크다(국내 광고언어 실험). 낯선 브랜드의 과한 친근체(반말·이모지)는 신뢰를 깎는다(Gretry 외 2017).
     · 반말·아기 말투(~용, ~쥬, ~했지 뭐예요)·유행어·감탄사 연발 금지. 문장마다 "~거든요"를 되풀이하지 마.
     · 조리 안내는 부드러운 권유형("~해 주세요", "~해 보세요"). "반드시 ~하세요!" 같은 단정 명령은 쓰지 마 (귀여운 캐릭터 + 단정 명령은 역효과, Chang 외 2021).
@@ -233,13 +234,13 @@ export function storySystem(): string {
 ## 시청자 (누구를 위한 영상인지 정하고 써)
 ${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENCE_INFO[a].cares}. 말투 — ${AUDIENCE_INFO[a].voice}. 훅 예 — ${AUDIENCE_INFO[a].hookIdeas}`).join('\n')}
 - 대본마다 audience를 하나 정하고, 첫 대사부터 그 사람의 관심사로 말을 걸어. 대본을 여러 개 쓰면 두 시청자가 모두 들어가야 해.
-- hobby-learner 대본이 있으면 그중 하나는 첫 대사에서 조리기능장의 방법·정석을 내세워 (예: 조리기능장이 먼저 하는 한 가지, 흔한 방법과 정석의 차이). 선생님 경험은 지어내지 말고.
+- hobby-learner 대본이 있으면 그중 하나는 첫 대사에서 조리기능장의 방법·정석을 내세워 (예: 조리기능장이 먼저 하는 한 가지, 흔한 방법과 정석의 차이). 매번 "조리기능장은 ~"으로 시작하지 말고 문장 틀을 바꿔 ("정석은 ~", "흔히 ~하지만 ~"). 선생님 경험은 지어내지 말고.
 - 훅 예시는 방향만 보여 주는 거야. 그대로 베끼지 말고 이 요리에 맞게 새로 써. "10분", "천 원" 같은 시간·가격은 원본에 있을 때만.
 
 ## 구성 규칙 (가장 중요)
 1. 대본마다 형식(storyType)을 하나 고르고 그 형식의 구성을 따라 (형식 목록은 사용자 메시지에 있어). 형식마다 장면 순서가 달라야 해. 모든 대본이 "실패 → 선생님 노트 → 해결 → 행복한 결말"이 되면 안 돼. 장면마다 beat(hook·context·point·method·close)를 적어.
 2. 첫 대사는 이 영상이 줄 정보 하나를 바로 약속해 (형식에 맞게: 질문, 두 방법, 정석 한 줄, 쓰임 상황, 계절). 공백 빼고 25자 안으로 짧게 (첫 3초에 넘길지 정해진다). 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지. 첫 장면 visual도 형식에 맞게: 완성 먼저(result), 비교(compare), 조리 클로즈업(sizzle). 실패 클로즈업(fail·fail-closeup)은 one-fix에서만.
-3. 대본끼리 형식, 첫 대사, 장면 순서, 마지막 대사가 모두 달라야 해. 같은 문장 틀을 돌려 쓰지 마. 실패에서 시작하는 대본(one-fix, 첫 장면이 mistake나 실패 화면)은 한 번에 많아야 하나.
+3. 대본끼리 형식, 첫 대사, 장면 순서, 마지막 대사가 모두 달라야 해. 같은 문장 틀을 돌려 쓰지 마. 첫 대사의 첫 어절도 대본끼리 겹치지 않게 (예: "조리기능장은 ~"으로 시작하는 첫 대사는 많아야 하나). 실패에서 시작하는 대본(one-fix, 첫 장면이 mistake나 실패 화면)은 한 번에 많아야 하나.
 4. 어른 시청자에게 유치하게 느껴지는 구도는 쓰지 마: 추리·수사·범인·사건·단서, 내기, 구출 작전·미션·출동, 맛조수 세계의 가상 인물(친구 로봇·할머니 등)과 그들의 감동 반응, 과장된 위기("큰일 났어요!"). 재미는 정보의 반전(생각과 다른 원리, 의외의 차이)에서, 따뜻함은 시청자의 실제 상황(가족 반찬·손님상·도시락)에서 나오게 해.
 5. 설명문을 읽는 말투도, 어린이 방송 말투도 아니게: 옆에서 요점을 짚어 주는 진행자처럼. 느낌표는 대본 전체에 ${MAX_EXCLAMATIONS}개 이하.
 6. 아래 말은 쓰지 마 (예전 영상에서 너무 반복됐어): ${STORY_BANNED_PHRASES.map((p) => `"${p.trim()}"`).join(', ')}. 유치하게 들리는 말도 쓰지 마: ${CHILDISH_FRAMING.map((c) => `"${c.word}"`).join(', ')}.
@@ -274,9 +275,11 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
   const types = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 대본은 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
   const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
+  const phrases = repeatedPhrases(recent.map((r) => r.lines ?? []), [recipe.dishName]);
   const account = recent.length
     ? `\n- 이 계정의 최근 대본 ${recent.length}개 (계정 전체가 같은 영상처럼 보이지 않게, 이것들과 다른 형식·첫 대사로):\n${recent.map((r) => `  - [${storyTypeLabel(r.storyType)}] ${r.title} / 첫 대사: ${r.firstLine}`).join('\n')}` +
-      (motifs.length ? `\n- 최근에 자주 나온 소재라 이번에는 쓰지 마: ${motifs.map((m) => `"${m}"`).join(', ')}` : '')
+      (motifs.length ? `\n- 최근에 자주 나온 소재라 이번에는 쓰지 마: ${motifs.map((m) => `"${m}"`).join(', ')}` : '') +
+      (phrases.length ? `\n- 최근 대본마다 되풀이된 표현이라 이번에는 쓰지 마 (비슷하게 돌려 쓰지도 마): ${phrases.map((m) => `"${m}"`).join(', ')}` : '')
     : '';
   return `아래 원본 자료로 형식이 서로 다른 대본 ${opts.count}개를 써.
 ## 고를 수 있는 형식 (storyType — 이름: 구성 / 지킬 것 / 잘 맞는 시청자)
@@ -309,6 +312,8 @@ export interface RecentStory {
   storyType: string;
   title: string;
   firstLine: string;
+  /** 대사 전체 (있으면 대본끼리 되풀이된 표현을 찾는다) */
+  lines?: string[];
 }
 
 /** 최근 대본에서 2번 넘게 쓴 형식 (견본 4편이 모두 '범인 찾기' 추리였다) */
@@ -329,6 +334,31 @@ export function repeatedMotifs(recent: RecentStory[], exclude: string[] = []): s
   }
   const skip = exclude.filter(Boolean).flatMap((e) => e.split(/[\s,?!]+/)).filter((w) => w.length >= 2);
   return [...n.entries()].filter(([w, c]) => c >= 2 && !skip.some((x) => x.includes(w) || w.includes(x))).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);
+}
+
+/**
+ * 여러 대본에 되풀이된 두 어절 표현 (예: 4편 모두 "선생님 노트를 보면"). 대본 minStories개 이상에 나온 것만.
+ * 연구소 이름(마지막 장면에 꼭 넣는 말)·요리 이름·숫자가 든 표현(원본 분량)은 뺀다.
+ */
+export function repeatedPhrases(scripts: string[][], exclude: string[] = [], minStories = 2): string[] {
+  const norm = (w: string) => w.replace(/[,.!?…~'"“”‘’()]/g, '');
+  const skip = [BRAND.labName, ...exclude].filter(Boolean).flatMap((e) => e.split(/\s+/)).filter((w) => w.length >= 2);
+  const n = new Map<string, number>();
+  for (const lines of scripts) {
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const words = line.split(/\s+/).map(norm).filter(Boolean);
+      for (let i = 0; i + 1 < words.length; i++) {
+        const a = words[i]!;
+        const b = words[i + 1]!;
+        if (/\d/.test(a + b) || skip.some((x) => a.includes(x) || b.includes(x))) continue;
+        if (a.length + b.length < 5) continue;
+        seen.add(`${a} ${b}`);
+      }
+    }
+    for (const k of seen) n.set(k, (n.get(k) ?? 0) + 1);
+  }
+  return [...n.entries()].filter(([, c]) => c >= minStories).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k]) => k);
 }
 
 const SEASON_WORDS = /제철|봄|여름|가을|겨울|명절|설날|추석|김장/;

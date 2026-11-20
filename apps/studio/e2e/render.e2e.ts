@@ -7,6 +7,7 @@
  *   E2E_EXPECT_VOICE=1 맛조수 목소리가 실제로 들어갔는지도 확인한다 (목소리 없이 만들어지면 실패)
  *   E2E_DISH=요리 이름  예시 레시피 고르기 (기본 호두정과)
  *   E2E_AUDIENCE=대상  ai-story에서 이 시청 대상(young-home | hobby-learner) 대본을 먼저 고른다
+ *   E2E_TYPE=형식      ai-story에서 이 형식(why·one-fix·standard·quick·occasion 등) 대본을 먼저 고른다 (여러 편이 같은 형식이 되지 않게)
  *   E2E_STYLE=연출     후보 영상과 같은 연출 대본으로 (예: before-after — 효과음이 들어간다). 없으면 기본 템플릿 대본
  *                     ai-story면 실제 Claude로 이야기 대본 3개를 받아 원본 대조를 통과한 첫 번째로 만든다 (ANTHROPIC_API_KEY 필요, 약 $0.1~0.3)
  */
@@ -55,7 +56,12 @@ try {
     const usable = stories.filter((st): st is Exclude<typeof st, { error: string }> => !('error' in st) && !storyBlocked(st));
     // E2E_AUDIENCE가 있으면 그 시청 대상을 노린 대본을 먼저 고른다 (여러 편을 만들어 대상별로 비교하려고)
     const want = process.env.E2E_AUDIENCE;
-    const pick = (want ? usable.find((st) => st.audience === want) : undefined) ?? usable[0];
+    const wantType = process.env.E2E_TYPE;
+    const pick =
+      (want && wantType ? usable.find((st) => st.audience === want && st.storyType === wantType) : undefined) ??
+      (wantType ? usable.find((st) => st.storyType === wantType) : undefined) ??
+      (want ? usable.find((st) => st.audience === want) : undefined) ??
+      usable[0];
     check(Boolean(pick), `원본 대조를 통과한 이야기 대본 (${stories.length}개 중, 약 $${costUsd.toFixed(2)})`);
     if (process.env.E2E_OUT) {
       fs.mkdirSync(process.env.E2E_OUT, { recursive: true });

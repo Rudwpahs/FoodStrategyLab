@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '../samples.ts';
 import { formatIngredient } from '../format.ts';
 import { BRAND } from '../brand.ts';
-import { CHILDISH_FRAMING, STORY_TYPE_INFO, findChildishFraming, overusedTypes, repeatedMotifs, storyTypeLabel, type RecentStory } from './story.ts';
+import { CHILDISH_FRAMING, STORY_TYPE_INFO, findChildishFraming, overusedTypes, repeatedMotifs, repeatedPhrases, storyTypeLabel, type RecentStory } from './story.ts';
 import { AI_STORY_STYLE, STORY_BANNED_PHRASES, StoryOutputSchema, availableStoryTypes, finalizeStory, storyBlocked, storySystem, storyUser, type StoryDraft } from './story.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
@@ -214,5 +214,29 @@ describe('AI 이야기 대본', () => {
     expect(c.warnings.join(' ')).toContain(BRAND.labName);
     expect(c.warnings.join(' ')).toContain('무대');
     expect(c.script.scenes[0]!.visual).toBeUndefined();
+  });
+});
+
+describe('대본끼리 되풀이된 표현 (2026-11-20 견본 4편 모두 "선생님 노트를 보면")', () => {
+  const scripts = [
+    ['조리기능장은 호두를 왜 먼저 데칠까요?', '희재 선생님 노트를 보면, 데치면 떫은맛이 줄어요.', '이희재의 맛 연구소에서 짚어 본 순서예요.'],
+    ['반죽을 미리 만들면 질어져요.', '희재 선생님 노트를 보면, 소금이 수분을 끌어내요.', '바삭함을 지키는 이희재의 맛 연구소 노트였어요.'],
+    ['조리기능장은 들깨가루를 마지막에 넣어요.', '물 3컵에 설탕 1컵이에요.', '물 3컵이면 충분해요.'],
+  ];
+  it('여러 대본에 나온 표현을 찾고, 연구소 이름·숫자 표현은 빼고', () => {
+    const found = repeatedPhrases(scripts);
+    expect(found).toContain('선생님 노트를');
+    expect(found).toContain('희재 선생님');
+    expect(found.some((f) => f.includes('연구소') || f.includes('이희재의'))).toBe(false);
+    expect(found.some((f) => /\d/.test(f))).toBe(false);
+  });
+  it('최근 대본의 되풀이 표현을 이번 요청에 "쓰지 마"로 알려 준다', () => {
+    const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+    const recent: RecentStory[] = scripts.map((lines, i) => ({ storyType: 'why', title: `제목 ${i}`, firstLine: lines[0]!, lines }));
+    expect(storyUser(walnut, { count: 3, recent })).toContain('"선생님 노트를"');
+  });
+  it('출처 문장을 매번 같은 틀로 쓰지 말라고 시스템 지시에 적혀 있다', () => {
+    expect(storySystem()).toContain('매번 같은 틀("선생님 노트를 보면")을 쓰지 말고');
+    expect(storySystem()).toContain('첫 대사의 첫 어절도 대본끼리 겹치지 않게');
   });
 });
