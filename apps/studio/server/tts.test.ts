@@ -372,4 +372,27 @@ describe('발음 고치기', () => {
     expect(said.split(/\s+/).length).toBe(line.split(/\s+/).length);
     expect(pronounce('호두정과')).toBe('호두정과');
   });
+  it('숫자·단위와 겹받침 ㄼ도 읽는 말로 바꾸고, 음성 파일 이름도 읽는 말을 따른다', async () => {
+    const { pronounce } = await import('./tts.ts');
+    expect(pronounce('설탕 1컵, 물엿 1/2컵, 3~4분')).toBe('설탕 한 컵, 물엿 반 컵, 삼사 분');
+    expect(pronounce('떫은맛이 줄어요')).toBe('떨븐맛이 줄어요');
+  });
+});
+
+describe('읽는 말로 받아쓴 낱말을 자막 어절에 맞추기', () => {
+  it('목소리가 "반 컵"·"한 큰술"로 읽고 받아쓰기도 그렇게 적어도, 자막 "1/2컵"·"1큰술" 어절에 시간이 붙는다', async () => {
+    const { alignSpokenWords } = await import('./tts.ts');
+    const r = alignSpokenWords('물엿 1/2컵, 꿀 1큰술', [
+      { word: '물엿', start: 0, end: 0.4 },
+      { word: '반', start: 0.45, end: 0.6 },
+      { word: '컵,', start: 0.6, end: 0.8 },
+      { word: '꿀', start: 0.9, end: 1.1 },
+      { word: '한', start: 1.15, end: 1.3 },
+      { word: '큰술', start: 1.3, end: 1.7 },
+    ])!;
+    expect(r).toHaveLength(4);
+    expect(r[1]![0]).toBeCloseTo(0.45, 2);
+    expect(r[1]![1]).toBeCloseTo(0.8, 2);
+    expect(r[3]![1]).toBeCloseTo(1.7, 2);
+  });
 });

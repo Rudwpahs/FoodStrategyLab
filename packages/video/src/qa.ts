@@ -1,4 +1,4 @@
-import { lcsLength, type Script } from '@mat-lab/recipe-core';
+import { lcsLength, speakable, type Script } from '@mat-lab/recipe-core';
 import { speechPlayback } from './speechPlayback.ts';
 import type { SceneTiming } from './timeline.ts';
 
@@ -161,6 +161,11 @@ export function auditFrames(brightness: number[], step: number): QaIssue[] {
 }
 
 const norm = (t: string) => t.replace(/[^0-9A-Za-z가-힣]/g, '');
+/**
+ * 읽는 말로 맞춘 뒤 비교한다: 대사 "설탕 1컵"은 목소리가 "설탕 한 컵"으로 읽고, 받아쓰기는 "1컵"이나 "한 컵"으로 적는다.
+ * 떫은맛처럼 소리 나는 대로 바꿔 읽힌 말도 양쪽을 같은 규칙으로 바꿔서 맞게 읽은 것을 틀렸다고 하지 않는다.
+ */
+const spoken = (t: string) => norm(speakable(t));
 
 /**
  * 한 글자만 달라도 뜻이 반대가 되는 조리 핵심어 (불 세기). 받아쓰기가 조금 틀려도 넘어가는 어절 비교(60% 일치)와 달리
@@ -177,12 +182,12 @@ const keyTerms = (text: string): string[] => norm(text).match(KEY_TERMS) ?? [];
  * - critical: 다르게 들린 조리 핵심어 (불 세기) — 받아쓰기 일치율과 상관없이 알려야 한다
  */
 export function lineMatch(expected: string, heard: string): { ratio: number; truncated: boolean; missing: string[]; critical: string[] } {
-  const e = norm(expected);
-  const h = norm(heard);
+  const e = spoken(expected);
+  const h = spoken(heard);
   if (!e) return { ratio: 1, truncated: false, missing: [], critical: [] };
   const common = lcsLength(e, h);
   const ratio = common / e.length;
-  const tail = norm(expected.trim().split(/\s+/).slice(-2).join(''));
+  const tail = spoken(expected.trim().split(/\s+/).slice(-2).join(' '));
   const truncated = h.length < e.length * 0.85 && tail.length > 0 && lcsLength(tail, h.slice(-tail.length - 4)) < tail.length * 0.5;
   const heardTerms = keyTerms(heard);
   const unheard = (term: string) => !heardTerms.includes(term);
@@ -190,7 +195,7 @@ export function lineMatch(expected: string, heard: string): { ratio: number; tru
     .trim()
     .split(/\s+/)
     .filter((w) => {
-      const n = norm(w);
+      const n = spoken(w);
       return (n.length >= 2 && lcsLength(n, h) < n.length * 0.6) || keyTerms(w).some(unheard);
     });
   const critical = [...new Set(keyTerms(expected).filter(unheard))];

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { speakable } from '@mat-lab/recipe-core';
 import { changeTempo, readFreshCache, removeAudioCaches, writeCache } from '@mat-lab/video/audio';
 import { alignWords } from '@mat-lab/video/wordAlign';
 import { ttsSettings } from './config.ts';
@@ -241,16 +242,40 @@ export async function transcribeAudio(file: string, opts: { needWords?: boolean 
 /**
  * 실제 음성의 어절별 시간 (받아쓰기 결과에서).
  * 받아쓴 낱말을 글자 단위로 대사 어절에 맞춘다 (wordAlign.ts): 띄어쓰기가 달라도("맛연구소"), 숫자 낱말에 시간이 없어도 쓴다.
+ * 목소리는 읽는 말로 말하므로("1/2컵" → "반 컵", speakable) 대사 어절과 받아쓴 낱말을 둘 다 읽는 말로 바꿔 맞춘다
+ * (대사는 어절마다 따로 바꿔 어절 수·자막 어절 대응을 그대로 둔다).
  * 낱말 글자가 없는 예전 캐시는 예전처럼 단어 수가 같을 때만 쓴다.
  */
+/** 대사(자막 글)와 받아쓴 낱말을 둘 다 읽는 말로 바꿔 맞춘다. 대사는 어절마다 따로 바꿔 자막 어절 수를 그대로 둔다 */
+export function alignSpokenWords(line: string, heard: { word: string; start: number; end: number }[]): [number, number][] | undefined {
+  const spokenLine = line
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => speakable(w).replace(/\s+/g, '') || w)
+    .join(' ');
+  return alignWords(spokenLine, heard.map((w) => ({ ...w, word: speakable(w.word) })));
+}
+
 export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
   const t = await transcribeAudio(file);
   if (!t) return undefined;
   if (t.words.length && t.words.every((w) => typeof w.word === 'string')) {
-    return alignWords(line, t.words.map((w) => ({ word: w.word!, start: w.start, end: w.end })));
+    return alignSpokenWords(line, t.words.map((w) => ({ word: w.word!, start: w.start, end: w.end })));
   }
   const expected = line.trim().split(/\s+/).filter(Boolean).length;
-  return t.words.length === expected ? t.words.map((w) => [w.start, w.end]) : undefined;
+  if (t.words.length === expected) return t.words.map((w) => [w.start, w.end]);
+  return undefined;
+}
+
+/**
+ * 목소리 엔진에 넘길 글자 (화면 자막·대본은 그대로, 목소리에만).
+ * 숫자+단위를 읽는 말로 풀고(설탕 1컵 → 설탕 한 컵, 3~4분 → 삼사 분), 엔진이 잘못 읽은 겹받침 'ㄼ'(떫은맛)과
+ * 이름을 소리 나는 대로 바꾼다. 규칙과 근거: recipe-core speakable.ts, docs/research/content-strategy/tts-pronunciation-2026-11.md
+ * 읽는 말은 어절 수가 자막과 다를 수 있다: 자막 어절 시간은 받아쓴 글자를 대사 글자에 맞춰 정한다 (measuredWords).
+ */
+export function pronounce(text: string): string {
+  return speakable(text);
 }
 
 /**
@@ -259,19 +284,6 @@ export async function measuredWords(file: string, line: string): Promise<[number
  * regenerate: 캐시가 있어도 새로 만든다 (받아쓰기로 끊긴 음성을 찾았을 때). 다 만들 때까지 옛 파일을 그대로 두고
  *   한 번에 바꿔치기하므로, 그 파일을 읽던 다른 작업이 빈 파일이나 반쯤 쓴 파일을 보지 않는다.
  */
-/**
- * 목소리 엔진이 잘못 읽는 말을 소리 나는 대로 바꾼다 (화면 자막·대본은 그대로, 목소리에만).
- * 어절 수를 바꾸지 않는다 (받아쓰기 어절 시간을 자막 어절에 맞추므로).
- * - "이희재의"를 "이제의"처럼 '희'를 빼고 읽었다 (2026-11-18 견본 받아쓰기) → 표준 발음 [이히재에]
- */
-const PRONUNCIATION: [RegExp, string][] = [
-  [/희재의(?=[\s.,!?…]|$)/g, '히재에'],
-  [/희재/g, '히재'],
-];
-export function pronounce(text: string): string {
-  return PRONUNCIATION.reduce((t, [re, to]) => t.replace(re, to), text);
-}
-
 export async function synthesize(text: string, audioDir: string, override: VoiceOverride = {}, opts: { regenerate?: boolean } = {}): Promise<{ file: string; seconds: number }> {
   const provider = await ttsProvider();
   if (provider === 'none') throw new Error('사용할 수 있는 음성 도구가 없습니다.');

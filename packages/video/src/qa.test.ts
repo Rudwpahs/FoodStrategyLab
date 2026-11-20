@@ -257,6 +257,24 @@ describe('받아쓰기로 대사 대조', () => {
     expect(lineMatch('중약불로 줄여요', '약불로 줄여요').critical).toEqual(['중약불']);
     expect(lineMatch('바른 순서는 핵심 5단계', '다른 순서는 핵심 5단계').critical).toEqual([]);
   });
+  it('숫자·단위를 읽는 말로 들은 것은 맞게 읽은 것으로 본다 (한 컵 = 1컵)', () => {
+    const line = '정석대로 다시 갈게요. 호두 500g에 설탕 1컵, 물엿 1/2컵까지요.';
+    for (const heard of ['정석대로 다시 갈게요. 호두 오백 그램에 설탕 한 컵, 물엿 반 컵까지요.', '정석대로 다시 갈게요. 호두 500g에 설탕 1컵, 물엿 반컵까지요.']) {
+      const m = lineMatch(line, heard);
+      expect(m.missing, heard).toEqual([]);
+      expect(m.ratio).toBe(1);
+    }
+    // 물엿 1/2컵을 엉뚱하게 읽으면(실제 견본 받아쓰기: "1분 1컵") 일치율이 떨어진다
+    expect(lineMatch(line, '정석대로 다시 갈게요. 호두 500g의 설탕 1컵, 물렷 1분 1컵까지요.').ratio).toBeLessThan(0.95);
+    expect(lineMatch('튀김은 140도 기름에 3~4분이면 돼요.', '튀김은 백사십도 기름에 삼사 분이면 돼요.').missing).toEqual([]);
+  });
+  it('소리 나는 대로 바꿔 읽힌 말(떫은맛 → 떨븐맛)도 받아쓰기 표기와 상관없이 맞게 본다', () => {
+    const line = '호두를 데치면 떫은맛이 줄어든대요.';
+    expect(lineMatch(line, '호두를 데치면 떫은맛이 줄어든대요.').missing).toEqual([]);
+    expect(lineMatch(line, '호두를 데치면 떨븐 맛이 줄어든대요.').missing).toEqual([]);
+    // 실제 견본 받아쓰기: 엔진이 '떫'을 못 읽었을 때
+    expect(lineMatch('떫은맛 범인 검거 완료!', '같은 맛 범인검거 완료.').missing).toEqual(['떫은맛']);
+  });
   it('이름이 다르게 들리면 그 어절을 알려 준다', () => {
     const m = lineMatch('오늘의 실험 끝! 이희재의 맛 연구소였어요.', '오늘의 실험 끝! 이제의 맛연구소였어요!');
     expect(m.truncated).toBe(false);
