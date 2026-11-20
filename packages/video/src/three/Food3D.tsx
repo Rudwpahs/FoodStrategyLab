@@ -1,9 +1,15 @@
-import React, { useLayoutEffect, useMemo, useRef } from 'react';
-import { CatmullRomCurve3, Color, Object3D, Vector3, type BufferGeometry, type InstancedMesh } from 'three';
+import React, { createContext, useContext, useLayoutEffect, useMemo, useRef } from 'react';
+import { CatmullRomCurve3, Color, Object3D, Vector3, type BufferGeometry, type InstancedMesh, type Texture } from 'three';
 import type { FoodPiece, FoodProfile, IngredientProp, PieceShape } from '@mat-lab/recipe-core';
-import { Plate } from './Kitchen.tsx';
 import { BURNER } from './layout.ts';
-import { moundGeometry, pancakeGeometry, pieceGeometry, sauceGeometry, seeded } from './foodShapes.ts';
+import { moundGeometry, pancakeGeometry, pieceGeometry, plateGeometry, sauceGeometry, seeded, steamTexture, wiltedGeometry } from './foodShapes.ts';
+
+/**
+ * 음식·그릇에만 비치는 주변 반사(코드로 만든 밝은 방, KitchenScene이 넣어 준다).
+ * 윤기는 '비친 빛'이 있어야 보인다: 예전에는 반사할 주변이 없어 양념·유약이 광택 없이 칠한 색처럼 보였다.
+ * 무대(벽·가구)에는 넣지 않는다 — 화면 전체가 뿌옇게 밝아지지 않게, 그리고 그리는 비용을 음식에만 쓰게.
+ */
+export const FoodEnv = createContext<Texture | null>(null);
 
 function mix(a: string, b: string, t: number): string {
   return '#' + new Color(a).lerp(new Color(b), Math.max(0, Math.min(1, t))).getHexString();
@@ -21,10 +27,26 @@ const M: React.FC<{ color: string; rough?: number; opacity?: number; emissive?: 
   />
 );
 
-/** 윤기 있는 음식 표면 (양념·기름이 묻은 것처럼). gloss 0~1 */
-const Glossy: React.FC<{ color?: string; gloss: number; rough?: number; side?: 0 | 2 }> = ({ color = '#FFFFFF', gloss, rough = 0.62, side = 0 }) => (
-  <meshPhysicalMaterial color={color} roughness={rough - gloss * 0.3} clearcoat={gloss} clearcoatRoughness={0.28} side={side} />
-);
+/**
+ * 윤기 있는 음식 표면 (양념·기름이 묻은 것처럼). gloss 0~1.
+ * 윤기가 셀수록 겉면 막(클리어코트)이 매끈해져 반사 하이라이트가 또렷해진다. 너무 세면 기름져 보이므로 반사 세기는 절제한다.
+ */
+const Glossy: React.FC<{ color?: string; gloss: number; rough?: number; side?: 0 | 2; vertexColors?: boolean }> = ({ color = '#FFFFFF', gloss, rough = 0.62, side = 0, vertexColors = false }) => {
+  const env = useContext(FoodEnv);
+  return (
+    <meshPhysicalMaterial
+      color={color}
+      roughness={rough - gloss * 0.3}
+      // 윤기가 거의 없으면 겉 막을 끈다 (겉 막 계산은 화소마다 반사를 한 번 더 계산해 소프트웨어 렌더에서 비싸다)
+      clearcoat={gloss < 0.15 ? 0 : gloss}
+      clearcoatRoughness={0.3 - gloss * 0.22}
+      envMap={env}
+      envMapIntensity={0.35 + gloss * 0.75}
+      side={side}
+      vertexColors={vertexColors}
+    />
+  );
+};
 
 /** 건더기 조각 위치 (원판 위에 흩뿌림) */
 function useBits(count: number, radius: number, seed: number) {
@@ -72,7 +94,8 @@ const Scatter: React.FC<{ geometry: BufferGeometry; items: Inst[]; gloss?: numbe
   if (!items.length) return null;
   return (
     <instancedMesh key={`${geometry.uuid}:${items.length}`} ref={ref} args={[geometry, undefined, items.length]} castShadow={shadows} receiveShadow={shadows}>
-      <Glossy gloss={gloss} rough={rough} side={side} />
+      {/* 모양에 꼭짓점 색(틈 그늘·줄기 색)이 있으면 조각 색에 곱한다 */}
+      <Glossy gloss={gloss} rough={rough} side={side} vertexColors={geometry.hasAttribute('color')} />
     </instancedMesh>
   );
 };
@@ -94,8 +117,9 @@ const PIECE_SPEC: Record<PieceShape, { size: number; count: number; flat: boolea
 };
 
 /** 익힘 정도에 따라 살짝 갈색으로 */
-function cookedTone(color: string, cook: number): string {
-  return mix(color, '#6B3A1A', cook * 0.22);
+function cookedTone(color: string, cook: number, glazed = false): string {
+  // 조청·설탕 시럽에 조린 견과는 갈색이 아니라 투명한 호박색(앰버)으로 진해진다
+  return glazed ? mix(color, '#B0661C', cook * 0.4) : mix(color, '#6B3A1A', cook * 0.22);
 }
 
 /** 조각 색에 자연스러운 얼룩 */
@@ -140,7 +164,7 @@ function layoutPieces(pieces: FoodPiece[], o: LayoutOpts): { shape: PieceShape; 
         : [rnd() * Math.PI, rnd() * Math.PI, rnd() * Math.PI];
       const sc: V3 = [s, s, s];
       const leafFix: V3 = piece.shape === 'leaf' ? [-Math.PI / 2 + (rnd() - 0.5) * 0.6, r[1], 0] : r;
-      byVariant[i % 3]!.push({ p: [Math.cos(a) * rr, y, Math.sin(a) * rr], r: leafFix, s: sc, c: jitter(cookedTone(piece.color, o.cook), rnd()) });
+      byVariant[i % 3]!.push({ p: [Math.cos(a) * rr, y, Math.sin(a) * rr], r: leafFix, s: sc, c: jitter(cookedTone(piece.color, o.cook, piece.shape === 'nut'), rnd()) });
     }
     byVariant.forEach((items, variant) => items.length && groups.push({ shape: piece.shape, variant, items }));
   }
@@ -170,8 +194,9 @@ const Medley: React.FC<{ food: FoodProfile; cook: number; jiggle?: number; radiu
   // 익힘은 20단계로만 반영한다: 조리 장면에서 매 프레임 조각을 다시 배치하지 않게
   const cookStep = Math.round(cook * 20) / 20;
   const groups = useMemo(() => layoutPieces(pieces, { radius, mound, cook: cookStep, garnish, size, amount }), [pieces, radius, mound, cookStep, garnish, size, amount]);
-  const sauceColor = mix(food.rawColor, food.cookedColor, cook);
   const nutty = pieces[0]?.shape === 'nut';
+  // 견과를 조리는 시럽은 투명한 호박색으로 진해진다 (밝은 색이면 반사가 더해져 분홍빛 판처럼 보였다)
+  const sauceColor = nutty ? mix(mix(food.rawColor, food.cookedColor, cook), '#7A3E0C', 0.5) : mix(food.rawColor, food.cookedColor, cook);
   return (
     // 볶을 때 조각이 들썩인다
     <group position={[Math.sin(jiggle) * 0.006, Math.abs(Math.sin(jiggle * 1.3)) * 0.008, Math.cos(jiggle * 0.8) * 0.005]}>
@@ -270,20 +295,58 @@ export const Pot: React.FC<{ children?: React.ReactNode; liquid?: string }> = ({
   </group>
 );
 
-/** 도자기 그릇: 유약 윤기, 둥근 테두리, 굽 */
-export const Bowl: React.FC<{ children?: React.ReactNode; liquid?: string; position?: [number, number, number] }> = ({ children, liquid, position = [0, 0.02, 0] }) => (
+// ---------- 그릇 ----------
+
+/**
+ * 그릇 종류: 흰 백자 · 짙은 돌그릇 · 놋그릇(유기).
+ * 음식과 그릇의 밝기 대비가 커야 음식이 또렷하다(흰 달걀을 흰 접시에 두면 밋밋하다) → tablewareFor가 음식 색으로 고른다.
+ */
+export type Ware = 'white' | 'stone' | 'brass';
+const WARE: Record<Ware, { color: string; rim: string; rough: number; clearcoat: number; metal: number }> = {
+  white: { color: '#F7F4EE', rim: '#E9E4DA', rough: 0.3, clearcoat: 0.8, metal: 0 },
+  stone: { color: '#34302D', rim: '#4A4440', rough: 0.45, clearcoat: 0.45, metal: 0 },
+  brass: { color: '#C99A4E', rim: '#B98A40', rough: 0.32, clearcoat: 0.2, metal: 0.85 },
+};
+
+const lum = (hex: string) => {
+  const c = new Color(hex);
+  return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+};
+
+/** 음식이 놓일 그릇: 밝은 음식(달걀·크림 파스타·흰밥)은 짙은 그릇(밥은 놋그릇), 진한 색 음식은 흰 백자 */
+export function tablewareFor(food: FoodProfile): Ware {
+  const main = food.kind === 'egg' ? '#FFFDF6' : food.kind === 'noodles' || food.kind === 'soup' ? (food.liquidColor ?? food.cookedColor) : food.kind === 'rice' && !food.topping ? '#FFFFFF' : food.cookedColor;
+  if (lum(main) < 0.62) return 'white';
+  return food.kind === 'rice' ? 'brass' : 'stone';
+}
+
+const WareMaterial: React.FC<{ ware: Ware; side?: 0 | 2; rim?: boolean }> = ({ ware, side = 0, rim }) => {
+  const env = useContext(FoodEnv);
+  const w = WARE[ware];
+  return <meshPhysicalMaterial color={rim ? w.rim : w.color} roughness={w.rough} metalness={w.metal} clearcoat={w.clearcoat} clearcoatRoughness={0.15} envMap={env} envMapIntensity={ware === 'brass' ? 1.1 : 0.7} side={side} />;
+};
+
+/** 접시 (원점 = 접시 바닥). 굽·바닥·올라온 테두리가 있는 돌림판 모양 */
+export const Plate: React.FC<{ ware?: Ware }> = ({ ware = 'white' }) => (
+  <mesh geometry={plateGeometry()} castShadow receiveShadow>
+    <WareMaterial ware={ware} side={2} />
+  </mesh>
+);
+
+/** 그릇: 유약 윤기, 둥근 테두리, 굽 */
+export const Bowl: React.FC<{ children?: React.ReactNode; liquid?: string; position?: [number, number, number]; ware?: Ware }> = ({ children, liquid, position = [0, 0.02, 0], ware = 'white' }) => (
   <group position={position}>
     <mesh position={[0, 0.07, 0]} rotation={[Math.PI, 0, 0]} castShadow receiveShadow>
       <sphereGeometry args={[0.14, 56, 28, 0, Math.PI * 2, 0, Math.PI / 2]} />
-      <meshPhysicalMaterial color="#F7F3EA" roughness={0.3} clearcoat={0.8} clearcoatRoughness={0.15} side={2} />
+      <WareMaterial ware={ware} side={2} />
     </mesh>
     <mesh position={[0, 0.07, 0]} rotation={[Math.PI / 2, 0, 0]}>
       <torusGeometry args={[0.14, 0.005, 10, 64]} />
-      <meshPhysicalMaterial color="#EFE9DD" roughness={0.3} clearcoat={0.8} />
+      <WareMaterial ware={ware} rim />
     </mesh>
     <mesh position={[0, -0.062, 0]}>
       <cylinderGeometry args={[0.055, 0.05, 0.016, 40]} />
-      <M color="#E9E2D3" rough={0.5} />
+      <WareMaterial ware={ware} rim />
     </mesh>
     {liquid && <Broth color={liquid} radius={0.13} y={0.05} oil={!isWater(liquid)} />}
     <group position={[0, 0.05, 0]}>{children}</group>
@@ -300,15 +363,15 @@ export const pancakeTurn = (flip: number) => flip * Math.PI * 2;
 
 /** 전·부침개: 들쭉날쭉한 원판 + 건더기 + 노릇한 자국. flip(0~1)이면 뒤집는다. */
 const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?: boolean }> = ({ food, cook, flip = 0, soggy }) => {
-  const spots = useBits(9, 0.11, 21);
   const color = soggy ? mix(food.rawColor, '#B8A27A', 0.4) : mix(food.rawColor, food.cookedColor, cook);
   const cookStep = Math.round(cook * 10) / 10;
   const groups = useMemo(() => layoutPieces(piecesOf(food).filter((p) => p.shape !== 'seed'), { radius: 0.13, mound: 0, cook: cookStep, amount: 0.7, size: 0.8, seed: 9 }), [food, cookStep]);
   const lift = Math.sin(flip * Math.PI) * 0.16;
   return (
     <group position={[0, 0.012 + lift, 0]} rotation={[pancakeTurn(flip), 0, 0]} scale={[1, soggy ? 0.55 : 1, 1]}>
+      {/* 꼭짓점 색으로 가장자리·자국이 노릇해진다: 익을수록 색이 진해지고, 눅눅한 실패작은 노릇함 없이 */}
       <mesh geometry={pancakeGeometry(3)} scale={[0.15, 0.022, 0.15]} castShadow receiveShadow>
-        <Glossy color={color} gloss={soggy ? 0.9 : 0.25 + cook * 0.4} rough={soggy ? 0.3 : 0.75} />
+        <Glossy color={color} gloss={soggy ? 0.9 : 0.3 + cook * 0.45} rough={soggy ? 0.3 : 0.7} vertexColors={!soggy && cook > 0.3} />
       </mesh>
       {/* 반죽 속에 반쯤 잠긴 건더기 */}
       <group position={[0, 0.004, 0]} scale={[1, 0.6, 1]}>
@@ -316,32 +379,35 @@ const Pancake: React.FC<{ food: FoodProfile; cook: number; flip?: number; soggy?
           <Scatter key={`${g.shape}${g.variant}`} geometry={pieceGeometry(g.shape, g.variant)} items={g.items} gloss={0.3} side={g.shape === 'leaf' ? 2 : 0} />
         ))}
       </group>
-      {cook > 0.55 &&
-        !soggy &&
-        spots.map((b, i) => (
-          <mesh key={i} position={[b.x, 0.0118, b.z]} rotation={[-Math.PI / 2, 0, b.rot]} scale={[b.s * 1.6, b.s, 1]}>
-            <circleGeometry args={[0.014, 16]} />
-            <meshStandardMaterial color={mix(food.cookedColor, '#7A4A1C', 0.35)} transparent opacity={Math.min(0.7, (cook - 0.55) * 2)} depthWrite={false} roughness={0.6} />
-          </mesh>
-        ))}
     </group>
   );
 };
 
-/** 나물·잎채소: 구겨진 잎 조각 더미 */
-const Leaves: React.FC<{ color: string; count?: number; radius?: number; mound?: number; seed?: number; gloss?: number }> = ({ color, count = 12, radius = 0.11, mound = 0.05, seed = 5, gloss = 0.3 }) => {
+/**
+ * 나물·잎채소: 데쳐서 무친 가닥(길쭉하고 비틀린 잎 + 연두색 줄기)을 가운데가 봉긋하게 소복이 쌓는다.
+ * strands=false면 예전처럼 넓은 잎 조각 (생 잎채소 소품)
+ */
+const Leaves: React.FC<{ color: string; count?: number; radius?: number; mound?: number; seed?: number; gloss?: number; strands?: boolean }> = ({
+  color,
+  count = 12,
+  radius = 0.11,
+  mound = 0.05,
+  seed = 5,
+  gloss = 0.3,
+  strands = false,
+}) => {
   const groups = useMemo(
     () =>
-      layoutPieces([{ shape: 'leaf', color }], { radius, mound, cook: 0, amount: count / 11, size: 1.1, seed }).map((g) => ({
+      layoutPieces([{ shape: 'leaf', color }], { radius, mound, cook: 0, amount: count / 11, size: strands ? 1.9 : 1.1, seed }).map((g) => ({
         ...g,
-        items: g.items.map((it) => ({ ...it, c: mix(it.c, '#2F6E2A', (it.p[0] * 31 + it.p[2] * 17) % 1 > 0.5 ? 0.25 : 0) })),
+        items: g.items.map((it) => ({ ...it, c: mix(it.c, '#1E5419', (it.p[0] * 31 + it.p[2] * 17) % 1 > 0.5 ? 0.3 : 0.08) })),
       })),
-    [color, count, radius, mound, seed],
+    [color, count, radius, mound, seed, strands],
   );
   return (
     <group>
       {groups.map((g) => (
-        <Scatter key={g.variant} geometry={pieceGeometry('leaf', g.variant)} items={g.items} gloss={gloss} side={2} />
+        <Scatter key={g.variant} geometry={strands ? wiltedGeometry(g.variant) : pieceGeometry('leaf', g.variant)} items={g.items} gloss={gloss} side={2} />
       ))}
     </group>
   );
@@ -358,15 +424,20 @@ const Eggs: React.FC<{ count?: number; halved?: boolean }> = ({ count = 3, halve
           {/* 단면이 위를 보는 반쪽 달걀 */}
           <mesh scale={[0.045, 0.035, 0.06]} castShadow>
             <sphereGeometry args={[1, 32, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
-            <Glossy color="#FFFDF6" gloss={0.6} rough={0.4} />
+            <Glossy color="#FFFEFA" gloss={0.7} rough={0.35} />
           </mesh>
           <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[0.045, 0.06, 1]}>
             <circleGeometry args={[1, 32]} />
-            <M color="#FFFDF6" rough={0.45} />
+            <M color="#FBF8F0" rough={0.5} />
           </mesh>
-          <mesh position={[0, 0.003, 0]} scale={[0.024, 0.008, 0.028]}>
+          {/* 반숙 노른자: 진한 주황, 가운데가 촉촉하게 반짝인다 (테두리는 조금 더 익은 노랑) */}
+          <mesh position={[0, 0.002, 0]} scale={[0.026, 0.006, 0.031]}>
             <sphereGeometry args={[1, 28, 16]} />
-            <Glossy color="#F6B526" gloss={0.4} rough={0.5} />
+            <Glossy color="#F4B53A" gloss={0.3} rough={0.6} />
+          </mesh>
+          <mesh position={[0, 0.004, 0]} scale={[0.019, 0.008, 0.023]}>
+            <sphereGeometry args={[1, 28, 16]} />
+            <Glossy color="#E98A12" gloss={1} rough={0.3} />
           </mesh>
         </group>
       ) : (
@@ -379,24 +450,42 @@ const Eggs: React.FC<{ count?: number; halved?: boolean }> = ({ count = 3, halve
   </group>
 );
 
-/** 면: 서로 엉킨 가는 가닥 */
-const Noodles: React.FC<{ color: string; radius?: number; height?: number }> = ({ color, radius = 0.08, height = 0.03 }) => {
+/**
+ * 면: 서로 엉킨 가는 가닥. nest면 접시에 돌돌 말아 올린 둥지 모양(파스타를 담는 흔한 방식)으로,
+ * 가닥이 가운데로 갈수록 높이 감겨 올라간다. (예전: 짧고 굵은 가닥이 흩어져 감자튀김처럼 보였다)
+ */
+const Noodles: React.FC<{ color: string; radius?: number; height?: number; nest?: boolean }> = ({ color, radius = 0.08, height = 0.03, nest = false }) => {
   const curves = useMemo(() => {
     const rnd = seeded(11);
-    return Array.from({ length: 22 }, () => {
-      const pts = Array.from({ length: 7 }, (_, k) => {
+    if (nest) {
+      return Array.from({ length: 34 }, (_, k) => {
+        const start = rnd() * Math.PI * 2;
+        const turns = 1.2 + rnd() * 0.9;
+        const pts = Array.from({ length: 16 }, (_, i) => {
+          const t = i / 15;
+          const a = start + t * turns * Math.PI * 2;
+          // 바깥(아래)에서 시작해 안쪽(위)으로 감긴다
+          const r = radius * (1 - t * 0.78) * (0.85 + rnd() * 0.25);
+          const y = height * (0.15 + t * 0.95) * (1 - (r / radius) ** 2 * 0.4) + (rnd() - 0.5) * 0.006 + (k % 3) * 0.002;
+          return new Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+        });
+        return new CatmullRomCurve3(pts);
+      });
+    }
+    return Array.from({ length: 30 }, () => {
+      const pts = Array.from({ length: 10 }, (_, k) => {
         const a = rnd() * Math.PI * 2;
         const r = Math.sqrt(rnd()) * radius;
         return new Vector3(Math.cos(a) * r, (k % 2) * height * rnd() + rnd() * height * 0.5, Math.sin(a) * r);
       });
       return new CatmullRomCurve3(pts);
     });
-  }, [radius, height]);
+  }, [radius, height, nest]);
   return (
     <group>
       {curves.map((c, i) => (
         <mesh key={i} castShadow>
-          <tubeGeometry args={[c, 64, 0.0042, 6, false]} />
+          <tubeGeometry args={[c, nest ? 96 : 80, nest ? 0.0032 : 0.0034, 6, false]} />
           <Glossy color={mix(color, '#FFFFFF', (i % 3) * 0.05)} gloss={0.6} rough={0.45} />
         </mesh>
       ))}
@@ -476,7 +565,7 @@ export const CookingFood: React.FC<{ food: FoodProfile; cook: number; frame: num
     case 'greens':
       return (
         <Pot liquid={food.liquidColor}>
-          <Leaves color={mix(food.rawColor, food.cookedColor, cook)} radius={0.12} mound={0.008} gloss={0.6} />
+          <Leaves color={mix(food.rawColor, food.cookedColor, cook)} count={20} radius={0.12} mound={0.008} gloss={0.6} strands />
           <Bubbles frame={frame} on={boiling} />
         </Pot>
       );
@@ -510,15 +599,18 @@ export const CookingFood: React.FC<{ food: FoodProfile; cook: number; frame: num
 };
 
 /** 접시에 담은 완성 음식 (실패 버전 포함) */
-export const PlatedFood: React.FC<{ food: FoodProfile | null; failed?: boolean; frame: number; origin: [number, number, number] }> = ({ food, failed, frame, origin }) => (
-  <group position={origin}>
-    <Plate />
-    {food && <PlateContent food={food} failed={failed} frame={frame} />}
-  </group>
-);
+export const PlatedFood: React.FC<{ food: FoodProfile | null; failed?: boolean; frame: number; origin: [number, number, number] }> = ({ food, failed, frame, origin }) => {
+  const ware = food ? tablewareFor(food) : 'white';
+  return (
+    <group position={origin}>
+      <Plate ware={ware} />
+      {food && <PlateContent food={food} failed={failed} frame={frame} ware={ware} />}
+    </group>
+  );
+};
 
-const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: number }> = ({ food, failed, frame }) => {
-  const top = [0, 0.022, 0] as [number, number, number];
+const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: number; ware: Ware }> = ({ food, failed, frame, ware }) => {
+  const top = [0, 0.018, 0] as [number, number, number];
   const seeds = useMemo(() => ({ ...food, pieces: food.pieces.filter((p) => p.shape === 'seed') }), [food]);
   // 깨 고명은 원본 재료에 깨가 있을 때만 (없는 재료를 그리지 않는다)
   const garnish = !failed;
@@ -539,29 +631,42 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
       case 'greens':
         return (
           <group position={top}>
-            <Leaves color={failed ? '#7C8A4A' : food.cookedColor} count={18} radius={0.1} mound={failed ? 0.015 : 0.05} gloss={failed ? 0.9 : 0.45} />
-            <group position={[0, failed ? 0.015 : 0.05, 0]}>
-              <Medley food={seeds} cook={0} radius={0.05} mound={0.01} sauce={false} garnish={garnish} />
-            </group>
+            {/* 소복하게: 가운데를 높게 쌓고 접시 가장자리는 비워 둔다. 참기름 윤기 */}
+            <Leaves color={failed ? '#7C8A4A' : food.cookedColor} count={failed ? 18 : 30} radius={failed ? 0.1 : 0.085} mound={failed ? 0.015 : 0.065} gloss={failed ? 0.9 : 0.7} strands={!failed} />
+            {/* 깨 고명은 원본 재료에 깨가 있을 때만 (없으면 아무것도 올리지 않는다 — 예전에는 빈 목록이 초록 덩어리로 그려졌다) */}
+            {seeds.pieces.length > 0 && (
+              <group position={[0, failed ? 0.015 : 0.065, 0]}>
+                <Medley food={seeds} cook={0} radius={0.05} mound={0.01} sauce={false} garnish={garnish} />
+              </group>
+            )}
           </group>
         );
       case 'soup':
         return (
-          <Bowl liquid={failed ? '#D8CBB0' : food.liquidColor ?? food.cookedColor}>
+          <Bowl liquid={failed ? '#D8CBB0' : food.liquidColor ?? food.cookedColor} ware={ware}>
             <group position={[0, -0.006, 0]}>
               <Medley food={food} cook={1} radius={0.1} mound={0.004} sauce={false} size={0.8} amount={0.7} garnish={garnish} />
             </group>
           </Bowl>
         );
       case 'noodles':
+        // 접시에 둥지처럼 말아 올린 면 + 소스 + 그 위에 원본 재료 건더기
         return (
-          <Bowl liquid={food.liquidColor}>
-            <Noodles color={food.cookedColor} radius={0.09} height={0.035} />
-          </Bowl>
+          <group position={top}>
+            <mesh geometry={sauceGeometry(11)} scale={[0.12, 0.006, 0.12]} receiveShadow>
+              <Glossy color={food.liquidColor ?? food.cookedColor} gloss={0.75} rough={0.45} />
+            </mesh>
+            <Noodles color={failed ? mix(food.cookedColor, '#C9B892', 0.4) : food.cookedColor} radius={0.085} height={failed ? 0.02 : 0.05} nest />
+            {!failed && (
+              <group position={[0, 0.045, 0]}>
+                <Medley food={food} cook={1} radius={0.045} mound={0.012} sauce={false} size={0.7} amount={0.5} garnish={garnish} />
+              </group>
+            )}
+          </group>
         );
       case 'rice':
         return food.topping ? (
-          <Bowl>
+          <Bowl ware={ware}>
             <RiceBed />
             {/* 밥 한쪽 위에 볶은 고명 (밥이 보이게) */}
             <group position={[0.015, 0.048, 0.022]}>
@@ -569,14 +674,15 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
             </group>
           </Bowl>
         ) : (
-          <Bowl>
+          <Bowl ware={ware}>
             <RiceBed />
           </Bowl>
         );
       default:
         return (
           <group position={top}>
-            <Medley food={food} cook={failed ? 0.3 : 1} radius={0.12} mound={0.04} garnish={garnish} />
+            {/* 가지런히 소복하게: 가운데를 높이고 접시 테두리는 비운다(담음새 연구). 조청 견과는 시럽 웅덩이 없이 윤기만 */}
+            <Medley food={food} cook={failed ? 0.3 : 1} radius={failed ? 0.12 : 0.09} mound={failed ? 0.03 : 0.07} amount={failed ? 1 : 1.5} garnish={garnish} sauce={failed || food.pieces[0]?.shape !== 'nut'} />
           </group>
         );
     }
@@ -584,24 +690,32 @@ const PlateContent: React.FC<{ food: FoodProfile; failed?: boolean; frame: numbe
   return (
     <group>
       {content}
-      {!failed && <Steam origin={[0, 0.07, 0]} frame={frame} />}
+      {!failed && <Steam origin={[0, 0.05, 0]} frame={frame} amount={7} />}
     </group>
   );
 };
 
 
-/** 김: 반투명 구슬이 올라가며 사라진다 */
+/**
+ * 김: 흐릿한 연기 판(스프라이트)이 올라가며 커지고, 옆으로 살랑이며 흐려진다.
+ * 움직이는 김은 음식을 더 뜨겁고 먹음직스럽게 보이게 한다(정지한 김 그림은 효과 없음 — Zhang 외 2024, 연구 문서 참고).
+ * 예전에는 흰 공이 떠올라 회색 구슬처럼 보였다.
+ */
 export const Steam: React.FC<{ origin: [number, number, number]; frame: number; amount?: number }> = ({ origin, frame, amount = 6 }) => {
-  const pts = useBits(amount, 0.08, 17);
+  const pts = useBits(amount, 0.06, 17);
+  const map = steamTexture();
+  const PERIOD = 84;
   return (
     <group position={origin}>
       {pts.map((p, i) => {
-        const t = ((frame + i * 11) % 60) / 60;
+        const t = ((frame + (i * PERIOD) / amount) % PERIOD) / PERIOD;
+        // 처음엔 빨리 나타나고 위에서 천천히 사라진다
+        const alpha = Math.min(1, t * 5) * Math.pow(1 - t, 1.4);
+        const sway = Math.sin(t * 5 + i * 1.7) * 0.025 * t + p.x * (1 + t);
         return (
-          <mesh key={i} position={[p.x + Math.sin(t * 6 + i) * 0.02, t * 0.35, p.z]} scale={0.025 + t * 0.04}>
-            <sphereGeometry args={[1, 24, 16]} />
-            <meshStandardMaterial color="#FFFFFF" transparent opacity={0.35 * (1 - t)} depthWrite={false} />
-          </mesh>
+          <sprite key={i} position={[sway, 0.01 + t * 0.3, p.z]} scale={[0.07 + t * 0.17, 0.09 + t * 0.2, 1]}>
+            <spriteMaterial map={map} color="#FFFFFF" transparent opacity={0.42 * alpha} depthWrite={false} rotation={i * 1.3 + t * 0.9} toneMapped={false} />
+          </sprite>
         );
       })}
     </group>

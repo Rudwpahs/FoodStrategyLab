@@ -165,17 +165,6 @@ const Stool: React.FC = () => (
   </group>
 );
 
-/** 접시 (원점 = 접시 바닥) */
-export const Plate: React.FC = () => (
-  <group>
-    <Cyl pos={[0, 0.01, 0]} r={0.2} r2={0.15} h={0.02} color="#FFFFFF" seg={32} />
-    <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <torusGeometry args={[0.185, 0.008, 6, 40]} />
-      <meshStandardMaterial color="#F0ECE4" />
-    </mesh>
-  </group>
-);
-
 /** 주방 세트 (조명은 장면 분위기에 따라 KitchenScene에서 넣는다) */
 export const KitchenSet: React.FC<{ dayTime?: DayTime }> = ({ dayTime = 'afternoon' }) => (
   <group>

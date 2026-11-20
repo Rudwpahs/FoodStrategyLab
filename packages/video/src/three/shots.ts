@@ -55,10 +55,11 @@ const COUNTER = {
   from: { pos: add(PROPS_CENTER, [0.18, 0.78, 1.55]), target: add(PROPS_CENTER, [0.02, 0.2, -0.05]) },
   to: { pos: add(PROPS_CENTER, [0.04, 0.74, 1.4]), target: add(PROPS_CENTER, [0.02, 0.2, -0.05]) },
 };
+// 완성 접시: 예전(1.3m 거리)은 음식이 화면의 작은 점이었다. 휴대폰에서는 가까이 보여야 한다(연구 문서 E10) → 조금 더 가까이
 const PLATE_CLOSE = {
   name: 'plate-close',
-  from: { pos: add(PLATE, [0.4, 0.72, 1.0]), target: add(PLATE, [0, 0.16, 0]) },
-  to: { pos: add(PLATE, [-0.2, 0.68, 1.0]), target: add(PLATE, [0, 0.16, 0]) },
+  from: { pos: add(PLATE, [0.32, 0.62, 0.86]), target: add(PLATE, [0, 0.13, 0]) },
+  to: { pos: add(PLATE, [-0.16, 0.58, 0.84]), target: add(PLATE, [0, 0.13, 0]) },
 };
 // 접시를 든 캐릭터 정면. 얼굴(아래)과 접시(그 밑)가 함께 보이고, 자막은 얼굴 위(모자 앞)에 들어가도록
 // 조금 떨어져서 찍는다 (가까우면 얼굴+접시가 화면 가운데를 다 차지해 자막이 얼굴이나 접시를 가렸다)
@@ -187,6 +188,31 @@ const PRESENT_LOW = {
   to: { pos: add(CHEF_FACE, [-0.2, 0.1, 2.55]), target: add(CHEF_FACE, [0.02, 0.24, 0]) },
 };
 
+// ---------- 음식이 주인공인 구도 (오프닝·엔딩이 영상마다 똑같지 않게) ----------
+
+// 먹기 직전 눈높이로 음식에 바짝 (음식이 화면을 채운다). 높이가 있는 음식(나물·견과·면)에 어울린다
+const FOOD_MACRO = {
+  name: 'food-macro',
+  from: { pos: add(PLATE, [0.2, 0.3, 0.52]), target: add(PLATE, [0, 0.05, 0]) },
+  to: { pos: add(PLATE, [0.08, 0.25, 0.42]), target: add(PLATE, [0, 0.05, 0]) },
+};
+// 식탁을 바로 위에서 본 한 상 구도 (접시와 식탁 차림이 함께). 납작한 음식(전)에 어울린다.
+// 음식이 위 카드와 아래 자막 사이(화면 가운데)에 들어오도록 조금 높이서
+const TOP_TABLE = {
+  name: 'top-table',
+  from: { pos: add(PLATE, [0.02, 1.28, 0.16]), target: add(PLATE, [0.02, 0, 0]) },
+  to: { pos: add(PLATE, [0.02, 1.12, 0.14]), target: add(PLATE, [0.02, 0, 0]) },
+};
+/** 구도의 갈래: 오프닝과 엔딩이 같은 갈래면 영상이 같은 그림으로 시작해서 끝나 보인다 */
+export function shotFamily(name: string): 'plate' | 'overhead' | 'present' | 'chef' | 'cook' | 'other' {
+  if (name === 'plate-close' || name === 'hero-low' || name === 'food-macro') return 'plate';
+  if (name === 'top-table') return 'overhead';
+  if (name.startsWith('present')) return 'present';
+  if (name.startsWith('chef') || name === 'push-in') return 'chef';
+  if (name.startsWith('stove') || name === 'top-down') return 'cook';
+  return 'other';
+}
+
 /** 장면 하나에 고를 수 있는 구도들. 첫째가 예전부터 쓰던 기본 구도 */
 export function shotVariants(scene: Pick<Scene, 'type' | 'visual'>, indexOfType: number): Shot[] {
   const base = shotFor(scene.type, indexOfType);
@@ -204,9 +230,9 @@ export function shotVariants(scene: Pick<Scene, 'type' | 'visual'>, indexOfType:
       case 'steps':
         return [{ ...TOP_DOWN, fov: 44 }];
       case 'tip':
-        return [{ ...HERO_LOW, fov: 42 }];
+        return [{ ...HERO_LOW, fov: 42 }, { ...FOOD_MACRO, fov: 38 }];
       case 'outro':
-        return [PRESENT_LOW];
+        return [PRESENT_LOW, { ...HERO_LOW, action: 'idle', fov: 40 }];
       case 'mistake':
         return [];
     }
@@ -270,38 +296,63 @@ export function shotPlan(script: Script): number[] {
   const places = placePlan(script);
   const rnd = seeded(videoLook(script.title).shotSeed);
   const seen = new Map<SceneType, number>();
-  let prev = '';
-  const plan = script.scenes.map((scene, i) => {
+  const variants = script.scenes.map((scene) => {
     const k = seen.get(scene.type) ?? 0;
     seen.set(scene.type, k + 1);
-    const all = shotVariants(scene, k);
-    let v = Math.floor(rnd() * all.length);
-    const name = (n: number) => fitPlace(all[n % all.length]!, places[i]!).name;
-    if (all.length > 1 && name(v) === prev) v = (v + 1) % all.length;
-    prev = name(v);
+    return shotVariants(scene, k);
+  });
+  const nameAt = (i: number, v: number) => fitPlace(variants[i]![v % variants[i]!.length]!, places[i]!).name;
+  let prev = '';
+  const plan = script.scenes.map((_, i) => {
+    const n = variants[i]!.length;
+    let v = Math.floor(rnd() * n);
+    if (n > 1 && nameAt(i, v) === prev) v = (v + 1) % n;
+    prev = nameAt(i, v);
     return v;
   });
+  // 엔딩이 오프닝과 같은 갈래(예: 둘 다 접시 클로즈업)면 엔딩을 다른 갈래로 바꾼다 (바로 앞 장면과 같은 구도는 피한다)
+  const last = plan.length - 1;
+  if (last > 0) {
+    const n = variants[last]!.length;
+    const ok = (v: number) => shotFamily(nameAt(last, v)) !== shotFamily(nameAt(0, plan[0]!)) && nameAt(last, v) !== nameAt(last - 1, plan[last - 1]!);
+    if (!ok(plan[last]!)) {
+      const alt = Array.from({ length: n }, (_, k) => (plan[last]! + k) % n).find(ok);
+      if (alt !== undefined) plan[last] = alt;
+    }
+  }
   shotPlanCache.set(script, { key, plan });
   return plan;
 }
 
 const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>[]> = {
+  // 결과 먼저 오프닝: 같은 접시 화면만 반복하지 않게 네 가지 (결과 먼저 vs 과정 먼저는 근거가 갈려 대본 유형이 정한다)
   result: () => [
     { ...PLATE_CLOSE, mood: 'golden', fov: 38, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
     { ...HERO_LOW, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
+    { ...FOOD_MACRO, mood: 'golden', fov: 36, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
+    { ...TOP_TABLE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
   ],
   fail: () => [{ ...PRESENT, mood: 'gloom', plated: 'failed', action: 'present', face: 'camera' }],
-  'fail-closeup': () => [{ ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false }],
+  'fail-closeup': () => [
+    { ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false },
+    { ...FOOD_MACRO, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false },
+  ],
   // 비교 장면은 화면을 위아래로 나눠 두 접시를 보여 준다 (KitchenVideo). 기본 상태는 '노트대로 한' 쪽.
-  compare: () => [{ ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false }],
+  compare: () => [
+    { ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
+    { ...HERO_LOW, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
+  ],
   sizzle: (b) => [
     { ...STOVE_CLOSE, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6] },
     { ...TOP_DOWN, mood: 'fire', fov: 40, action: 'cook', face: 'stove', burnerOn: true, cook: b.cook[1] > 0 ? b.cook : [0.3, 0.6] },
   ],
   react: () => [{ ...CHEF_PUNCH, mood: 'curious', fov: 38, face: 'camera' }],
+  // 엔딩: 예전에는 늘 '접시 든 맛조수'였다. 식탁 위 접시를 낮게·위에서 본 한 상을 더해 영상마다 다르게
   signature: () => [
     { ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present', face: 'camera' },
     { ...PRESENT_LOW, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present', face: 'camera' },
+    { ...HERO_LOW, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', face: 'camera', burnerOn: false },
+    { ...TOP_TABLE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', face: 'camera', burnerOn: false },
   ],
 };
 

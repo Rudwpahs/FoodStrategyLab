@@ -2,7 +2,7 @@ import React from 'react';
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace, type Texture } from 'three';
 import { Box, Cyl, KitchenSet, windowColor } from './Kitchen.tsx';
 import { CHEF_POS, COUNTER_FRONT, COUNTER_TOP, WALL_Z, type Vec3 } from './layout.ts';
-import type { DayTime, Place } from './places.ts';
+import type { DayTime, Place, TableDress } from './places.ts';
 
 /**
  * 주방 말고 네 무대: 시장 가판대 · 식탁 · 찬장·냉장고 앞 · 연구실 칠판.
@@ -252,15 +252,23 @@ export const MarketSet: React.FC = () => {
 const GINGHAM = 0.12;
 const GINGHAM_PATTERN: Pattern = { kind: 'gingham', a: '#FFFDF7', b: 'rgba(226, 84, 60, 0.42)' };
 
-/** 빨강·흰색 체크무늬 식탁보 천 (코드로 그린 무늬) */
-const Cloth: React.FC<{ pos: Vec3; size: [number, number, number]; repeat: [number, number] }> = ({ pos, size, repeat }) => (
-  <Patterned pos={pos} size={size} pattern={GINGHAM_PATTERN} repeat={[repeat[0] / 2, repeat[1] / 2]} shadow />
+/** 식탁 차림별 천 무늬 (맨 나무 식탁은 천 없이 나무 줄무늬) */
+const DRESS: Record<TableDress, Pattern> = {
+  gingham: GINGHAM_PATTERN,
+  linen: { kind: 'stripes', a: '#FBF6EC', b: '#F2EBDD' },
+  wood: { kind: 'stripes', a: '#B98454', b: '#AE7A4B' },
+  indigo: { kind: 'gingham', a: '#F7F5F0', b: 'rgba(52, 78, 128, 0.36)' },
+};
+
+/** 식탁보 천 (코드로 그린 무늬) */
+const Cloth: React.FC<{ pos: Vec3; size: [number, number, number]; repeat: [number, number]; dress?: TableDress }> = ({ pos, size, repeat, dress = 'gingham' }) => (
+  <Patterned pos={pos} size={size} pattern={DRESS[dress]} repeat={dress === 'wood' ? [repeat[0] / 6, 1] : [repeat[0] / 2, repeat[1] / 2]} shadow />
 );
 
 const DN = { floorA: '#D9A46E', floorB: '#CC9661', wall: '#F4E3CC', wainscot: '#E7CFAF', rail: '#FFFFFF', curtain: '#8DC2A2', wood: '#B97A48', woodDark: '#8F5A33' };
 const DINING_WALL_Z = WALL_Z - 0.3;
 
-export const DiningSet: React.FC<{ dayTime: DayTime }> = ({ dayTime }) => {
+export const DiningSet: React.FC<{ dayTime: DayTime; table?: TableDress }> = ({ dayTime, table = 'gingham' }) => {
   const glow = windowColor(dayTime);
   const tx0 = -1.9;
   const tx1 = 1.6;
@@ -308,11 +316,18 @@ export const DiningSet: React.FC<{ dayTime: DayTime }> = ({ dayTime }) => {
       <Ball pos={[win.x - 0.2, 2.35, -1.1]} r={0.05} color="#FFF0C8" emissive="#FFE2A0" shadow={false} />
       {/* 식탁: 다리 + 체크무늬 식탁보(위·앞·옆으로 늘어진 천) */}
       {[tx0 + 0.12, tx1 - 0.12].flatMap((x) => [tz0 + 0.1, tz1 - 0.1].map((z) => <Box key={`${x}${z}`} pos={[x, 0.3, z]} size={[0.07, 0.6, 0.07]} color={DN.woodDark} />))}
-      <Cloth pos={[tcx, COUNTER_TOP - 0.02, tcz]} size={[tw, 0.04, tz1 - tz0]} repeat={[tw / GINGHAM, (tz1 - tz0) / GINGHAM]} />
-      <Cloth pos={[tcx, COUNTER_TOP - 0.2, tz1 + 0.01]} size={[tw, 0.36, 0.015]} repeat={[tw / GINGHAM, 0.36 / GINGHAM]} />
-      {[tx0, tx1].map((x) => (
-        <Cloth key={x} pos={[x + (x < 0 ? -0.008 : 0.008), COUNTER_TOP - 0.2, tcz]} size={[0.015, 0.36, tz1 - tz0]} repeat={[(tz1 - tz0) / GINGHAM, 0.36 / GINGHAM]} />
-      ))}
+      <Cloth dress={table} pos={[tcx, COUNTER_TOP - 0.02, tcz]} size={[tw, 0.04, tz1 - tz0]} repeat={[tw / GINGHAM, (tz1 - tz0) / GINGHAM]} />
+      {/* 늘어진 천 (맨 나무 식탁은 상판 두께만) */}
+      {table === 'wood' ? (
+        <Box pos={[tcx, COUNTER_TOP - 0.06, tz1 - 0.004]} size={[tw, 0.07, 0.02]} color="#9A6538" />
+      ) : (
+        <>
+          <Cloth dress={table} pos={[tcx, COUNTER_TOP - 0.2, tz1 + 0.01]} size={[tw, 0.36, 0.015]} repeat={[tw / GINGHAM, 0.36 / GINGHAM]} />
+          {[tx0, tx1].map((x) => (
+            <Cloth dress={table} key={x} pos={[x + (x < 0 ? -0.008 : 0.008), COUNTER_TOP - 0.2, tcz]} size={[0.015, 0.36, tz1 - tz0]} repeat={[(tz1 - tz0) / GINGHAM, 0.36 / GINGHAM]} />
+          ))}
+        </>
+      )}
       {/* 꽃병 */}
       <Cyl pos={[-1.15, COUNTER_TOP + 0.09, -1.42]} r={0.05} r2={0.07} h={0.18} color="#7FB7C9" seg={12} />
       {[
@@ -648,12 +663,12 @@ export const LabSet: React.FC = () => {
 };
 
 /** 장소별 무대 하나 */
-export const PlaceSet: React.FC<{ place: Place; dayTime: DayTime }> = ({ place, dayTime }) => {
+export const PlaceSet: React.FC<{ place: Place; dayTime: DayTime; table?: TableDress }> = ({ place, dayTime, table }) => {
   switch (place) {
     case 'market':
       return <MarketSet />;
     case 'dining':
-      return <DiningSet dayTime={dayTime} />;
+      return <DiningSet dayTime={dayTime} table={table} />;
     case 'pantry':
       return <PantrySet />;
     case 'lab':

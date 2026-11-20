@@ -77,6 +77,8 @@ const PIECE_WORDS: { words: string[]; piece: FoodPiece }[] = [
   { words: ['애호박', '오이'], piece: { shape: 'slice', color: '#A9C96A' } },
   { words: ['호박', '감자', '고구마', '무'], piece: { shape: 'cube', color: '#E8C977' } },
   { words: ['버섯'], piece: { shape: 'slice', color: '#9C7652' } },
+  // 고사리: 가늘고 긴 갈색 줄기 (예전에는 모양이 없어 파스타 위가 흰 조각뿐이었다)
+  { words: ['고사리'], piece: { shape: 'strip', color: '#6E4C2C' } },
   { words: ['돼지', '소고기', '고기', '베이컨', '햄', '닭'], piece: { shape: 'strip', color: '#A95E44' } },
   { words: ['어묵'], piece: { shape: 'strip', color: '#E2B47A' } },
   { words: ['새우'], piece: { shape: 'curl', color: '#F28A6A' } },
