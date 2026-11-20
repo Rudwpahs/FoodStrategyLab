@@ -9,6 +9,8 @@
 | `pilotlib.ts` | `pilot.ts`가 쓰는 공용 함수 (받아쓰기 비교용 타임라인 내보내기) |
 | `preview-video.ts` | 목소리 없이(예상 길이·자막만) 후보 영상 한 편을 MP4로. `npx tsx tools/content-lab/preview-video.ts <recipe.json> <출력.mp4> [후보번호]` |
 | `frames.ts` | 후보 대본의 프레임을 일정 간격으로 뽑아 한 장으로 붙임 (화면 구성 확인). `npx tsx tools/content-lab/frames.ts <recipe.json> <출력폴더> [후보번호] [간격초]` |
+| `foodframes.ts` | 샘플 레시피 5개마다 같은 규칙으로 고른 프레임(첫 화면·조리·완성 접시·엔딩)을 한 장으로 (음식·배경 전후 비교). `npx tsx tools/content-lab/foodframes.ts <출력폴더> [후보번호] [r0-plate,r3-cook 처럼 일부만]` |
+| `rendertime.ts` | 정해진 60프레임 구간의 실제 렌더 시간 측정 (전후 비교, 네 번째 값으로 예전 video 패키지 폴더 지정). `npx tsx tools/content-lab/rendertime.ts <출력폴더> [레시피번호] [시작 비율] [video 폴더]` |
 | `seed-pilot-render.ts` | 이미 만든 파일럿 영상을 프로젝트의 검수용 영상으로 붙임 (e2e 점검에서 30분 렌더 대신). `MATLAB_DATA_DIR=… npx tsx tools/content-lab/seed-pilot-render.ts <projectId> <영상.mp4> [첫화면.png]` |
 | `hooktable.ts` | 호두정과 15가지 훅 비교표 (hook-library.md 3절) |
 | `blogpilot.ts` | 블로그 A(자동)·B(전문가 노트형) 샘플 |

@@ -101,6 +101,7 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     mood: shot.mood,
     place,
     dayTime: videoLook(script.title).dayTime,
+    table: videoLook(script.title).table,
   };
 }
 

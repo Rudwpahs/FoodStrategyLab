@@ -13,6 +13,7 @@
 | [blog-research.md](blog-research.md) · [blog-writing-guide.md](blog-writing-guide.md) | 네이버 블로그 21건 분석·공식 가이드, 작성 기준 |
 | [experiments.md](experiments.md) | 호두정과 릴스 A/B/C·블로그 A/B 비교와 실측 |
 | [implementation-status.md](implementation-status.md) | 코드 적용 내역, 리뷰 결과, 다음 세션 이어하기 |
+| [food-visuals-2026-11.md](food-visuals-2026-11.md) | 음식 비주얼(윤기·김·그릇 대비·담음새)·배경/흐름 다양화 연구와 적용, 렌더 시간 측정 (2026-11) |
 
 ---
 

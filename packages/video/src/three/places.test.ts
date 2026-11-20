@@ -5,8 +5,8 @@ import { PLACES, SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, generateTemplateS
 import { CAPTION_SAFE_BOTTOM } from '../theme.ts';
 import { buildTimeline, totalFrames, type VideoProps } from '../timeline.ts';
 import { CAPTION_HEIGHT, CARDS_BOTTOM, faceBox, faceSafeCaptionBottom } from './captionPlacement.ts';
-import { DAY_TIMES, MAX_PLACES, PLACE_HAS_STOVE, WHIP_FRAMES, placePlan, placeTransitionAt, videoLook } from './places.ts';
-import { shotForScene, shotPlan, shotVariants } from './shots.ts';
+import { DAY_TIMES, MAX_PLACES, PLACE_HAS_STOVE, TABLE_DRESSES, WHIP_FRAMES, placePlan, placeTransitionAt, videoLook } from './places.ts';
+import { shotFamily, shotForScene, shotPlan, shotVariants } from './shots.ts';
 import { propPositions } from './layout.ts';
 import { projectToScreen, sceneAt, stageAt } from './stage.ts';
 
@@ -131,6 +131,47 @@ describe('카메라 구도', () => {
       });
     }
     for (const name of ['push-in', 'hero-low', 'top-down', 'orbit-wide', 'orbit-props', 'present-low']) expect(used).toContain(name);
+  });
+
+  const namesOf = (s: Script) => {
+    const places = placePlan(s);
+    const plan = shotPlan(s);
+    const seen = new Map<string, number>();
+    return s.scenes.map((sc, i) => {
+      const k = seen.get(sc.type) ?? 0;
+      seen.set(sc.type, k + 1);
+      return shotForScene(sc, k, plan[i], places[i]).name;
+    });
+  };
+
+  it('엔딩이 영상마다 같은 그림이 아니다: 엔딩 구도가 여러 가지이고, 오프닝과 같은 갈래로 끝나지 않는다', () => {
+    const endings = new Set<string>();
+    const openings = new Set<string>();
+    for (const s of allScripts()) {
+      const names = namesOf(s);
+      openings.add(names[0]!);
+      endings.add(names.at(-1)!);
+      expect(shotFamily(names.at(-1)!), `${s.title} ${s.style ?? 'template'}: ${names.join(' > ')}`).not.toBe(shotFamily(names[0]!));
+    }
+    // 예전에는 엔딩이 '접시 든 맛조수' 두 구도뿐이었다
+    expect(endings.size).toBeGreaterThanOrEqual(3);
+    expect(endings).toContain('top-table');
+    expect(endings).toContain('hero-low');
+    expect(openings.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('음식이 주인공인 새 구도(바짝 다가가기·위에서 본 한 상)가 쓰인다', () => {
+    const used = new Set(allScripts().flatMap(namesOf));
+    for (const name of ['food-macro', 'top-table']) expect(used).toContain(name);
+  });
+});
+
+describe('식탁 차림', () => {
+  it('제목이 다르면 식탁 차림이 달라지고(네 가지 모두 쓰임), 같은 제목이면 늘 같다', () => {
+    const dresses = new Set<string>();
+    for (let k = 0; k < 40; k++) dresses.add(videoLook(`실험 ${k}번: 왜 그럴까?`).table);
+    expect([...dresses].sort()).toEqual([...TABLE_DRESSES].sort());
+    expect(videoLook('호두정과').table).toBe(videoLook('호두정과').table);
   });
 });
 

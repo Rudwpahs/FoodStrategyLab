@@ -95,5 +95,6 @@ function coverState(emotion: Scene['emotion'], square: boolean, title: string): 
     mood: 'golden',
     place: 'dining',
     dayTime: videoLook(title).dayTime,
+    table: videoLook(title).table,
   };
 }

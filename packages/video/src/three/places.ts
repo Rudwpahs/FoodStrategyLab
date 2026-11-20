@@ -28,6 +28,13 @@ export const PLACE_HAS_STOVE: Record<Place, boolean> = {
   pantry: false,
 };
 
+/**
+ * 식탁 차림 (영상마다 바뀐다): 빨간 체크 식탁보 · 흰 리넨 · 맨 나무 식탁 · 쪽빛 체크.
+ * 엔딩·결과 장면은 거의 늘 식탁이라, 차림까지 같으면 영상끼리 같은 그림으로 끝나 보였다.
+ */
+export const TABLE_DRESSES = ['gingham', 'linen', 'wood', 'indigo'] as const;
+export type TableDress = (typeof TABLE_DRESSES)[number];
+
 /** 한 영상에 쓰는 장소 수 상한 */
 export const MAX_PLACES = 3;
 
@@ -50,6 +57,8 @@ export interface VideoLook {
   dayTime: DayTime;
   /** 카메라 구도 고르기용 씨앗 */
   shotSeed: number;
+  /** 식탁 차림 */
+  table: TableDress;
 }
 
 export function videoLook(title: string): VideoLook {
@@ -61,6 +70,8 @@ export function videoLook(title: string): VideoLook {
     explain: rnd() < 0.6 ? 'lab' : 'kitchen',
     dayTime: DAY_TIMES[Math.floor(rnd() * DAY_TIMES.length)]!,
     shotSeed: Math.floor(rnd() * 1_000_000),
+    // 앞의 값들은 그대로 두고 뒤에 이어서 뽑는다 (예전 영상의 장소·구도가 바뀌지 않게)
+    table: TABLE_DRESSES[Math.floor(rnd() * TABLE_DRESSES.length)]!,
   };
 }
 
