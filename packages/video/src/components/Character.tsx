@@ -14,6 +14,8 @@ export interface CharacterProps {
   frame: number;
   /** 대사 중이면 입이 움직인다 */
   talking?: boolean;
+  /** 입 벌림 (0~1, 실제 목소리 크기). 없으면 talking일 때 일정한 파형으로 */
+  mouth?: number;
   size?: number;
   /** 정지 이미지(캐릭터 시트 등)에서 흔들림·깜빡임 끄기 */
   still?: boolean;
@@ -39,12 +41,12 @@ const POSES: Record<Emotion, Pose> = {
   disappointed: pose('disappointed', { squash: 0.96 }),
 };
 
-export const Character: React.FC<CharacterProps> = ({ emotion, frame, talking = false, size = 480, still = false }) => {
+export const Character: React.FC<CharacterProps> = ({ emotion, frame, talking = false, mouth, size = 480, still = false }) => {
   const pose = POSES[emotion];
   const t = still ? 0 : frame;
   const bob = still ? 0 : Math.sin(t / 7) * (talking ? 7 : 4);
   const blink = !still && t % 96 < 4;
-  const open = talking && !still ? mouthOpen(t) : 0;
+  const open = still ? 0 : (mouth ?? (talking ? mouthOpen(t) : 0));
   const wave = pose.wave && !still ? Math.sin(t / 3.5) * 14 : 0;
   const squash = pose.squash ?? 1;
 

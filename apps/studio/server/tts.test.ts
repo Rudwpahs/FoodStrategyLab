@@ -114,6 +114,21 @@ describe('VoiceStudio 음성', () => {
     expect(requests[0]).toMatchObject({ model: 'voxcpm2', voice: preset.voiceName, language: 'ko', response_format: 'mp3', input: '이히재에 맛 연구소에서 오늘도 실험!' }); // 목소리에는 발음을 고친 글자를 보낸다 (pronounce)
   });
 
+  it('말투 지시문(VOICESTUDIO_INSTRUCT)은 기본으로 보내지 않고, 넣으면 요청에 담아 다른 음성 캐시로 만든다', async () => {
+    expect(requests[0]).not.toHaveProperty('instruct');
+    const plain = await voiceIdentity('voicestudio');
+    process.env.VOICESTUDIO_INSTRUCT = 'natural conversational tone';
+    try {
+      const withInstruct = await voiceIdentity('voicestudio');
+      expect(withInstruct).not.toBe(plain);
+      await synthesize('말투 지시문 시험', audioDir);
+      expect(requests.at(-1)).toMatchObject({ instruct: 'natural conversational tone', voice: preset.voiceName });
+    } finally {
+      delete process.env.VOICESTUDIO_INSTRUCT;
+    }
+    expect(await voiceIdentity('voicestudio')).toBe(plain);
+  });
+
   it('비상업 엔진(OmniVoice 등)이나 목록에 없는 엔진은 VOICESTUDIO_MODEL로 지정해도 쓰지 않는다', async () => {
     const vs = await findVoiceStudio();
     if (vs.state !== 'ok') throw new Error('fake VoiceStudio offline');
@@ -133,10 +148,16 @@ describe('VoiceStudio 음성', () => {
     }
   });
 
-  it('받아쓰기로 어절별 실제 시간을 잰다 (어절 수가 맞을 때만)', async () => {
+  it('받아쓰기로 어절별 실제 시간을 잰다 (띄어쓰기가 달라도 글자로 맞추고, 전혀 다른 글이면 쓰지 않는다)', async () => {
     const a = await synthesize('이희재의 맛 연구소에서 오늘도 실험!', audioDir);
     const words = await measuredWords(a.file, '이희재의 맛 연구소에서 오늘도 실험!');
     expect(words).toEqual([[0.1, 0.5], [0.5, 0.7], [0.7, 1.2], [1.2, 1.5], [1.5, 1.9]]);
+    // 대본이 붙여 쓴 경우(어절 4개, 받아쓰기 5낱말): 예전에는 단어 수가 달라 시간을 버렸다
+    const joined = (await measuredWords(a.file, '이희재의 맛연구소에서 오늘도 실험!'))!;
+    expect(joined).toHaveLength(4);
+    expect(joined[1]![0]).toBeCloseTo(0.5, 5);
+    expect(joined[1]![1]).toBeCloseTo(1.2, 5);
+    expect(joined[3]).toEqual([1.5, 1.9]);
     const b = await synthesize('다른 문장', audioDir);
     expect(await measuredWords(b.file, '다른 문장')).toBeUndefined();
   });

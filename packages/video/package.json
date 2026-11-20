@@ -12,7 +12,8 @@
     "./qa": "./src/qa.ts",
     "./music": "./src/music.ts",
     "./clipSound": "./src/clipSound.ts",
-    "./realFootage": "./src/realFootage.ts"
+    "./realFootage": "./src/realFootage.ts",
+    "./wordAlign": "./src/wordAlign.ts"
   },
   "scripts": {
     "studio": "remotion studio src/entry.ts"

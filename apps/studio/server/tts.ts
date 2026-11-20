@@ -5,6 +5,7 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { changeTempo, readFreshCache, removeAudioCaches, writeCache } from '@mat-lab/video/audio';
+import { alignWords } from '@mat-lab/video/wordAlign';
 import { ttsSettings } from './config.ts';
 import { VOICE_TEMPOS, defaultPreset, ensurePresetVoice, isVoiceTempo, presetByVoiceName } from './voicePresets.ts';
 import { assertCommercialEngine, engineInfo, findVoiceStudio, listProfiles, readVoiceSettings, slowFetch } from './voicestudio.ts';
@@ -125,7 +126,9 @@ export async function voiceIdentity(provider: TtsProvider, override: VoiceOverri
   const profileId = (await listProfiles(url).catch(() => [])).find((p) => p.name === voice)?.id ?? 'builtin';
   const tempo = override.tempo ?? voiceTempo();
   // 보통 빠르기(1)는 예전과 같은 이름 → 이미 만든 음성을 그대로 쓴다
-  return ['vs', engine, voice, profileId, s.voicestudio.speed, ...(tempo !== 1 ? [`tempo${tempo}`] : [])].join('|');
+  // 말투 지시문을 쓰면 만드는 방식이 바뀌므로(조절 복제) 다른 음성으로 친다. 비어 있으면 예전과 같은 이름
+  const instruct = s.voicestudio.instruct ? [`instruct:${crypto.createHash('sha1').update(s.voicestudio.instruct).digest('hex').slice(0, 8)}`] : [];
+  return ['vs', engine, voice, profileId, s.voicestudio.speed, ...(tempo !== 1 ? [`tempo${tempo}`] : []), ...instruct].join('|');
 }
 
 /** 목소리 정체 + 문장으로 캐시 파일 이름을 만든다 */
@@ -146,13 +149,15 @@ async function voicestudioTarget(): Promise<VoiceStudioTarget | null> {
 }
 
 async function voicestudioSpeech(text: string, out: string, voice: string, { url, engine: model }: VoiceStudioTarget) {
-  const { speed, apiKey } = ttsSettings().voicestudio;
+  const { speed, apiKey, instruct } = ttsSettings().voicestudio;
   // 상업 이용 가능한 엔진만 쓴다 (기본 OmniVoice는 비상업 라이선스)
   if (!model) throw new Error('상업적으로 쓸 수 있는 음성 엔진(VoxCPM2 등)이 설치되어 있지 않습니다. VoiceStudio 앱의 Model Catalogue에서 VoxCPM2를 설치해 주세요.');
   // 그래픽카드 없는 PC에서는 한 줄에 몇 분 걸릴 수 있다 (기본 15분, VOICESTUDIO_TIMEOUT_MS로 조정).
   // 내장 fetch는 응답 헤더를 5분까지만 기다리므로 node:http로 직접 요청한다.
   const timeoutMs = Number(process.env.VOICESTUDIO_TIMEOUT_MS) || 900_000;
-  const payload = JSON.stringify({ model: assertCommercialEngine(model), voice, input: text, response_format: 'mp3', speed, language: 'ko' });
+  // speed는 VoxCPM2가 쓰지 않는다(VoiceStudio generation_kwargs). 다른 엔진을 위해 그대로 보낸다
+  // instruct(말투 지시문)가 있으면 VoiceStudio가 '이어 말하기' 대신 '조절 복제'로 만든다
+  const payload = JSON.stringify({ model: assertCommercialEngine(model), voice, input: text, response_format: 'mp3', speed, language: 'ko', ...(instruct ? { instruct } : {}) });
   const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
   // VoiceStudio가 다른 음성을 만드는 중이면 429(바쁨, 다시 시도해도 안전)를 준다 → 잠시 기다렸다 다시 요청
   const retryMs = Number(process.env.VOICESTUDIO_RETRY_MS) || 15_000;
@@ -197,17 +202,19 @@ export function postSlow(target: string, body: string, headers: Record<string, s
 /** 음성 받아쓰기 결과 (VoiceStudio의 Whisper 계열) */
 export interface Transcript {
   text: string;
-  words: { start: number; end: number }[];
+  /** word: 받아쓴 낱말 (예전 캐시에는 없다) */
+  words: { start: number; end: number; word?: string }[];
 }
 
 /**
  * 음성 파일을 받아쓴다. 결과는 파일 크기·수정 시각과 함께 옆에 저장한다.
  * 받아쓰기를 쓸 수 없으면(목소리 엔진이 VoiceStudio가 아님, 연결 실패) undefined.
  */
-export async function transcribeAudio(file: string): Promise<Transcript | undefined> {
+export async function transcribeAudio(file: string, opts: { needWords?: boolean } = {}): Promise<Transcript | undefined> {
   const cache = `${file}.asr.json`;
   const cached = readFreshCache<Transcript>(cache, file);
-  if (cached) return cached;
+  // needWords: 낱말 글자가 없는 예전 캐시는 다시 받아쓴다 (제작 중에만: 목소리 엔진이 이미 켜져 있을 때)
+  if (cached && !(opts.needWords && cached.words.some((w) => typeof w.word !== 'string'))) return cached;
   if ((await ttsProvider().catch(() => 'none')) !== 'voicestudio') return undefined;
   const { apiKey } = ttsSettings().voicestudio;
   const url = await voicestudioUrl();
@@ -221,8 +228,8 @@ export async function transcribeAudio(file: string): Promise<Transcript | undefi
     form.append('timestamp_granularities[]', 'word');
     const res = await slowFetch(`${url}/v1/audio/transcriptions`, { method: 'POST', body: form, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} }, Number(process.env.VOICESTUDIO_INFO_TIMEOUT_MS) || 120_000);
     if (!res.ok) return undefined;
-    const data = (await res.json()) as { text?: string; words?: { start: number; end: number }[] };
-    const t: Transcript = { text: String(data.text ?? ''), words: (data.words ?? []).map((w) => ({ start: Number(w.start), end: Number(w.end) })) };
+    const data = (await res.json()) as { text?: string; words?: { start: number; end: number; word?: string }[] };
+    const t: Transcript = { text: String(data.text ?? ''), words: (data.words ?? []).map((w) => ({ start: Number(w.start), end: Number(w.end), word: String(w.word ?? '') })) };
     writeCache(cache, file, t);
     return t;
   } catch {
@@ -233,11 +240,15 @@ export async function transcribeAudio(file: string): Promise<Transcript | undefi
 
 /**
  * 실제 음성의 어절별 시간 (받아쓰기 결과에서).
- * 받아쓴 단어 수가 대사 어절 수와 같을 때만 쓴다.
+ * 받아쓴 낱말을 글자 단위로 대사 어절에 맞춘다 (wordAlign.ts): 띄어쓰기가 달라도("맛연구소"), 숫자 낱말에 시간이 없어도 쓴다.
+ * 낱말 글자가 없는 예전 캐시는 예전처럼 단어 수가 같을 때만 쓴다.
  */
 export async function measuredWords(file: string, line: string): Promise<[number, number][] | undefined> {
   const t = await transcribeAudio(file);
   if (!t) return undefined;
+  if (t.words.length && t.words.every((w) => typeof w.word === 'string')) {
+    return alignWords(line, t.words.map((w) => ({ word: w.word!, start: w.start, end: w.end })));
+  }
   const expected = line.trim().split(/\s+/).filter(Boolean).length;
   return t.words.length === expected ? t.words.map((w) => [w.start, w.end]) : undefined;
 }

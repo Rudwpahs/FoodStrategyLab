@@ -22,6 +22,8 @@ export interface StageState {
   camera: { pos: Vec3; target: Vec3; fov: number };
   emotion: Emotion;
   talking: boolean;
+  /** 입 벌림 (0~1, 실제 목소리 크기). 없으면 talking일 때 일정한 파형으로 움직인다 */
+  mouth?: number;
   action: ChefAction;
   face: Shot['face'];
   burnerOn: boolean;
@@ -144,7 +146,7 @@ const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProf
       {props.map((p, i) => (
         <IngredientModel key={i} prop={p} position={positions[i]!} pop={state.propPop[i] ?? 0} />
       ))}
-      <Chef3D emotion={state.emotion} frame={frame} talking={state.talking} action={state.action} facing={facing} position={CHEF_POS} pop={state.chefPop} />
+      <Chef3D emotion={state.emotion} frame={frame} talking={state.talking} mouth={state.mouth} action={state.action} facing={facing} position={CHEF_POS} pop={state.chefPop} />
     </>
   );
 };

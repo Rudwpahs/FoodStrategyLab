@@ -96,6 +96,14 @@ describe('소리 다듬기', () => {
     expect(t[0]!.words).toEqual([[0, 15], [18, 60]]);
   });
 
+  it('잘라낸 자리가 프레임 사이면: 단어 시간은 실제로 잘린 자리(프레임으로 반올림한 값)를 기준으로 옮긴다', () => {
+    // 0.387초 무음 → 음성은 12프레임(0.4초)부터 재생된다. 1.405초에 시작하는 단어는 장면 1.005초(30.15프레임)에 들린다
+    // (예전 계산은 잘라낸 초를 그대로 빼서 31프레임: 반 프레임 넘게 늦었다)
+    const t = buildTimeline(script, script.scenes.map(() => 2), [], script.scenes.map(() => ({ trimStart: 0.387, words: [[0.4, 0.9], [1.405, 2.4]] as [number, number][] })));
+    expect(t[0]!.audioTrimFrames).toBe(12);
+    expect(t[0]!.words).toEqual([[0, 15], [30, 60]]);
+  });
+
   it('팁 장면 뒤에는 짧은 쉼이 있다', () => {
     const t = buildTimeline(script, script.scenes.map(() => 2));
     const tip = script.scenes.findIndex((x) => x.type === 'tip');

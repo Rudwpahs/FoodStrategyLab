@@ -3,12 +3,13 @@ import path from 'node:path';
 import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { FPS, buildTimeline, captionGroups, totalFrames, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { audioDb, cachedSpeechBounds, extractFrame, frameBrightness, mediaInfo, mixClipSound, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { audioDb, cachedSpeechBounds, cachedSpeechShape, extractFrame, frameBrightness, mediaInfo, mixClipSound, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
 import { clipLevelDb, clipSoundFilter, clipSoundVolumeExpr, soundLayers } from '@mat-lab/video/clipSound';
 import { clipLayers } from '@mat-lab/video/realFootage';
 import { musicFor, musicVolumeExpr, speechIntervals } from '@mat-lab/video/music';
 import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPlan } from '@mat-lab/video/cards';
+import { estimateWords, snapToSpeech } from '@mat-lab/video/wordAlign';
 import { DATA_DIR } from './config.ts';
 import { HttpError, creditedReviewer, type RenderQa, type RenderQaIssue, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
@@ -38,8 +39,12 @@ export async function previewTimeline(script: Script, origin = '', opts: { fullL
       continue;
     }
     const bounds = await cachedSpeechBounds(a.file).catch(() => ({ start: 0, end: a.seconds, silent: false }));
-    const words = await measuredWords(a.file, script.scenes[i]!.line).catch(() => undefined);
-    extras.push({ trimStart: bounds.start, words });
+    const line = script.scenes[i]!.line;
+    // 입 모양은 실제 목소리 크기를, 자막 어절 시간은 실제 쉼을 따른다 (lipSync.ts, wordAlign.ts). 못 재면 예전 방식
+    const shape = await cachedSpeechShape(a.file).catch(() => undefined);
+    const measured = await measuredWords(a.file, line).catch(() => undefined);
+    const words = shape ? (measured ? snapToSpeech(measured, shape.pauses) : estimateWords(line, bounds.start, bounds.end, shape.pauses)) : measured;
+    extras.push({ trimStart: bounds.start, words, mouth: shape?.mouth });
     // 자동 검사에서 끝이 잘렸던 장면은 말소리 측정 대신 음성 파일 끝까지 쓴다
     const full = opts.fullLength?.has(script.scenes[i]!.id) ? a.seconds - bounds.start + 0.1 : 0;
     seconds.push(Math.max(0.3, bounds.end - bounds.start, full));
@@ -481,7 +486,8 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
     if (shouldStop()) throw new RenderCanceled();
     const a = cachedAudio(scene.line, AUDIO_DIR, identity);
     if (!a) continue;
-    const heard = await transcribeAudio(a.file).catch(() => undefined);
+    // 예전 받아쓰기 캐시(낱말 글자 없음)는 여기서 새로 받아 둔다: 자막 어절 시간 맞추기(wordAlign.ts)에 낱말 글자가 필요하다
+    const heard = await transcribeAudio(a.file, { needWords: true }).catch(() => undefined);
     if (!heard) continue;
     checked++;
     let m = lineMatch(scene.line, heard.text);

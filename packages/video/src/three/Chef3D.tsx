@@ -76,6 +76,8 @@ interface Props {
   emotion: Emotion;
   frame: number;
   talking: boolean;
+  /** 입 벌림 (0~1, 실제 목소리 크기). 없으면 talking일 때 일정한 파형으로 */
+  mouth?: number;
   action: ChefAction;
   /** y축 회전 (0 = 카메라 쪽 +z) */
   facing: number;
@@ -103,8 +105,8 @@ export function eyeOpenness(frame: number): number {
   return Math.max(0.06, Math.min(close(frame - start), twice));
 }
 
-export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, action, facing, position, pop = 1 }) => {
-  const open = talking ? mouthOpen(frame) : 0;
+export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, mouth, action, facing, position, pop = 1 }) => {
+  const open = mouth ?? (talking ? mouthOpen(frame) : 0);
   const lids = emotion === 'joy' || emotion === 'embarrassed' ? 1 : eyeOpenness(frame);
   const rad = (d: number) => (d * Math.PI) / 180;
 

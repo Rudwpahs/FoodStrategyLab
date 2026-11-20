@@ -31,6 +31,8 @@ export interface SceneTiming {
   audioTrimFrames?: number;
   /** 실제 음성에서 잰 어절별 [시작, 끝] 프레임 (장면 시작 기준) */
   words?: [number, number][];
+  /** 입 벌림: 프레임마다 '0'~'9' 한 글자 (장면 시작 기준, 실제 목소리 크기에서. lipSync.ts) */
+  mouth?: string;
 }
 
 /** 음성 파일 분석 결과 (초 단위) */
@@ -39,6 +41,8 @@ export interface SpeechExtra {
   trimStart?: number;
   /** 어절별 [시작, 끝] (원본 파일 기준 초) */
   words?: [number, number][];
+  /** 입 벌림 글자열 (원본 파일 맨 앞부터, FPS 기준: lipSync.ts mouthTrack) */
+  mouth?: string;
 }
 
 export interface VideoProps {
@@ -94,8 +98,13 @@ export function buildTimeline(
       speechFrames: Math.min(durationInFrames, Math.ceil(speech * fps)),
       audioUrl: audioUrls[i],
     };
-    if (trim > 0) timing.audioTrimFrames = Math.round(trim * fps);
-    if (extra?.words?.length) timing.words = extra.words.map(([a, b]) => [Math.max(0, Math.round((a - trim) * fps)), Math.max(0, Math.round((b - trim) * fps))]);
+    // 음성은 프레임 단위로 잘라 재생하므로(trimBefore), 어절 시간·입 모양도 실제로 잘린 자리(프레임으로 반올림한 값)를 기준으로 옮긴다
+    const trimFrames = trim > 0 ? Math.round(trim * fps) : 0;
+    if (trimFrames > 0) timing.audioTrimFrames = trimFrames;
+    const played = trimFrames / fps;
+    if (extra?.words?.length) timing.words = extra.words.map(([a, b]) => [Math.max(0, Math.round((a - played) * fps)), Math.max(0, Math.round((b - played) * fps))]);
+    // 말소리가 끝나면(페이드 끝) 입을 닫는다
+    if (extra?.mouth) timing.mouth = extra.mouth.slice(trimFrames, trimFrames + timing.speechFrames + 1);
     cursor += durationInFrames;
     return timing;
   });
