@@ -395,7 +395,7 @@ describe('발음 고치기', () => {
   it('숫자·단위와 겹받침 ㄼ도 읽는 말로 바꾸고, 음성 파일 이름도 읽는 말을 따른다', async () => {
     const { pronounce } = await import('./tts.ts');
     expect(pronounce('설탕 1컵, 물엿 1/2컵, 3~4분')).toBe('설탕 한 컵, 물엿 반 컵, 삼사 분');
-    expect(pronounce('떫은맛이 줄어요')).toBe('떨븐맛이 줄어요');
+    expect(pronounce('떫은맛이 줄어요')).toBe('떨븐 맛이 줄어요');
   });
 });
 

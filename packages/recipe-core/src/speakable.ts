@@ -304,6 +304,9 @@ const join = (s: Syl) => String.fromCharCode(SBASE + s.cho * 588 + s.jung * 28 +
  * - 예외 '밟-': 자음 앞에서 [밥] (제10항 다만) — 밟다 → 밥따, 밟는 → 밤는 (제18항)
  * - 예외 '넓-': 넓죽하다·넓둥글다 → 넙쭉하다·넙뚱글다
  * 엔진이 이미 맞게 읽는 흔한 말(얇게·넓은·짧게: 2026-11-19 소리 실험)은 바꾸지 않는다 (READS_FINE).
+ * 꾸미는 말 '-은' 뒤에 이름씨가 붙은 말(떫은맛)은 그 사이를 띄워 넘긴다 — 떫은맛이 → 떨븐 맛이.
+ * 소리 실험(2026-11-21, 같은 문장·시드 8개, 받아쓰기): 붙여 쓴 "떨븐맛이"는 8번 중 5번, 띄운 "떨븐 맛이"는 8번 중 7번
+ * "떨분맛"으로 들렸다 (나머지는 "깔분맛"). 표준 발음은 같다 ([떨븐마시]).
  */
 const READS_FINE = new Set(['얇', '넓', '짧']);
 
@@ -324,7 +327,9 @@ export function respellDoubleFinalLB(text: string): string {
     }
     if (next.cho === CHO.ㅇ) {
       chars[i] = join({ ...s, jong: JONG.ㄹ });
-      chars[i + 1] = join({ ...next, cho: CHO.ㅂ });
+      // 떫은맛: '은' 뒤에 글자가 더 붙어 있으면 띄운다 (위 소리 실험)
+      const modifier = nextCh === '은' && isSyl(chars[i + 2]);
+      chars[i + 1] = join({ ...next, cho: CHO.ㅂ }) + (modifier ? ' ' : '');
     } else if (next.cho === CHO.ㅎ) {
       chars[i] = join({ ...s, jong: JONG.ㄹ });
       chars[i + 1] = join({ ...next, cho: CHO.ㅍ });
