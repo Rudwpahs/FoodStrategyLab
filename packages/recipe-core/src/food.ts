@@ -35,6 +35,8 @@ export interface FoodProfile {
   pieces: FoodPiece[];
   /** 물·국물 색 (냄비 요리) */
   liquidColor?: string;
+  /** 뜨겁게 먹는 음식인지 (완성 접시에 김을 올릴지). 원본 조리 순서로 정한다: servedHot */
+  hot?: boolean;
 }
 
 const KIND_RULES: { kind: FoodKind; words: string[] }[] = [
@@ -168,6 +170,23 @@ const BASE: Record<FoodKind, Omit<FoodProfile, 'kind' | 'bits' | 'pieces'>> = {
   generic: { vessel: 'pan', rawColor: '#E8CFA0', cookedColor: '#C9853F' },
 };
 
+/** 차게·식혀 먹는 요리 이름 (나물·무침·정과·강정·샐러드·냉국수 등) */
+const COLD_DISH = /나물|무침|겉절이|샐러드|정과|강정|냉면|냉국|냉채|묵|화채|식혜|양갱|김밥|장아찌|피클/;
+/** 마지막 단계에서 식히는 말 (식힘망은 눅눅해지지 않게 올려 두는 것이라 뜨거운 음식) */
+const COOL_DOWN = /얼음물|찬물|식힌|식혀|식히|냉장|차게/;
+
+/**
+ * 완성 접시가 뜨거운지: 요리 이름이 찬 요리면 아니고, 마지막 두 단계에서 식히면 아니다.
+ * (중간 단계의 '식혀서 냉동보관' 같은 준비 과정은 보지 않는다) 그 밖에는 종류로: 나물은 차게, 나머지는 뜨겁게.
+ * 김(스팀)은 뜨거운 음식에만 그린다 — 찬 나물·정과·얼음물에 식힌 달걀에 김을 올리면 원본과 다른 장면이 된다.
+ */
+export function servedHot(recipe: Pick<RecipeInput, 'dishName' | 'steps'>, kind: FoodKind): boolean {
+  if (COLD_DISH.test(recipe.dishName.replace(/\s/g, ''))) return false;
+  const last = recipe.steps.slice(-2).join(' ').replace(/식힘망/g, '');
+  if (COOL_DOWN.test(last)) return false;
+  return kind !== 'greens';
+}
+
 export function foodProfile(recipe: RecipeInput): FoodProfile {
   const kind = recipe.foodKind && recipe.foodKind !== 'auto' ? recipe.foodKind : inferFoodKind(recipe);
   const base = BASE[kind];
@@ -183,7 +202,7 @@ export function foodProfile(recipe: RecipeInput): FoodProfile {
     })
     .sort((a, b) => Number(a.shape === 'seed') - Number(b.shape === 'seed'))
     .slice(0, 5);
-  const profile: FoodProfile = { kind, ...base, bits, pieces };
+  const profile: FoodProfile = { kind, ...base, bits, pieces, hot: servedHot(recipe, kind) };
   // 덮밥·비빔밥: 고명을 팬에 볶고(재료 색), 완성 그릇은 밥 위에 고명
   if (kind === 'rice' && /덮밥|비빔밥|볶음밥/.test(`${recipe.dishName} ${recipe.topic}`)) {
     profile.topping = true;

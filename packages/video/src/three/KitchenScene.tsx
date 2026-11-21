@@ -1,10 +1,10 @@
 import React, { useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
-import { ACESFilmicToneMapping, BackSide, BoxGeometry, Color, DoubleSide, Mesh, MeshBasicMaterial, Object3D, PlaneGeometry, PMREMGenerator, PerspectiveCamera, Scene, type Texture, type WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Color, Object3D, PerspectiveCamera, Scene } from 'three';
 import { foodProfile, type Emotion, type FoodProfile, type IngredientProp, type RecipeInput } from '@mat-lab/recipe-core';
 import { Chef3D } from './Chef3D.tsx';
-import { CookingFood, Flame, FoodEnv, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
+import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
 import { BURNER, CHEF_POS, PLATE, chefFacing, handPlate, propPositions, type Vec3 } from './layout.ts';
 import { PLACE_HAS_STOVE, type DayTime, type Place, type TableDress } from './places.ts';
 import { PlaceSet } from './Sets.tsx';
@@ -128,59 +128,9 @@ const CameraRig: React.FC<{ pos: Vec3; target: Vec3; fov: number }> = ({ pos, ta
 /**
  * 렌더러 설정. 색 처리(톤 매핑)는 기본 ACES 그대로 둔다: 제품 색을 지키는 Khronos PBR Neutral도 시험했지만(2026-11)
  * 무대·식탁보까지 한꺼번에 주황빛으로 짙어져 인공적으로 보였다(채도가 지나치면 인공적으로 보인다는 연구와 같은 방향).
- * 음식 색은 톤 매핑 대신 음식 쪽(반사·꼭짓점 색·불빛 세기)에서 살린다.
+ * 음식 색은 톤 매핑 대신 음식 쪽(만화풍 재질의 선명한 색·단계 음영, toon.ts)에서 살린다.
  */
 const GL = { antialias: true, preserveDrawingBuffer: true, toneMapping: ACESFilmicToneMapping };
-
-/**
- * 음식 촬영 스튜디오처럼 만든 반사용 주변: 어두운 방에 큰 부드러운 조명판(소프트박스) 셋.
- * - 음식 뒤 위쪽의 큰 판: 접시 건너편에서 카메라 쪽으로 반사되는 빛 → 양념·유약이 '젖은 듯' 반짝인다
- * - 옆의 판 둘: 둥근 면을 따라 길게 비치는 하이라이트
- * 방 자체는 어두워서 음식이 뿌옇게 밝아지지 않는다(밝은 방을 쓰면 반사보다 '사방에서 오는 빛'이 커져 색이 바랬다).
- * 파일·외부 자원 없이 코드로 만들고, 캔버스(렌더러)마다 한 번만 흐리게 구워 둔다.
- */
-function studioScene(): Scene {
-  const scene = new Scene();
-  const room = new Mesh(new BoxGeometry(10, 10, 10), new MeshBasicMaterial({ color: '#2A241F', side: BackSide }));
-  scene.add(room);
-  const panel = (w: number, h: number, pos: [number, number, number], look: [number, number, number], strength: number, tint = '#FFF4E6') => {
-    const m = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ color: new Color(tint).multiplyScalar(strength), side: DoubleSide }));
-    m.position.set(...pos);
-    m.lookAt(...look);
-    scene.add(m);
-  };
-  // 음식(원점) 기준 방향. 카메라는 대체로 +z 쪽에서 본다
-  panel(4.5, 2.6, [0, 3.2, -3.4], [0, 0, 0], 5);
-  panel(2.2, 3.2, [-4.4, 1.6, 0.6], [0, 0, 0], 2.2);
-  panel(1.6, 2.4, [4.4, 1.2, -1.2], [0, 0, 0], 1.4, '#FFE2C2');
-  return scene;
-}
-
-const roomEnvs = new WeakMap<WebGLRenderer, Texture>();
-function roomEnv(gl: WebGLRenderer): Texture {
-  let t = roomEnvs.get(gl);
-  if (!t) {
-    const pm = new PMREMGenerator(gl);
-    const studio = studioScene();
-    t = pm.fromScene(studio, 0.02).texture;
-    pm.dispose();
-    // 구운 뒤에는 방 모형이 필요 없다
-    studio.traverse((o) => {
-      if (o instanceof Mesh) {
-        o.geometry.dispose();
-        (o.material as MeshBasicMaterial).dispose();
-      }
-    });
-    roomEnvs.set(gl, t);
-  }
-  return t;
-}
-
-const FoodEnvProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const gl = useThree((s) => s.gl);
-  const env = useMemo(() => roomEnv(gl), [gl]);
-  return <FoodEnv.Provider value={env}>{children}</FoodEnv.Provider>;
-};
 
 /** 한 상태의 3D 장면 내용 (조명·주방·음식·소품·맛조수) */
 const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProfile; props: IngredientProp[] }> = ({ frame, state, food, props }) => {
@@ -195,7 +145,7 @@ const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProf
         <>
           <Flame frame={frame} on={state.burnerOn} />
           <CookingFood food={food} cook={state.cook} frame={frame} stirring={state.action === 'cook'} flip={state.flip} showFood={state.showFoodInVessel} />
-          {state.showFoodInVessel && state.burnerOn && <Steam origin={[BURNER[0], BURNER[1] + 0.12, BURNER[2]]} frame={frame} amount={5} />}
+          {state.showFoodInVessel && state.burnerOn && <Steam origin={[BURNER[0], BURNER[1] + 0.12, BURNER[2]]} frame={frame} amount={3} />}
         </>
       )}
       {state.action === 'present' ? (
@@ -268,9 +218,7 @@ export const KitchenScene: React.FC<{
   // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다
   <ThreeCanvas width={width} height={height} dpr={1} shadows gl={GL} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
     <CameraRig {...state.camera} />
-    <FoodEnvProvider>
-      <SceneContents frame={frame} state={state} food={food} props={props} />
-      {split && <SplitTop frame={frame} state={split} food={food} />}
-    </FoodEnvProvider>
+    <SceneContents frame={frame} state={state} food={food} props={props} />
+    {split && <SplitTop frame={frame} state={split} food={food} />}
   </ThreeCanvas>
 );

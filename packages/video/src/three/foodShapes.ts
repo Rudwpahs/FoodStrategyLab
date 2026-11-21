@@ -2,6 +2,8 @@
 // 울퉁불퉁하게 만든다. 같은 입력이면 항상 같은 모양 (영상 프레임마다 모양이 바뀌면 안 된다).
 import {
   BoxGeometry,
+  CatmullRomCurve3,
+  TubeGeometry,
   BufferGeometry,
   CanvasTexture,
   CylinderGeometry,
@@ -15,7 +17,7 @@ import {
   Vector3,
   type Texture,
 } from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { PieceShape } from '@mat-lab/recipe-core';
 import { seeded } from '../random.ts';
 
@@ -117,33 +119,32 @@ function slice(seed: number): BufferGeometry {
 }
 
 /**
- * 호두 반쪽 알맹이: 가운데 깊은 골로 나뉜 두 덩이 + 뇌처럼 구불구불한 주름, 아래는 평평 — 길이 약 2.7.
- * (예전: 공을 울퉁불퉁하게만 해서 주황 덩어리처럼 보였다) 주름 사이는 꼭짓점 색으로 어둡게 해 깊이가 보인다.
+ * 호두 반쪽 알맹이 (만화풍): 가운데 골로 나뉜 두 덩이 + 굵고 큰 주름 서너 줄, 아래는 평평 — 길이 약 2.7.
+ * 예전에는 뇌 모양 잔주름 + 틈 그늘을 꼼꼼히 넣어 '어설픈 사실풍'(가장 거부감이 큰 구간)이었다.
+ * 만화 음식은 모양을 단순하게, 그늘은 두 단계로만 끊어 그린다(그림 실무). 꼭짓점 수도 줄였다(36×24 → 28×18).
  */
 function walnut(seed: number): BufferGeometry {
-  return deform(new SphereGeometry(1, 36, 24), (p) => {
+  return deform(new SphereGeometry(1, 28, 18), (p) => {
     const { x, y, z } = p;
     const top = smoothstep(-0.35, 0.4, y);
-    const groove = Math.exp(-((x / 0.17) ** 2)) * 0.34 * top;
-    // 가로로 도는 굵은 주름 + 잔주름 (덩이마다 결이 조금 다르게)
-    const wave = Math.sin(z * 8.5 + Math.sin(x * 3.2 + seed) * 1.6 + seed) * 0.75 + Math.sin(x * 10 - z * 2.5 + seed * 2) * 0.45;
-    const fine = Math.sin(x * 19 + Math.sin(z * 7 + seed) * 2) * Math.sin(z * 17 - seed) * 0.5;
-    const ridge = (wave * 0.1 + fine * 0.05) * (0.35 + 0.65 * top);
-    const lobe = bumps(x, y, z, 3.4, seed) * 0.08;
-    const r = 1 - groove + ridge + lobe;
-    p.multiplyScalar(r);
-    p.set(p.x * 1.35, p.y > 0 ? p.y * 0.66 : p.y * 0.24, p.z);
-    // 틈 그늘: 골·주름 안쪽은 어둡고 튀어나온 곳은 밝게
-    return 0.62 + 0.38 * smoothstep(-0.12, 0.08, ridge + lobe - groove * 0.9);
+    const groove = Math.exp(-((x / 0.2) ** 2)) * 0.3 * top;
+    // 굵은 주름 몇 줄만 (덩이마다 결이 조금 다르게)
+    const wave = Math.sin(z * 5.2 + Math.sin(x * 2.2 + seed) * 0.9 + seed);
+    const ridge = wave * 0.12 * (0.35 + 0.65 * top);
+    const lobe = bumps(x, y, z, 2.4, seed) * 0.05;
+    p.multiplyScalar(1 - groove + ridge + lobe);
+    p.set(p.x * 1.35, p.y > 0 ? p.y * 0.7 : p.y * 0.26, p.z);
+    // 그늘 두 단계: 골·주름 안쪽만 짙게 (칼같이 끊음)
+    return 0.6 + 0.4 * smoothstep(-0.05, -0.02, ridge - groove * 0.8);
   });
 }
 
 /**
  * 데쳐서 무친 나물 한 가닥: 길쭉한 잎이 비틀리고 휘었다. 줄기 쪽(왼쪽 끝)은 연두색으로 밝다 — 길이 1.
- * (예전: 구겨진 넓은 잎이라 미역·브로콜리처럼 보였다)
+ * 만화풍에서는 잎맥 같은 잔무늬를 넣지 않는다(줄기 색만 또렷하게).
  */
 function wilted(seed: number): BufferGeometry {
-  return deform(new PlaneGeometry(1, 0.26, 18, 3), (v) => {
+  return deform(new PlaneGeometry(1, 0.26, 14, 2), (v) => {
     const t = v.x + 0.5; // 0 = 줄기 끝, 1 = 잎 끝
     const leaf = smoothstep(0.25, 0.45, t);
     const width = 0.28 + 0.72 * leaf * Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0.04, (t - 0.2) / 0.8 + 0.08))), 0.6);
@@ -152,11 +153,9 @@ function wilted(seed: number): BufferGeometry {
     const y = y0 * Math.cos(twist);
     const z = y0 * Math.sin(twist) + (t - 0.5) * (t - 0.5) * 0.45 + Math.sin(t * 6 + seed) * 0.05;
     v.set(v.x, y, z);
-    // 줄기는 밝은 연두, 잎 가운데 잎맥은 살짝 밝게
+    // 줄기는 밝은 연두 (두 단계로 끊어서)
     const stem: [number, number, number] = [1.45, 1.35, 0.85];
-    const base = lerp3(stem, [1, 1, 1], leaf);
-    const vein = 1 + 0.12 * Math.exp(-((v.y / 0.03) ** 2));
-    return [base[0] * vein, base[1] * vein, base[2] * vein];
+    return lerp3(stem, [1, 1, 1], smoothstep(0.3, 0.36, t));
   });
 }
 
@@ -239,32 +238,83 @@ export function moundGeometry(seed: number): BufferGeometry {
 }
 
 /**
- * 전·부침개: 가장자리가 들쭉날쭉한 납작한 원판 — 반지름 1, 두께 1.
- * 꼭짓점 색으로 노릇함을 넣는다: 가장자리는 진한 갈색으로 바삭하게, 윗면에는 군데군데 노릇한 자국, 아랫면은 전체가 노릇.
- * (예전: 한 가지 색의 원판이라 덜 익은 반죽처럼 보였다. 위 면이 촘촘해야 자국이 보여서 구를 눌러 만든다)
+ * 전·부침개 (만화풍): 가장자리가 둥글게 물결치는 납작한 원판 — 반지름 1, 두께 1.
+ * 노릇함은 꼭짓점 색을 '단계'로 끊어 넣는다: 가장자리를 도는 바삭한 갈색 띠 + 윗면의 큰 노릇한 얼룩 몇 개(경계가 또렷하게), 아랫면은 전체가 노릇.
+ * 예전에는 잔 얼룩(촘촘한 무늬)과 잔물결로 사실처럼 만들려 했는데, 멀리서는 덜 익은 반죽, 가까이서는 어색한 사진처럼 보였다.
  */
 export function pancakeGeometry(seed: number): BufferGeometry {
   return cached(`pancake:${seed}`, () =>
     deform(new SphereGeometry(1, 96, 36), (v) => {
       const a = Math.atan2(v.z, v.x);
       const ring = Math.hypot(v.x, v.z);
-      const edge = 1 + Math.sin(a * 5 + seed) * 0.035 + Math.sin(a * 13 + seed * 3) * 0.022 + Math.sin(a * 31 + seed * 5) * 0.012;
+      // 큰 물결 몇 개만 (만화 전은 테두리가 둥글게 출렁인다)
+      const edge = 1 + Math.sin(a * 5 + seed) * 0.045 + Math.sin(a * 9 + seed * 3) * 0.02;
       const up = v.y >= 0;
-      // 위·아래는 평평하고 옆은 둥글게: 높이를 눌러 모서리만 둥근 원판으로
       const h = Math.sign(v.y) * Math.pow(Math.abs(v.y), 0.3) * 0.5;
       const x = v.x * edge;
       const z = v.z * edge;
-      const surface = up ? bumps(x, 0, z, 13, seed) * 0.07 + bumps(x, 0, z, 4.5, seed + 1) * 0.08 : 0;
-      // 가운데가 살짝 도톰하고 가장자리는 얇게
-      v.set(x, h * (1 - ring * 0.3) + surface * (1 - ring * 0.5), z);
-      const golden: [number, number, number] = [0.66, 0.44, 0.24];
-      const rim = smoothstep(0.8, 0.99, ring);
-      // 자잘한 자국 여러 개 + 큰 얼룩 조금 (한두 개의 큰 원이면 달걀 프라이처럼 보였다)
-      const spots = smoothstep(0.2, 0.6, bumps(x, 0, z, 11, seed + 2.5)) * 0.8 + smoothstep(0.3, 0.7, bumps(x, 0, z, 4, seed + 7)) * 0.3;
-      const brown = up ? clamp01(rim * 0.95 + spots * 0.55) : 0.75;
-      return lerp3([1, 1, 1], golden, brown);
+      // 윗면은 느린 물결로 살짝 도톰하게 (잔물결 없음)
+      const surface = up ? Math.sin(x * 4.2 + seed) * Math.cos(z * 3.7 - seed) * 0.06 : 0;
+      v.set(x, h * (1 - ring * 0.25) + surface * (1 - ring * 0.5), z);
+      return pancakeShade(ring, bumps(x, 0, z, 3.2, seed + 2.5), up);
     }),
   );
+}
+
+/** 전 색 단계: 밝은 반죽 → 노릇한 얼룩 → 바삭한 갈색 테두리. 경계를 좁게(또렷하게) 둔다 */
+export const PANCAKE_TONES = {
+  base: [1, 1, 1] as [number, number, number],
+  golden: [0.84, 0.6, 0.34] as [number, number, number],
+  crisp: [0.58, 0.33, 0.14] as [number, number, number],
+};
+export function pancakeShade(ring: number, field: number, up: boolean): [number, number, number] {
+  if (!up) return PANCAKE_TONES.golden;
+  const patch = smoothstep(0.32, 0.37, field);
+  const rim = smoothstep(0.82, 0.86, ring);
+  return lerp3(lerp3(PANCAKE_TONES.base, PANCAKE_TONES.golden, patch), PANCAKE_TONES.crisp, rim);
+}
+
+/**
+ * 면 가닥 묶음을 하나의 모양으로 합친다(가닥마다 따로 그리면 그리기 호출이 수십 번 → 한 번).
+ * nest면 접시에 돌돌 말아 올린 둥지 모양, 아니면 냄비 속에 흩어진 가닥.
+ * 만화풍: 가닥을 조금 굵고 적게 (가는 가닥 수십 개는 멀리서 회색 실뭉치처럼 보였다).
+ */
+export function noodleGeometry(o: { radius: number; height: number; nest: boolean }): BufferGeometry {
+  return cached(`noodles:${o.radius}:${o.height}:${o.nest}`, () => {
+    const rnd = seeded(11);
+    const parts: BufferGeometry[] = [];
+    if (o.nest) {
+      for (let k = 0; k < 22; k++) {
+        const start = rnd() * Math.PI * 2;
+        const turns = 1.2 + rnd() * 0.9;
+        const pts = Array.from({ length: 14 }, (_, i) => {
+          const t = i / 13;
+          const a = start + t * turns * Math.PI * 2;
+          const r = o.radius * (1 - t * 0.78) * (0.85 + rnd() * 0.25);
+          const y = o.height * (0.15 + t * 0.95) * (1 - (r / o.radius) ** 2 * 0.4) + (rnd() - 0.5) * 0.006 + (k % 3) * 0.002;
+          return new Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+        });
+        parts.push(new TubeGeometry(new CatmullRomCurve3(pts), 72, 0.0045, 6, false));
+      }
+    } else {
+      // 냄비 속: 물속에서 빙글 도는 긴 곡선 가닥 (짧게 꺾인 직선은 감자튀김처럼 보였다)
+      for (let k = 0; k < 18; k++) {
+        const start = rnd() * Math.PI * 2;
+        const turns = 0.5 + rnd() * 0.6;
+        const r0 = o.radius * (0.3 + rnd() * 0.6);
+        const pts = Array.from({ length: 12 }, (_, i) => {
+          const t = i / 11;
+          const a = start + t * turns * Math.PI * 2;
+          const r = Math.min(o.radius * 0.95, r0 * (0.8 + 0.4 * Math.sin(t * 3 + k)));
+          return new Vector3(Math.cos(a) * r, o.height * (0.4 + 0.6 * Math.sin(t * 5 + k) ** 2), Math.sin(a) * r);
+        });
+        parts.push(new TubeGeometry(new CatmullRomCurve3(pts), 48, 0.0045, 6, false));
+      }
+    }
+    const merged = mergeGeometries(parts)!;
+    parts.forEach((p) => p.dispose());
+    return merged;
+  });
 }
 
 /**
@@ -297,30 +347,38 @@ export function plateGeometry(): BufferGeometry {
 
 let steamTex: Texture | null = null;
 /**
- * 김 한 줄기 그림(가운데가 진하고 가장자리로 갈수록 흐려지는 구름 몇 개를 겹친 것). 코드로 한 번만 그린다.
- * 카메라를 향하는 판(스프라이트)에 붙여, 올라가며 커지고 흐려지게 움직인다.
+ * 만화 김 한 가닥: 위로 구불구불 올라가는 흰 S자 선(끝이 둥근 붓선 + 살짝 번진 테두리). 코드로 한 번만 그린다.
+ * 만화·애니에서 '뜨겁다'를 알리는 상징 모양. 카메라를 향하는 판(스프라이트)에 붙여 올라가며 흔들리고 흐려지게 움직인다
+ * (움직이는 김만 효과가 있다 — Zhang 외 2024).
  */
 export function steamTexture(): Texture | null {
   if (steamTex) return steamTex;
   if (typeof document === 'undefined') return null;
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = 64;
+  c.height = 160;
   const g = c.getContext('2d')!;
-  const blobs = [
-    [64, 70, 46, 0.55],
-    [48, 52, 30, 0.4],
-    [80, 46, 28, 0.4],
-    [62, 30, 24, 0.3],
-    [74, 88, 30, 0.35],
-  ];
-  for (const [x, y, r, a] of blobs) {
-    const grad = g.createRadialGradient(x!, y!, 0, x!, y!, r!);
-    grad.addColorStop(0, `rgba(255,255,255,${a})`);
-    grad.addColorStop(0.55, `rgba(255,255,255,${a! * 0.45})`);
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 128, 128);
-  }
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const path = () => {
+    g.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40;
+      const x = 32 + Math.sin(t * Math.PI * 2.2) * 14 * (0.5 + t * 0.5);
+      const y = 148 - t * 136;
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+  };
+  // 번진 테두리 → 또렷한 가운데 선
+  g.strokeStyle = 'rgba(255,255,255,0.35)';
+  g.lineWidth = 16;
+  path();
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,1)';
+  g.lineWidth = 9;
+  path();
+  g.stroke();
   steamTex = new CanvasTexture(c);
   steamTex.colorSpace = SRGBColorSpace;
   return steamTex;

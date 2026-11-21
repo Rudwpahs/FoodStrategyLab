@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, estimateSpeechSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientPiece, ingredientProps } from './index.ts';
+import { RecipeInputSchema, SAMPLE_RECIPES, checkScript, clipGroups, estimateSceneSeconds, estimateSpeechSeconds, foodProfile, generateTemplateScript, inferFoodKind, ingredientPiece, ingredientProps, servedHot } from './index.ts';
 
 const [kimchi, spinach, egg] = SAMPLE_RECIPES as [typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0], typeof SAMPLE_RECIPES[0]];
 
@@ -81,6 +81,17 @@ describe('3D 음식 표현 규칙', () => {
     expect(labels.slice(0, 3)).toEqual(['고사리 400g', '거피들깨가루 100g', '고사리들깨소스 1인분']);
     expect(labels).toContain('스파게티니 100g');
     expect(labels.length).toBeLessThanOrEqual(6);
+  });
+
+  it('김은 뜨겁게 먹는 음식에만: 조리 순서 끝에서 식히거나 찬 요리 이름이면 김이 없다', () => {
+    const hot = (name: string) => foodProfile(SAMPLE_RECIPES.find((r) => r.dishName === name)!).hot;
+    expect(hot('바삭한 김치전')).toBe(true); // 식힘망은 눅눅해지지 않게 올려 두는 것
+    expect(hot('시금치나물')).toBe(false); // 찬물에 헹군 나물
+    expect(hot('반숙 달걀')).toBe(false); // 얼음물에 식힘
+    expect(hot('호두정과')).toBe(false); // 정과는 식혀 먹는 과자
+    expect(hot('들깨고사리파스타')).toBe(true); // 소스를 '식혀서 냉동보관'은 준비 단계라 보지 않는다
+    expect(servedHot({ dishName: '김치찌개', steps: ['끓인다'] }, 'soup')).toBe(true);
+    expect(servedHot({ dishName: '비빔국수', steps: ['삶은 면을 찬물에 헹군다', '양념에 비빈다'] }, 'noodles')).toBe(false);
   });
 
   it('실제 레시피 대본은 원본에 없는 분량 오류가 없다', () => {

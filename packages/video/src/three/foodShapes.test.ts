@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BufferGeometry } from 'three';
 import { SAMPLE_RECIPES, foodProfile, type PieceShape } from '@mat-lab/recipe-core';
-import { pancakeGeometry, pieceGeometry, plateGeometry, wiltedGeometry } from './foodShapes.ts';
+import { PANCAKE_TONES, noodleGeometry, pancakeGeometry, pancakeShade, pieceGeometry, plateGeometry, wiltedGeometry } from './foodShapes.ts';
 
 const SHAPES: PieceShape[] = ['bean', 'leaf', 'strip', 'chunk', 'nut', 'cube', 'slice', 'curl', 'ring', 'seed'];
 
@@ -21,18 +21,39 @@ describe('음식 3D 모양', () => {
     for (const v of [0, 1, 2]) expect(finite(wiltedGeometry(v)), `wilted:${v}`).toBe(true);
     expect(finite(pancakeGeometry(3))).toBe(true);
     expect(finite(plateGeometry())).toBe(true);
+    expect(finite(noodleGeometry({ radius: 0.085, height: 0.05, nest: true }))).toBe(true);
+    expect(finite(noodleGeometry({ radius: 0.12, height: 0.012, nest: false }))).toBe(true);
   });
 
-  it('호두·나물·전은 꼭짓점 색(틈 그늘·줄기 색·노릇한 가장자리)이 있어 한 가지 색 덩어리가 아니다', () => {
+  it('호두·나물·전은 꼭짓점 색(주름 그늘·줄기 색·노릇한 가장자리)이 있어 한 가지 색 덩어리가 아니다', () => {
     const spread = (g: BufferGeometry) => {
       const c = g.getAttribute('color');
       expect(c, '꼭짓점 색').toBeTruthy();
       const r = Array.from({ length: c.count }, (_, i) => c.getX(i));
       return Math.max(...r) - Math.min(...r);
     };
-    expect(spread(pieceGeometry('nut', 0))).toBeGreaterThan(0.3);
+    expect(spread(pieceGeometry('nut', 0))).toBeGreaterThan(0.2);
     expect(spread(wiltedGeometry(0))).toBeGreaterThan(0.3);
     expect(spread(pancakeGeometry(3))).toBeGreaterThan(0.25);
+  });
+});
+
+describe('만화풍 전 색 단계', () => {
+  it('가장자리는 바삭한 갈색, 노릇한 얼룩은 그 사이, 가운데 반죽이 가장 밝고 아랫면은 노릇하다', () => {
+    const sum = (c: number[]) => c[0]! + c[1]! + c[2]!;
+    const center = pancakeShade(0.2, -1, true);
+    const patch = pancakeShade(0.2, 1, true);
+    const rim = pancakeShade(0.98, -1, true);
+    expect(center).toEqual(PANCAKE_TONES.base);
+    expect(sum(patch)).toBeLessThan(sum(center));
+    expect(sum(rim)).toBeLessThan(sum(patch));
+    expect(pancakeShade(0.2, -1, false)).toEqual(PANCAKE_TONES.golden);
+  });
+
+  it('단계는 또렷하다: 얼룩 경계를 조금만 넘으면 색이 거의 다 바뀐다 (사실풍 잔무늬처럼 번지지 않게)', () => {
+    const r = (f: number) => pancakeShade(0.2, f, true)[2];
+    expect(r(0.3)).toBeCloseTo(1, 5);
+    expect(r(0.4)).toBeCloseTo(PANCAKE_TONES.golden[2], 5);
   });
 });
 

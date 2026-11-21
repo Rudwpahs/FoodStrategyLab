@@ -11,7 +11,7 @@
 | 경로 | 역할 |
 | --- | --- |
 | `packages/recipe-core` | 규칙·순수 함수: 레시피 모델, 원본 대조(`fidelity.ts`), 훅 15종(`hooks.ts`), 연출 6종(`styles.ts`), 후보 5개(`candidates.ts`), AI 이야기 대본 프롬프트·검사(`generator/story.ts`) |
-| `packages/video` | Remotion + Three.js 렌더: 3D 무대 5곳(주방·시장·식탁·찬장·연구실, `three/places.ts`·`Sets.tsx`)·맛조수·음식(`foodShapes.ts`), 실제 촬영 영상 모드(`realFootage.ts`·`clipSound.ts`·`components/Narrator.tsx`, 촬영 목록은 recipe-core `shotList.ts`), 자막, 자막 강조·줄 나누기(`captionStyle.ts`), 자막 어절 시간을 받아쓰기·실제 쉼에 맞추기(`wordAlign.ts`), 입 모양을 목소리 크기에 맞추기(`lipSync.ts`), 효과음(`sfx.ts`), 배경 음악·더킹(`music.ts`, CC0 곡은 `assets/bgm`), 렌더러(`render.ts`), 완성 영상 자동 품질 검사(`qa.ts`: 대사 잘림·무음·검은 화면·받아쓰기 대조) |
+| `packages/video` | Remotion + Three.js 렌더: 3D 무대 5곳(주방·시장·식탁·찬장·연구실, `three/places.ts`·`Sets.tsx`)·맛조수·음식(`foodShapes.ts`, 만화풍 재질 `toon.ts`), 실제 촬영 영상 모드(`realFootage.ts`·`clipSound.ts`·`components/Narrator.tsx`, 촬영 목록은 recipe-core `shotList.ts`), 자막, 자막 강조·줄 나누기(`captionStyle.ts`), 자막 어절 시간을 받아쓰기·실제 쉼에 맞추기(`wordAlign.ts`), 입 모양을 목소리 크기에 맞추기(`lipSync.ts`), 효과음(`sfx.ts`), 배경 음악·더킹(`music.ts`, CC0 곡은 `assets/bgm`), 렌더러(`render.ts`), 완성 영상 자동 품질 검사(`qa.ts`: 대사 잘림·무음·검은 화면·받아쓰기 대조) |
 | `packages/publishing` | 블로그(자동·전문가 답변형), SNS 문구, 일관성 검사, 문체 점검(AI 티: im-not-ai 규칙, `aiTells.ts`), im-not-ai 윤문 룰북·요청문·게이트(`imNotAi/`), ZIP |
 | `apps/studio/server` | Express 5 + node:sqlite: API, 로그인(`auth.ts`), 제작 파이프라인(`pipeline.ts`), VoiceStudio 연동(`voicestudio.ts`, `tts.ts`), 레시피 읽기(`recipeReader.ts`)·AI 티 다듬기(`humanize.ts`)·AI 이야기 대본(`storyWriter.ts`)·쉬운 말 수정 요청(`scriptReviser.ts`)·계정 진단(`audit.ts`, `auditSummary.ts`) (Claude API·월 한도 공유), 주간 계획·승인 대기열(`planSlots.ts`, `planApi.ts`), 예약 게시·댓글 답장(`autoPilot.ts`, `commentRules.ts`, 기본 꺼짐) |
 | `apps/studio/web` | React 19 화면 (Vite) |
