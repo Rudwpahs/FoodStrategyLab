@@ -138,3 +138,17 @@ describe('화면에 적는 영상 길이', () => {
     expect(videoSeconds(at(1229))).toBe(40);
   });
 });
+
+describe('핵심 원리 앞 쉼', () => {
+  it('첫 explain 장면 바로 앞 장면만 0.35초 길어진다 (영상당 한 번)', () => {
+    const script = generateTemplateScript(SAMPLE_RECIPES[0]!);
+    const k = script.scenes.findIndex((s) => s.type === 'explain');
+    expect(k).toBeGreaterThan(0);
+    const secs = script.scenes.map(() => 2);
+    const base = buildTimeline({ ...script, scenes: script.scenes.map((s) => (s.type === 'explain' ? { ...s, type: 'question' as const } : s)) }, secs);
+    const withKey = buildTimeline(script, secs);
+    const diff = withKey.map((t, i) => t.durationInFrames - base[i]!.durationInFrames);
+    expect(diff[k - 1]).toBe(Math.round(0.35 * FPS));
+    expect(diff.filter((d, i) => i !== k - 1 && i !== k).every((d) => d === 0)).toBe(true);
+  });
+});

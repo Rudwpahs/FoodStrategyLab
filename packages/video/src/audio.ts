@@ -113,7 +113,7 @@ export async function cachedSpeechShape(file: string, fps = FPS): Promise<Speech
 
 /** 최종 영상 음량을 -14 LUFS로 맞춘다 (화면은 다시 인코딩하지 않음) */
 export async function normalizeLoudness(input: string, output: string): Promise<void> {
-  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
+  await ff(['-hide_banner', '-y', '-i', path.resolve(input), '-c:v', 'copy', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', path.resolve(output)]);
 }
 
 /** 영상·음성의 소리 크기(dB)를 QA_STEP 간격으로 (자동 품질 검사용) */

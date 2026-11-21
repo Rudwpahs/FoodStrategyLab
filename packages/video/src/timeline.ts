@@ -10,6 +10,11 @@ const MIN_INTRO_SECONDS = 2.4;
 const OUTRO_EXTRA_SECONDS = 1.6;
 /** 펀치라인(팁·실수) 뒤에 두는 짧은 쉼 */
 const PUNCH_BEAT_SECONDS = 0.35;
+/**
+ * 핵심 원리(첫 explain 장면) 바로 앞에만 쉼을 더 둔다 (장면 끝 기본 쉼 0.45초 + 이만큼).
+ * 근거: 단어 바로 앞의 조용한 쉼이 그 단어를 더 잘 기억하게 했다 (MacGregor·Corley·Donaldson 2010). 쉼이 잦으면 역효과라 영상당 한 번만.
+ */
+const KEY_PAUSE_SECONDS = 0.35;
 /** 화면 카드를 읽는 데 필요한 최소 시간 (초당 약 16자, 최대 5초) */
 const READ_CHARS_PER_SECOND = 16;
 const MAX_READ_SECONDS = 5;
@@ -83,11 +88,13 @@ export function buildTimeline(
   fps = FPS,
 ): SceneTiming[] {
   let cursor = 0;
+  const keyIndex = script.scenes.findIndex((s) => s.type === 'explain');
   return script.scenes.map((scene, i) => {
     const speech = speechSeconds[i] ?? estimateSpeechSeconds(scene.line);
     let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
     if (scene.type === 'tip' || scene.type === 'mistake') seconds += PUNCH_BEAT_SECONDS;
+    if (keyIndex > 0 && i === keyIndex - 1) seconds += KEY_PAUSE_SECONDS;
     const durationInFrames = Math.ceil(seconds * fps);
     const extra = extras[i];
     const trim = extra?.trimStart ?? 0;
