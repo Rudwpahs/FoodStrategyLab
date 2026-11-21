@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
+import { AI_CLIP_CHECK, BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
 import { BLOG_STYLE_INFO, type BlogStyle } from '@mat-lab/publishing';
 import { buildTimeline, videoSeconds, type SceneTiming } from '@mat-lab/video';
 import { api, renderFile } from '../api.ts';
@@ -16,6 +16,8 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
   const latest = project.latest;
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  // 생성 AI 클립이 들어간 영상이면 클립을 직접 봤다는 확인을 더 받는다 (원칙 1, 서버도 같은 것을 확인)
+  const aiClips = Object.values(project.sceneMedia ?? {}).some((m) => /\.ai\./.test(m.url));
   const [reviewer, setReviewer] = useState<string>(user?.displayName ?? BRAND.researcher);
   const [note, setNote] = useState('');
   // 대사별 AI 티 (im-not-ai 규칙 검사, 0원)
@@ -248,7 +250,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
         ) : (
           <>
             {aiPending && <RecipeReadCard project={project} onEdit={() => go('input')} onConfirmed={reload} open />}
-            {CHECKLIST_ITEMS.map((c) => (
+            {[...CHECKLIST_ITEMS, ...(aiClips ? [AI_CLIP_CHECK] : [])].map((c) => (
               <label key={c.key} className={`check ${checklist[c.key] ? 'on' : ''}`}>
                 <input type="checkbox" checked={!!checklist[c.key]} onChange={(e) => setChecklist((p) => ({ ...p, [c.key]: e.target.checked }))} />
                 {c.label}
@@ -271,7 +273,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
                 <button className="btn" onClick={() => submit('changes_requested')}>수정 요청</button>
                 <button
                   className="btn primary big"
-                  disabled={issues === null || errors > 0 || aiPending || !CHECKLIST_ITEMS.every((c) => checklist[c.key]) || !reviewer.trim()}
+                  disabled={issues === null || errors > 0 || aiPending || !CHECKLIST_ITEMS.every((c) => checklist[c.key]) || (aiClips && !checklist[AI_CLIP_CHECK.key]) || !reviewer.trim()}
                   title={issues === null ? '원본 대조 검사가 끝나야 승인할 수 있어요' : errors > 0 ? '원본 레시피와 다른 곳을 먼저 고쳐야 승인할 수 있어요' : aiPending ? 'AI 제안 내용을 먼저 확인해 주세요' : ''}
                   onClick={() => submit('approved')}
                 >

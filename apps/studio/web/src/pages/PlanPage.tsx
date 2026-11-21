@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BRAND, CHECKLIST_ITEMS, SLOT_STATUS_LABELS, WEEKDAY_LABELS, addDays, slotTimeLabel, type SlotStatus } from '@mat-lab/recipe-core';
+import { BRAND, AI_CLIP_CHECK, CHECKLIST_ITEMS, SLOT_STATUS_LABELS, WEEKDAY_LABELS, addDays, slotTimeLabel, type SlotStatus } from '@mat-lab/recipe-core';
 import { api, planApi, type PlanResponse, type PlanSlotView, type QueueCard } from '../api.ts';
 import { navigate, useApp } from '../App.tsx';
 import { Sheet } from '../components/Sheet.tsx';
@@ -262,7 +262,8 @@ const ApproveSheet: React.FC<{ card: QueueCard; canApprove: boolean; onClose: ()
   const [reviewer, setReviewer] = useState(user?.displayName ?? BRAND.researcher);
   const [busy, setBusy] = useState(false);
   const blocked = card.fidelityErrors.length > 0 || card.aiPending;
-  const ready = canApprove && !blocked && CHECKLIST_ITEMS.every((c) => checklist[c.key]) && (card.qaErrors.length === 0 || qaSeen) && reviewer.trim().length > 0;
+  const items = [...CHECKLIST_ITEMS, ...(card.aiClips ? [AI_CLIP_CHECK] : [])];
+  const ready = canApprove && !blocked && items.every((c) => checklist[c.key]) && (card.qaErrors.length === 0 || qaSeen) && reviewer.trim().length > 0;
 
   const approve = async () => {
     setBusy(true);
@@ -292,7 +293,7 @@ const ApproveSheet: React.FC<{ card: QueueCard; canApprove: boolean; onClose: ()
       ))}
       {card.aiPending && <div className="issue warning small">사진에서 읽을 때 AI가 채운 칸을 먼저 확인해야 승인할 수 있어요. [검수 화면]에서 확인해 주세요.</div>}
       {!canApprove && <div className="issue warning small">승인은 연구자 계정만 할 수 있어요. 연구자 계정으로 로그인해 주세요.</div>}
-      {CHECKLIST_ITEMS.map((c) => (
+      {items.map((c) => (
         <label key={c.key} className={`check ${checklist[c.key] ? 'on' : ''}`}>
           <input type="checkbox" checked={!!checklist[c.key]} onChange={(e) => setChecklist((p) => ({ ...p, [c.key]: e.target.checked }))} />
           {c.label}

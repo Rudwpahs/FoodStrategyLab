@@ -9,6 +9,7 @@ import {
   RecipeInputSchema,
   ScriptSchema,
   canApprove,
+  AI_CLIP_CHECK,
   deriveStatus,
   type Checklist,
   type ProjectStatus,
@@ -471,6 +472,11 @@ export class Repo {
     return toPublication(this.db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId) as Row);
   }
 
+  /** 생성 AI 클립('장면.ai.확장자')이 하나라도 들어갔는지 (승인할 때 클립을 직접 봤는지 더 묻는다) */
+  hasAiClips(id: number): boolean {
+    return Object.values(this.getSceneMedia(id)).some((m) => isAiClipFile(m.file));
+  }
+
   getSceneMedia(id: number): SceneMedia {
     const rows = this.db.prepare('SELECT scene_id, file, kind, created_at FROM scene_media WHERE project_id = ?').all(id) as Row[];
     const out: SceneMedia = {};
@@ -556,6 +562,7 @@ export class Repo {
     if (decision === 'approved') {
       const gate = canApprove(checklist, input.reviewer);
       if (!gate.ok) throw new HttpError(400, gate.reason);
+      if (this.hasAiClips(id) && checklist.aiClips !== true) throw new HttpError(400, `생성 AI 클립이 들어간 영상이에요. 확인하지 않은 항목: ${AI_CLIP_CHECK.label}`);
       // 원본 레시피와 다른 분량·재료·순서가 있으면 승인하지 않는다 (확인창으로 넘기지 않음)
       const errors = checkScript(this.getRecipe(id), latest.script).filter((i) => i.level === 'error');
       if (errors.length) throw new HttpError(409, `원본 레시피와 다른 곳 ${errors.length}건을 고쳐야 승인할 수 있어요: ${errors[0]!.message}`);

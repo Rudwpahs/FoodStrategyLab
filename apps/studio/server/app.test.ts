@@ -459,6 +459,27 @@ describe('장면별 AI 클립', () => {
   });
 });
 
+describe('생성 AI 클립이 든 영상 승인 (원칙 1)', () => {
+  it('AI 클립이 있으면 클립을 직접 봤다는 확인 없이는 승인할 수 없다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    const clip = Buffer.from('fake video');
+    expect((await fetch(`${base}/projects/${pid}/scenes/s3/media?source=ai`, { method: 'PUT', headers: { 'content-type': 'video/mp4' }, body: clip })).status).toBe(200);
+    const blocked = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' });
+    expect(blocked.status).toBe(400);
+    expect(JSON.stringify(blocked.body)).toContain('AI 클립');
+    const ok = await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: { ...allChecked, aiClips: true }, decision: 'approved' });
+    expect(ok.status).toBe(200);
+  });
+
+  it('직접 찍은 영상만 있으면 지금처럼 4개 항목으로 승인된다', async () => {
+    const pid = (await call('POST', '/projects', { recipe: SAMPLE_RECIPES[1] })).body.id;
+    await call('POST', `/projects/${pid}/script/template`);
+    expect((await fetch(`${base}/projects/${pid}/scenes/s1/media`, { method: 'PUT', headers: { 'content-type': 'video/quicktime' }, body: Buffer.from('fake video') })).status).toBe(200);
+    expect((await call('POST', `/projects/${pid}/reviews`, { version: 1, reviewer: '이희재', checklist: allChecked, decision: 'approved' })).status).toBe(200);
+  });
+});
+
 describe('미디어 파일 보내기', () => {
   const media = (p: string) => fetch(`${base.replace('/api', '')}/media/${p}`);
 

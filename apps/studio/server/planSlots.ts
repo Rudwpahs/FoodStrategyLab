@@ -58,6 +58,8 @@ export interface QueueCard {
   fidelityErrors: string[];
   /** 사진에서 읽은 레시피의 AI 제안 칸을 아직 확인하지 않았는지 (확인 전에는 승인할 수 없다) */
   aiPending: boolean;
+  /** 생성 AI 클립이 들어갔는지 (승인할 때 클립을 직접 봤다는 확인을 더 받는다) */
+  aiClips: boolean;
 }
 
 export interface PlanView {
@@ -253,6 +255,7 @@ export class PlanStore {
         qaErrors: render.qa?.issues.filter((i) => i.level === 'error').map((i) => i.message) ?? [],
         fidelityErrors: checkScript(p.recipe, latest.script).filter((i) => i.level === 'error').map((i) => i.message),
         aiPending: Boolean(p.source?.aiFields.length && !p.source.aiConfirmedAt),
+        aiClips: Object.values(p.sceneMedia ?? {}).some((m) => /\.ai\./.test(m.url)),
       });
     }
     const busy = new Set(this.list().filter((s) => s.status !== 'posted' && s.status !== 'skipped').map((s) => s.projectId));

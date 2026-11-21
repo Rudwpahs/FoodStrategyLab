@@ -137,6 +137,12 @@ export const CHECKLIST_ITEMS = [
   { key: 'expression', label: '조리 원리와 표현이 정확하다' },
 ] as const;
 export type ChecklistKey = (typeof CHECKLIST_ITEMS)[number]['key'];
+
+/**
+ * 생성 AI 클립이 들어간 영상에만 더 묻는 항목 (원칙 1). 프롬프트에 원본 재료를 넣어도 생성 모델은 다른 재료를 그리곤 한다
+ * (비서구 음식 오류: CultDiff 2025 등, docs/research/content-strategy/food-realism-2026-11.md). 클립을 직접 보고 확인해야 승인된다.
+ */
+export const AI_CLIP_CHECK = { key: 'aiClips', label: 'AI 클립에 원본에 없는 재료·분량·조리 모습이 나오지 않는다 (클립을 직접 봤다)' } as const;
 export type Checklist = Record<ChecklistKey, boolean>;
 
 export const ChecklistSchema = z.object({
@@ -144,6 +150,8 @@ export const ChecklistSchema = z.object({
   safety: z.boolean(),
   noFakeClaims: z.boolean(),
   expression: z.boolean(),
+  /** AI_CLIP_CHECK: 생성 AI 클립이 있을 때만 필요 */
+  aiClips: z.boolean().optional(),
 });
 
 /** 대본 출처. ai-revise = 쉬운 말 수정 요청을 Claude가 반영한 대본 */
