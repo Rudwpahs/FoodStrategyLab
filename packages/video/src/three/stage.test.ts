@@ -5,7 +5,7 @@ import { buildTimeline, totalFrames } from '../timeline.ts';
 import { CAPTION_HEIGHT, CARDS_BOTTOM, faceBox, faceSafeCaptionBottom } from './captionPlacement.ts';
 import { EYE_Y, MOUTH_Y } from './Chef3D.tsx';
 import { CHEF_POS, chefFacing, propPositions } from './layout.ts';
-import { projectToScreen, sceneAt, stageAt } from './stage.ts';
+import { projectToScreen, propCueFrames, propName, sceneAt, stageAt } from './stage.ts';
 
 const recipe = SAMPLE_RECIPES[0]!;
 const script = generateTemplateScript(recipe);
@@ -151,5 +151,46 @@ describe('맛조수 눈 깜빡임', () => {
     const gaps = new Set(closed.slice(1).map((f, i) => f - closed[i]!).filter((g) => g > 20));
     expect(closed.length).toBeGreaterThan(5);
     expect(gaps.size).toBeGreaterThan(2);
+  });
+});
+
+describe('재료 소품은 목소리가 그 이름을 말할 때 나온다', () => {
+  const line = '호두 500g에 설탕과 물엿, 꿀로 시럽을 만들어요.';
+  const words: [number, number][] = [
+    [0, 10],
+    [12, 20],
+    [22, 30],
+    [32, 40],
+    [42, 48],
+    [50, 58],
+    [60, 70],
+  ];
+  it('라벨 이름이 든 어절의 시작(조금 앞)에 맞추고, 대사에 없는 재료는 정하지 않는다', () => {
+    expect(propCueFrames(line, words, ['호두 500g', '설탕 1컵', '물엿 1/2컵', '꿀 1큰술', '소금 약간'])).toEqual([0, 19, 29, 39, undefined]);
+  });
+  it('라벨에서 말에 나올 이름을 뽑고, 조사만 붙은 어절에 맞춘다 ("물"은 "물엿"이 아니다)', () => {
+    expect(['잘 익은 김치 200g', '김치 국물 2큰술', '다진 마늘 1/2작은술', '다진마늘 2t', '소금 약간', '물 달걀이 잠길 만큼'].map(propName)).toEqual(['김치', '국물', '마늘', '다진마늘', '소금', '물']);
+    const w = (n: number) => Array.from({ length: n }, (_, k) => [k * 10, k * 10 + 8] as [number, number]);
+    expect(propCueFrames('물엿, 설탕과 물이면 돼요.', w(4), ['물 3컵', '물엿 1/2컵'])).toEqual([17, 0]);
+    expect(propCueFrames('잘 익은 김치에 김치 국물을 더해요.', w(6), ['잘 익은 김치 200g', '김치 국물 2큰술'])).toEqual([17, 37]);
+  });
+  it('어절 시간이 없거나 어절 수가 다르면 예전처럼 차례로 (모두 undefined)', () => {
+    expect(propCueFrames(line, undefined, ['호두 500g'])).toEqual([undefined]);
+    expect(propCueFrames(line, words.slice(1), ['호두 500g'])).toEqual([undefined]);
+  });
+  it('장면 상태에서도 그 프레임에 맞춰 나타난다', () => {
+    const i = script.scenes.findIndex((s) => s.type === 'ingredients');
+    const labels = ingredientProps(recipe).map((p) => p.label);
+    const named = labels.map(propName).slice(0, 2);
+    // 재료 장면 대사를 두 재료 이름이 나오는 말로 바꾼다 (두 번째 이름은 다섯 번째 어절)
+    const sc = { ...script.scenes[i]!, line: `재료는 ${named[0]} 하나 그리고 ${named[1]}이면 돼요.` };
+    const sc2 = { ...script, scenes: script.scenes.map((x, k) => (k === i ? sc : x)) };
+    const tokens = sc.line.trim().split(/\s+/);
+    const t = { ...timings[i]!, words: tokens.map((_, k) => [20 + k * 10, 26 + k * 10] as [number, number]) };
+    const tl = timings.map((x, k) => (k === i ? t : x));
+    const cue = propCueFrames(sc.line, t.words, labels)[1]!;
+    expect(cue).toBe(20 + 4 * 10 - 3);
+    expect(stageAt(sc2, tl, t.from + cue - 1, 'pancake', labels)!.propPop[1]).toBe(0);
+    expect(stageAt(sc2, tl, t.from + cue + 12, 'pancake', labels)!.propPop[1]).toBeGreaterThan(0.9);
   });
 });

@@ -57,8 +57,48 @@ export function openingPush(local: number): number {
   return 1 + OPENING_PUSH * rest * rest;
 }
 
-/** 프레임 → 3D 장면 상태 (카메라·캐릭터·음식·소품). 순수 함수라 테스트할 수 있다. */
-export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, propCount: number, variant: 'main' | 'compare-fail' = 'main'): StageState | null {
+/**
+ * 재료 이름 (라벨 → 말에서 찾을 이름): 분량을 떼고 마지막 낱말("잘 익은 김치 200g" → 김치, "다진 마늘" → 마늘),
+ * 붙여 쓴 이름은 그대로("다진마늘 2t" → 다진마늘). 분량 숫자가 없는 라벨("소금 약간", "물 달걀이 잠길 만큼")은 첫 낱말.
+ */
+export function propName(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const amountAt = words.findIndex((w) => /\d/.test(w));
+  const name = amountAt > 0 ? words.slice(0, amountAt) : words.slice(0, 1);
+  return name[name.length - 1] ?? '';
+}
+
+/** 어절이 그 이름 + 조사(없어도 됨)인지: "설탕과" ○, "물엿," 은 "물"이 아니다 */
+const PARTICLE = /^(은|는|이|가|을|를|과|와|에|에서|으로|로|도|만|이랑|랑|하고|이나|나|까지|의|이면|면|이에요|예요|이요|요|부터|에는)?$/;
+const namesWord = (token: string, name: string) => {
+  const t = token.replace(/[,.!?…~'"“”‘’()]/g, '');
+  return t.startsWith(name) && PARTICLE.test(t.slice(name.length));
+};
+
+/**
+ * 재료 소품이 나올 프레임 (재료 장면 시작 기준): 목소리가 그 재료 이름을 말하는 어절이 시작할 때.
+ * 대사에 이름이 없거나 실제 목소리 어절 시간이 없으면 undefined (예전처럼 차례로 나온다).
+ * 근거: 화면의 물건이 그 말을 하는 순간 나타나야 말과 그림이 이어진다 (2026-11-21, 사용자 지적 "싱크가 안 맞아").
+ */
+export function propCueFrames(line: string, words: [number, number][] | undefined, labels: string[]): (number | undefined)[] {
+  const tokens = line.trim().split(/\s+/).filter(Boolean);
+  if (!words || words.length !== tokens.length) return labels.map(() => undefined);
+  return labels.map((label) => {
+    const name = propName(label);
+    if (!name) return undefined;
+    const k = tokens.findIndex((t) => namesWord(t, name));
+    return k >= 0 ? Math.max(0, words[k]![0] - PROP_CUE_LEAD) : undefined;
+  });
+}
+/** 말보다 조금 먼저 나와 말할 때 이미 보이게 (프레임) */
+const PROP_CUE_LEAD = 3;
+
+/**
+ * 프레임 → 3D 장면 상태 (카메라·캐릭터·음식·소품). 순수 함수라 테스트할 수 있다.
+ * props: 소품 수, 또는 소품 라벨 (라벨이 있으면 목소리가 이름을 말할 때 그 소품이 나온다)
+ */
+export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, props: number | string[], variant: 'main' | 'compare-fail' = 'main'): StageState | null {
+  const propCount = typeof props === 'number' ? props : props.length;
   const at = sceneAt(script, timings, frame);
   if (!at) return null;
   const { scene, index, local, progress, timing } = at;
@@ -75,11 +115,13 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   const cam = push === 1 ? raw : { target: raw.target, pos: raw.pos.map((v, k) => raw.target[k]! + (v - raw.target[k]!) * push) as Vec3 };
 
   const ingredientsIndex = script.scenes.findIndex((s) => s.type === 'ingredients');
+  const cues =
+    index === ingredientsIndex && typeof props !== 'number' ? propCueFrames(scene.line, timing.words, props) : [];
   const propPop = Array.from({ length: propCount }, (_, i) => {
     if (ingredientsIndex === -1) return index >= script.scenes.findIndex((s) => s.type === 'steps') && index > 0 ? 1 : 0;
     if (index > ingredientsIndex) return 1;
     if (index < ingredientsIndex) return 0;
-    return popIn((local - 6 - i * 7) / 9);
+    return popIn((local - (cues[i] ?? 6 + i * 7)) / 9);
   });
 
   const cookT = scene.type === 'steps' ? smooth(progress) : progress;

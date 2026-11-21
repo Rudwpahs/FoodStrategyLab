@@ -31,10 +31,11 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const { width, height } = useVideoConfig();
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
   const props = useMemo(() => ingredientProps(recipe), [recipe]);
-  const state = stageAt(script, timings, frame, food.kind, props.length);
+  const labels = useMemo(() => props.map((p) => p.label), [props]);
+  const state = stageAt(script, timings, frame, food.kind, labels);
   // 비교 장면: 화면을 위(건너뛴 결과)·아래(노트대로 한 결과)로 나눈다 — 설명용 연출
   const compare = sceneAt(script, timings, frame)?.scene.visual === 'compare';
-  const failState = compare ? stageAt(script, timings, frame, food.kind, props.length, 'compare-fail') : null;
+  const failState = compare ? stageAt(script, timings, frame, food.kind, labels, 'compare-fail') : null;
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
