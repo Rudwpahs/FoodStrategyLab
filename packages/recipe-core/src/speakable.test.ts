@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from './samples.ts';
-import { alignWordTimes, nativeNumber, respellDoubleFinalLB, sinoNumber, speakNumbers, speakable } from './speakable.ts';
+import { alignWordTimes, hardWords, nativeNumber, respellDoubleFinalLB, sinoNumber, speakNumbers, speakable } from './speakable.ts';
 
 describe('수 읽기', () => {
   it('한자어 수: 천·백·십 앞의 일은 읽지 않고 만 단위로 띄운다', () => {
@@ -184,5 +184,20 @@ describe('받아쓴 어절 시간을 자막 어절에 맞추기', () => {
       [1.5, 2],
     ]);
     expect(alignWordTimes('다른 문장', [{ text: '이희재의', start: 0, end: 1 }])).toBeUndefined();
+  });
+});
+
+describe('받아쓰기로 꼭 확인할 낱말 (hardWords)', () => {
+  it('발음을 고쳐 넘긴 ㄼ 낱말은 바뀐 글자와 앞뒤 한 글자만 (조사는 빼고)', () => {
+    expect(hardWords('호두를 끓는 물에 데친 뒤 찬물에 헹구면 떫은맛이 줄어들어요.')).toEqual([{ written: '떫은맛', said: '떨븐맛' }]);
+    expect(hardWords('선물용 호두정과, 한 입 먹자마자 떫어요!')).toEqual([{ written: '떫어요', said: '떨버요' }]);
+    expect(hardWords('달걀 여덟을 삶아요')).toEqual([{ written: '여덟을', said: '여덜블' }]);
+  });
+  it('이름은 이름 글자만 (읽는 글자는 띄어쓰기만 다르다)', () => {
+    expect(hardWords('이희재의 맛 연구소였어요.')).toEqual([{ written: '이희재', said: '이희재' }]);
+  });
+  it('같은 낱말은 한 번만, 고친 말이 없으면 비어 있다 (숫자·잘 읽는 겹받침은 넣지 않는다)', () => {
+    expect(hardWords('데치면 떫은맛이 빠지고, 떫은맛 걱정 끝')).toHaveLength(1);
+    expect(hardWords('설탕 1컵, 반죽은 얇게, 넓은 팬에')).toEqual([]);
   });
 });

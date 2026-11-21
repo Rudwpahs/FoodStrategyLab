@@ -1,19 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildReelPromptPack, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
+import { buildReelPromptPack, hardWords, instagramCaption, type RecipeInput, type Script } from '@mat-lab/recipe-core';
 import { BLOG_STYLES, buildBlogPost, buildExpertBlog, buildSocialCopy, buildSrt, buildZip, polishPost, type BlogStyle, type ExpertNotes } from '@mat-lab/publishing';
 import { FPS, buildTimeline, captionGroups, totalFrames, type SceneTiming, type SpeechExtra, type VideoProps } from '@mat-lab/video/timeline';
-import { audioDb, cachedSpeechBounds, cachedSpeechShape, extractFrame, frameBrightness, mediaInfo, mixClipSound, mixMusic, musicFile, normalizeLoudness, removeAudioWithCache, toJpeg } from '@mat-lab/video/audio';
+import { audioDb, cachedSpeechBounds, cachedSpeechShape, extractFrame, frameBrightness, mediaInfo, mixClipSound, mixMusic, musicFile, normalizeLoudness, removeAudioCaches, removeAudioWithCache, toJpeg, writeCache } from '@mat-lab/video/audio';
 import { clipLevelDb, clipSoundFilter, clipSoundVolumeExpr, soundLayers } from '@mat-lab/video/clipSound';
 import { clipLayers } from '@mat-lab/video/realFootage';
 import { musicFor, musicVolumeExpr, speechIntervals } from '@mat-lab/video/music';
-import { QA_STEP, auditAudio, auditFrames, lineMatch } from '@mat-lab/video/qa';
+import { QA_STEP, auditAudio, auditFrames, hardWordHeard, lineMatch } from '@mat-lab/video/qa';
 import { recipeCardPlan } from '@mat-lab/video/cards';
 import { estimateWords, snapToSpeech } from '@mat-lab/video/wordAlign';
 import { DATA_DIR } from './config.ts';
 import { HttpError, creditedReviewer, type RenderQa, type RenderQaIssue, type Repo } from './repo.ts';
 import { withRenderToken } from './auth.ts';
-import { cachedAudio, measuredWords, synthesize, transcribeAudio, ttsProvider, voiceIdentity } from './tts.ts';
+import { cachedAudio, measuredWords, synthesize, transcribeAudio, ttsProvider, voiceIdentity, type Transcript } from './tts.ts';
 
 export const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 export const RENDER_DIR = path.join(DATA_DIR, 'renders');
@@ -472,6 +472,66 @@ export async function auditVideo(video: string, timings: SceneTiming[], script: 
 const BLACK_FRAME_STEP = 0.25;
 const MATCH_REDO = 0.6;
 const MATCH_CLOSE = 0.92;
+/** 발음을 고쳐 넘긴 낱말(떫은맛·이희재)이 받아쓰기에 안 들릴 때 다시 녹음하는 최대 횟수 (한 번에 몇 초) */
+const HARD_WORD_RETAKES = 2;
+
+type Heard = { text: string; m: ReturnType<typeof lineMatch>; transcript: Transcript };
+
+/**
+ * 발음을 고쳐 넘긴 낱말(recipe-core hardWords)이 받아쓰기에 제대로 들렸는지 보고, 안 들리면 다시 녹음한다.
+ * 엔진은 같은 글자도 녹음할 때마다 다르게 읽는다: 한 영상의 '떫은맛' 두 번 중 한 번만 또렷했다 (2026-11-21 견본).
+ * 녹음마다 가장 나은 것(안 들린 낱말 수가 적고, 같으면 대사 일치율이 높은 것)을 남긴다: 새 녹음이 더 나쁘면
+ * 앞의 녹음으로 되돌린다. 끝까지 안 들리면 꼭 들어 보라고 남긴다. warned: 안 들린 낱말을 이미 알렸는지
+ */
+async function retakeHardWords(scene: Script['scenes'][number], index: number, file: string, first: Heard, qa: RenderQa, shouldStop: () => boolean): Promise<Heard & { warned: boolean }> {
+  const hard = hardWords(scene.line);
+  const unheard = (text: string) => hard.filter((h) => !hardWordHeard(h, text));
+  const before = unheard(first.text);
+  if (!before.length) return { ...first, warned: false };
+  let best = { ...first, missing: before };
+  // 지금까지 가장 나은 녹음의 사본 (다시 녹음하면 같은 파일 이름에 새 녹음이 들어간다)
+  const keep = `${file}.keep.mp3`;
+  fs.copyFileSync(file, keep);
+  let lastIsBest = true;
+  let takes = 1;
+  try {
+    for (let k = 0; k < HARD_WORD_RETAKES && best.missing.length; k++) {
+      if (shouldStop()) throw new RenderCanceled();
+      const again = await synthesize(scene.line, AUDIO_DIR, {}, { regenerate: true });
+      takes++;
+      lastIsBest = false;
+      if ((await cachedSpeechBounds(again.file).catch(() => null))?.silent) continue;
+      const t = await transcribeAudio(again.file, { needWords: true }).catch(() => undefined);
+      if (!t) continue;
+      const m = lineMatch(scene.line, t.text);
+      const missing = unheard(t.text);
+      if (!m.truncated && m.ratio >= MATCH_REDO && (missing.length < best.missing.length || (missing.length === best.missing.length && m.ratio > best.m.ratio))) {
+        best = { text: t.text, m, transcript: t, missing };
+        fs.copyFileSync(again.file, keep);
+        lastIsBest = true;
+      }
+    }
+  } finally {
+    if (lastIsBest) fs.rmSync(keep, { force: true });
+    else {
+      // 가장 나은 녹음으로 한 번에 바꿔치기한다 (읽던 작업이 빈 파일을 보지 않게). 받아쓰기 결과도 그 녹음 것으로
+      removeAudioCaches(file);
+      fs.renameSync(keep, file);
+      writeCache(`${file}.asr.json`, file, best.transcript);
+    }
+  }
+  const fixed = before.filter((w) => !best.missing.includes(w)).map((w) => w.written);
+  if (fixed.length) qa.fixed.push(`장면 ${index + 1}의 "${fixed.join('", "')}" 발음이 또렷하지 않아서 다시 녹음했어요.`);
+  if (best.missing.length)
+    qa.issues.push({
+      level: 'warning',
+      code: 'mismatch',
+      scene: index + 1,
+      sceneId: scene.id,
+      message: `장면 ${index + 1}에서 "${best.missing.map((w) => w.written).join('", "')}"이(가) 또렷하게 들리지 않아요 (${takes}번 녹음해 봤어요. 받아쓰기: "${best.text.trim().slice(0, 40)}"). 꼭 들어 보고 확인해 주세요.`,
+    });
+  return { text: best.text, m: best.m, transcript: best.transcript, warned: best.missing.length > 0 };
+}
 
 /**
  * 장면별 음성을 받아써서 대사와 맞춰 본다 (받아쓰기를 쓸 수 있을 때만).
@@ -492,6 +552,7 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
     checked++;
     let m = lineMatch(scene.line, heard.text);
     let text = heard.text;
+    let transcript: Transcript = heard;
     if (m.truncated || m.ratio < MATCH_REDO) {
       // 옛 파일을 먼저 지우지 않는다: 같은 파일을 읽는 다른 작업(후보 목소리·다른 제작)이 있을 수 있어,
       // tts가 같은 파일 잠금 안에서 새로 만든 뒤 한 번에 바꿔치기한다
@@ -511,11 +572,14 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
       if (!m2.truncated && m2.ratio >= MATCH_REDO) qa.fixed.push(`장면 ${i + 1} 음성이 ${m.truncated ? '중간에 끊겨' : '대사와 다르게'} 만들어져서 다시 만들었어요.`);
       m = m2;
       text = heard2.text;
+      transcript = heard2;
     }
+    const hard = await retakeHardWords(scene, i, a.file, { text, m, transcript }, qa, shouldStop);
+    ({ m, text } = hard);
     if (m.critical.length) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 불 세기 "${m.critical.join('", "')}"이(가) 다르게 들려요 (받아쓰기: "${text.trim().slice(0, 40)}"). 꼭 들어 보고 확인해 주세요.` });
     if (m.truncated) qa.issues.push({ level: 'error', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사 중간에서 끊겨요 (들린 말: "${text.trim().slice(0, 40)}").` });
     else if (m.ratio < MATCH_REDO) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사와 많이 다르게 들려요 (들린 말: "${text.trim().slice(0, 40)}").` });
-    else if (m.missing.length && m.ratio < MATCH_CLOSE) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });
+    else if (m.missing.length && m.ratio < MATCH_CLOSE && !hard.warned) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 "${m.missing.slice(0, 3).join('", "')}"이(가) 다르게 들릴 수 있어요 (받아쓰기: "${text.trim().slice(0, 40)}"). 받아쓰기가 틀렸을 수도 있으니 들어 보고 확인해 주세요.` });
   }
   if (checked) qa.checked.push(`받아쓰기로 대사 대조 (${checked}개 장면)`);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import zlib from 'node:zlib';
 import type { Script } from '@mat-lab/recipe-core';
 import { decodeGrayPng, splitPngs } from './audio.ts';
-import { QA_STEP, auditAudio, auditFrames, lineMatch, quietRuns, rmsDb } from './qa.ts';
+import { QA_STEP, auditAudio, auditFrames, hardWordHeard, lineMatch, quietRuns, rmsDb } from './qa.ts';
 import { sfxSamples } from './sfx.ts';
 import { speechBounds } from './speech.ts';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
@@ -279,5 +279,29 @@ describe('받아쓰기로 대사 대조', () => {
     const m = lineMatch('오늘의 실험 끝! 이희재의 맛 연구소였어요.', '오늘의 실험 끝! 이제의 맛연구소였어요!');
     expect(m.truncated).toBe(false);
     expect(m.missing).toEqual(['이희재의']);
+  });
+});
+
+describe('발음을 고친 낱말이 들렸는지 (hardWordHeard)', () => {
+  const tteol = { written: '떫은맛', said: '떨븐맛' };
+  it('맞춤법대로 적힌 받아쓰기도, 소리대로 적힌 받아쓰기도 들린 것으로 본다', () => {
+    expect(hardWordHeard(tteol, '호두를 데치면 떫은맛이 줄어들어요.')).toBe(true);
+    expect(hardWordHeard(tteol, '호두를 데치면 떨븐 맛이 줄어들어요.')).toBe(true);
+    // 받아쓰기가 흔한 글자로 적는 경우 (모음 하나 다름)
+    expect(hardWordHeard(tteol, '데치면 떨분맛이 빠지고')).toBe(true);
+  });
+  it('실제로 틀리게 들린 말은 안 들린 것으로 본다 (2026-11 견본 받아쓰기)', () => {
+    expect(hardWordHeard(tteol, '찬물에 헹구면 깔끔한 맛이 줄어들어요.')).toBe(false);
+    expect(hardWordHeard(tteol, '헹구면 떳은 맛이 줄어든데요.')).toBe(false);
+    expect(hardWordHeard(tteol, '같은 맛 범인검거 완료.')).toBe(false);
+    expect(hardWordHeard({ written: '떫어요', said: '떨버요' }, '한입 먹자마자 떴어요.')).toBe(false);
+    expect(hardWordHeard({ written: '떫어요', said: '떨버요' }, '한 입 먹자마자 떨어요.')).toBe(false);
+  });
+  it('이름: 성이 빠지거나 다르게 들리면 안 들린 것', () => {
+    const name = { written: '이희재', said: '이희재' };
+    expect(hardWordHeard(name, '이 희재의 맛 연구소였어요.')).toBe(true);
+    expect(hardWordHeard(name, '이희재의 맛 연구소')).toBe(true);
+    expect(hardWordHeard(name, '이제 맛연구소 수사 기록에')).toBe(false);
+    expect(hardWordHeard(name, '피제 선생님 노트에')).toBe(false);
   });
 });

@@ -355,14 +355,55 @@ export function respellDoubleFinalLB(text: string): string {
  */
 const NAMES: [RegExp, string][] = [[/이희재/g, '이 희재']];
 
+/** 낱말 발음만 고친다 (겹받침 'ㄼ', 이름). 숫자는 그대로 */
+const respellWords = (text: string) => NAMES.reduce((out, [re, to]) => out.replace(re, to), respellDoubleFinalLB(text));
+
 /**
  * 대사 → 목소리 엔진에 넘길 글자.
  * 화면 자막·대본·승인 기록에는 쓰지 않는다 (원본 분량 표기는 그대로 보여야 한다).
  */
 export function speakable(text: string): string {
-  let out = speakNumbers(text);
-  out = respellDoubleFinalLB(out);
-  for (const [re, to] of NAMES) out = out.replace(re, to);
+  return respellWords(speakNumbers(text));
+}
+
+// ───────────────────────── 받아쓰기로 꼭 확인할 낱말 ─────────────────────────
+
+/** 엔진이 잘못 읽은 적이 있어 발음을 고쳐 넘긴 낱말 */
+export interface HardWord {
+  /** 대사에 적힌 글자 (떫은맛) */
+  written: string;
+  /** 목소리에 넘긴 글자 (떨븐맛). 띄어쓰기는 뺀다 */
+  said: string;
+}
+
+/**
+ * 대사에서 발음을 고쳐 넘긴 낱말(겹받침 'ㄼ': 떫은맛·떫어요, 이름: 이희재)을 찾는다.
+ * 고친 글자로 넘겨도 엔진은 녹음할 때마다 조금씩 다르게 읽어서 가끔 틀린다
+ * (2026-11-21 견본: 한 영상의 '떫은맛' 두 번 중 한 번은 받아쓰기 4번 중 2번이 "깔끔한 맛"). 그래서 이 낱말은
+ * 녹음 뒤 받아쓰기로 따로 확인한다 (pipeline.ts). 확인할 부분은 바뀐 글자와 그 앞뒤 한 글자까지:
+ * 조사까지 넣으면 틀리게 읽은 말("떳은맛이")도 맞는 말과 비슷해 보인다.
+ * 숫자는 넣지 않는다 (받아쓰기가 숫자나 글자로 제각각 적고, 엔진이 잘 읽는다).
+ */
+export function hardWords(line: string): HardWord[] {
+  const out: HardWord[] = [];
+  for (const token of line.split(/\s+/)) {
+    const chars = [...token.replace(/[^가-힣]/g, '')];
+    if (!chars.length) continue;
+    const word = chars.join('');
+    const said = [...respellWords(word).replace(/\s+/g, '')];
+    const changed = new Set<number>();
+    chars.forEach((c, i) => c !== said[i] && changed.add(i));
+    // 이름은 글자는 그대로 두고 띄어쓰기만 바꾸므로 이름 자리 전체를 본다
+    for (const [re] of NAMES) for (const m of word.matchAll(new RegExp(re.source, 'g'))) for (let k = 0; k < m[0].length; k++) changed.add(m.index + k);
+    if (!changed.size) continue;
+    const lo = Math.min(...changed);
+    const hi = Math.max(...changed);
+    const pad = [...changed].some((i) => split(chars[i]!).jong === JONG.ㄼ) ? 1 : 0;
+    const from = Math.max(0, lo - pad);
+    const to = Math.min(chars.length, hi + 1 + pad);
+    const written = chars.slice(from, to).join('');
+    if (!out.some((w) => w.written === written)) out.push({ written, said: said.slice(from, to).join('') });
+  }
   return out;
 }
 

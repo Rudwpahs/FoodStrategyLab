@@ -70,7 +70,12 @@ describe('레시피 읽기 (가짜 Claude)', () => {
   it('재료·분량·순서는 적힌 그대로, 없는 칸은 AI 제안으로 표시하고, 사용 금액을 기록한다 (기본: Opus 5.5)', async () => {
     const db = openDb(':memory:');
     const calls: { model: string; effort: string }[] = [];
-    const r = await new RecipeReader(db, fakeParse(kimchijeon, calls)).read([{ name: 'a.jpg', type: 'image/jpeg', data: png }]);
+    // 기본값을 본다: 이 컴퓨터에 CLAUDE_EFFORT가 설정돼 있어도 영향받지 않게
+    const savedEffort = process.env.CLAUDE_EFFORT;
+    delete process.env.CLAUDE_EFFORT;
+    const r = await new RecipeReader(db, fakeParse(kimchijeon, calls))
+      .read([{ name: 'a.jpg', type: 'image/jpeg', data: png }])
+      .finally(() => savedEffort !== undefined && (process.env.CLAUDE_EFFORT = savedEffort));
     expect(calls[0]!.model).toBe('claude-opus-5-5');
     expect(calls[0]!.effort).toBe('high');
     expect(r.recipe.ingredients).toEqual([

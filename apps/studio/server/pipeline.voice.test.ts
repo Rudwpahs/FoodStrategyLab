@@ -65,6 +65,69 @@ describe('받아쓰기로 대사 대조', () => {
   });
 });
 
+describe('발음을 고쳐 넘긴 낱말 (떫은맛·이희재) 다시 녹음', () => {
+  const line = '호두를 찬물에 헹구면 떫은맛이 빠져요';
+  const script: Script = { title: 't', scenes: [{ id: 's1', type: 'intro', emotion: 'joy', line }] };
+  /** 같은 파일 이름에 새 녹음을 쓰는 가짜 synthesize (실제 tts처럼 바꿔치기) */
+  const takes = (file: string) => {
+    let n = 1;
+    tts.synthesize.mockImplementation(async () => {
+      fs.writeFileSync(file, `take${++n}`);
+      return { file, seconds: 1 };
+    });
+  };
+
+  it('안 들리면 다시 녹음하고, 들리면 멈춘다', async () => {
+    const first = audio('hard1.mp3');
+    fs.writeFileSync(first.file, 'take1');
+    tts.cachedAudio.mockImplementation(() => first);
+    takes(first.file);
+    tts.transcribeAudio
+      .mockImplementationOnce(async () => ({ text: '호두를 찬물에 헹구면 깔끔한 맛이 빠져요', words: [] }))
+      .mockImplementationOnce(async () => ({ text: '호두를 찬물에 헹구면 떨분맛이 빠져요', words: [] }));
+    const qa: RenderQa = { issues: [], checked: [], fixed: [] };
+    await checkVoiceLines(script, qa);
+    expect(tts.synthesize).toHaveBeenCalledTimes(1);
+    expect(tts.synthesize).toHaveBeenCalledWith(line, expect.any(String), {}, { regenerate: true });
+    expect(fs.readFileSync(first.file, 'utf8')).toBe('take2');
+    expect(qa.fixed.join(' ')).toContain('"떫은맛" 발음이 또렷하지 않아서 다시 녹음했어요');
+    expect(qa.issues).toEqual([]);
+    expect(fs.existsSync(`${first.file}.keep.mp3`)).toBe(false);
+  });
+
+  it('끝까지 안 들리면 두 번까지만 다시 녹음하고, 가장 나은 녹음을 남기고, 꼭 들어 보라고 알린다', async () => {
+    const first = audio('hard2.mp3');
+    fs.writeFileSync(first.file, 'take1');
+    tts.cachedAudio.mockImplementation(() => first);
+    takes(first.file);
+    tts.transcribeAudio
+      .mockImplementationOnce(async () => ({ text: '호두를 찬물에 헹구면 깔끔한 맛이 빠져요', words: [] }))
+      // 두 번째는 중간에 끊김 (더 나쁨), 세 번째는 일치율이 더 낮음
+      .mockImplementationOnce(async () => ({ text: '호두를 찬물에', words: [] }))
+      .mockImplementationOnce(async () => ({ text: '호두 찬물 같은 맛이 빠져', words: [] }));
+    const qa: RenderQa = { issues: [], checked: [], fixed: [] };
+    await checkVoiceLines(script, qa);
+    expect(tts.synthesize).toHaveBeenCalledTimes(2);
+    // 첫 녹음이 가장 나았다 → 되돌린다
+    expect(fs.readFileSync(first.file, 'utf8')).toBe('take1');
+    expect(fs.existsSync(`${first.file}.keep.mp3`)).toBe(false);
+    const msgs = qa.issues.map((i) => i.message);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain('"떫은맛"이(가) 또렷하게 들리지 않아요 (3번 녹음해 봤어요');
+    expect(qa.fixed).toEqual([]);
+  });
+
+  it('처음부터 잘 들리면 다시 녹음하지 않는다', async () => {
+    const first = audio('hard3.mp3');
+    tts.cachedAudio.mockImplementation(() => first);
+    tts.transcribeAudio.mockImplementation(async () => ({ text: '호두를 찬물에 헹구면 떫은맛이 빠져요', words: [] }));
+    const qa: RenderQa = { issues: [], checked: [], fixed: [] };
+    await checkVoiceLines(script, qa);
+    expect(tts.synthesize).not.toHaveBeenCalled();
+    expect(qa.issues).toEqual([]);
+  });
+});
+
 describe('음성 도구가 바뀐 경우', () => {
   it("'auto'에서 VoiceStudio 대신 edge-tts로 만들었으면 영상 검사 결과에 알린다", async () => {
     tts.ttsProvider.mockImplementation(async () => 'edge');

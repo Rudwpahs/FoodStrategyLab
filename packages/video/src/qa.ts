@@ -1,4 +1,4 @@
-import { lcsLength, speakable, type Script } from '@mat-lab/recipe-core';
+import { lcsLength, speakable, type HardWord, type Script } from '@mat-lab/recipe-core';
 import { speechPlayback } from './speechPlayback.ts';
 import type { SceneTiming } from './timeline.ts';
 
@@ -173,6 +173,33 @@ const spoken = (t: string) => norm(speakable(t));
  */
 const KEY_TERMS = /중강불|중약불|센불|강불|중불|약불/g;
 const keyTerms = (text: string): string[] => norm(text).match(KEY_TERMS) ?? [];
+
+/**
+ * 발음을 고쳐 넘긴 낱말(hardWords)이 들렸다고 볼 최소 일치율 (자모 단위, 실험으로 정한 값).
+ * '떨분맛'(모음 하나 다름, 8/9)은 들림, '떳은맛'(7/9)·'깔끔한 맛'·'같은 맛'은 안 들림, '떨어요'(ㅂ 빠짐, 6/7)도 안 들림.
+ */
+export const HARD_WORD_MATCH = 0.86;
+
+/**
+ * 발음을 고쳐 넘긴 낱말이 받아쓰기에 들렸는지 본다.
+ * 받아쓴 말도 같은 규칙(speakable)으로 바꿔서, 받아쓰기가 맞춤법대로 "떫은맛"이라 적어도 "떨븐맛"과 같게 본다.
+ * 그대로 들어 있지 않으면 낱말 길이 ±1 글자 창으로 훑어 자모 단위로 가장 많이 같은 곳을 찾는다.
+ */
+export function hardWordHeard(word: HardWord, heard: string): boolean {
+  const target = norm(word.said);
+  if (!target) return true;
+  const h = [...norm(speakable(heard)).replace(/[0-9A-Za-z]/g, '')];
+  if (h.join('').includes(target)) return true;
+  const t = target.normalize('NFD');
+  const n = [...target].length;
+  let best = 0;
+  for (let len = Math.max(1, n - 1); len <= n + 1; len++)
+    for (let i = 0; i + len <= h.length; i++) {
+      const win = h.slice(i, i + len).join('').normalize('NFD');
+      best = Math.max(best, lcsLength(t, win) / Math.max([...t].length, [...win].length));
+    }
+  return best >= HARD_WORD_MATCH;
+}
 
 /**
  * 대본 대사와 받아쓴 말을 비교한다.
