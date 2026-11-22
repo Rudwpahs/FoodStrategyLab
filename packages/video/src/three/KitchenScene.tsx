@@ -128,7 +128,8 @@ const CameraRig: React.FC<{ pos: Vec3; target: Vec3; fov: number }> = ({ pos, ta
 /**
  * 렌더러 설정. 색 처리(톤 매핑)는 기본 ACES 그대로 둔다: 제품 색을 지키는 Khronos PBR Neutral도 시험했지만(2026-11)
  * 무대·식탁보까지 한꺼번에 주황빛으로 짙어져 인공적으로 보였다(채도가 지나치면 인공적으로 보인다는 연구와 같은 방향).
- * 음식 색은 톤 매핑 대신 음식 쪽(만화풍 재질의 선명한 색·단계 음영, toon.ts)에서 살린다.
+ * 음식·그릇·재료 소품(만화풍 재질, toon.ts)은 ACES를 쓰지 않고 재질 안에서 빛을 정리한다:
+ * ACES는 여러 조명이 겹친 팬 속 주황 음식을 노랑·흰색으로 틀어 전구처럼 빛나게 했다.
  */
 const GL = { antialias: true, preserveDrawingBuffer: true, toneMapping: ACESFilmicToneMapping };
 
