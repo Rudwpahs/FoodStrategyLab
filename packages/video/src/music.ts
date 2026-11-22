@@ -39,6 +39,8 @@ export function musicFor(script: Pick<Script, 'style' | 'hookType'>): MusicTrack
     case 'why':
     case 'compare':
     case 'qa':
+    // 진지한 엉뚱 가이드: 태연한 말투에 살금살금 피치카토가 어울린다
+    case 'deadpan':
     case 'mystery':
     case 'myth':
     case 'comedy':

@@ -129,3 +129,34 @@ describe('AI 캐릭터의 가짜 경험', () => {
     expect(c.warnings.join(' ')).toContain('직접 해 보거나 맛본 것처럼');
   });
 });
+
+describe('진지한 엉뚱 가이드 (deadpan)', () => {
+  const base = (lines: string[]): StoryDraft => ({
+    title: '김치전 바삭하게 먹는 법',
+    storyType: 'deadpan',
+    audience: 'young-home',
+    logline: '엉뚱한 방법 뒤 진짜 방법',
+    scenes: [
+      { beat: 'hook', type: 'intro', emotion: 'curious', visual: 'react', place: 'kitchen', line: lines[0]! },
+      { beat: 'context', type: 'question', emotion: 'confident', place: 'pantry', line: lines[1]! },
+      { beat: 'method', type: 'ingredients', emotion: 'confident', place: 'market', line: '호두 500g에 설탕, 물엿, 꿀을 준비해요.', cardTitle: '재료', cardItems: walnut.ingredients.map(formatIngredient) },
+      { beat: 'method', type: 'steps', emotion: 'confident', visual: 'sizzle', place: 'kitchen', line: '데치고, 말리고, 조리고, 140도 정도에서 튀겨요.', cardItems: walnut.steps.slice(0, 5) },
+      { beat: 'close', type: 'outro', emotion: 'joy', visual: 'result', place: 'dining', line: `떫은맛은 데치는 단계에서 잡혀요. ${BRAND.labName}의 정석이에요.` },
+    ],
+  });
+  it('농담이라고 밝히는 줄이 없으면 경고한다', () => {
+    const c = finalizeStory(walnut, base(['호두정과 떫을 때 다들 알죠?', '보통은 호두를 타워크레인으로 옥상까지 올려 햇볕에 말려요.']), 's');
+    if ('error' in c) throw new Error(c.error);
+    expect(c.warnings.join(' ')).toContain('농담이라고 밝히는 줄이 없어요');
+  });
+  it('따라 하면 위험한 장난은 경고한다', () => {
+    const c = finalizeStory(walnut, base(['호두정과 떫을 때 다들 알죠?', '보통은 불에 기름을 부어 터트리는데, 물론 농담이에요.']), 's');
+    if ('error' in c) throw new Error(c.error);
+    expect(c.warnings.join(' ')).toContain('위험한 장난');
+  });
+  it('해 없는 엉뚱함 + 농담 밝히기는 경고 없음', () => {
+    const c = finalizeStory(walnut, base(['호두정과 떫을 때 다들 알죠?', '보통은 호두를 타워크레인으로 옥상까지 올리는데, 물론 농담이고 진짜 방법은 이래요.']), 's');
+    if ('error' in c) throw new Error(c.error);
+    expect(c.warnings.join(' ')).not.toMatch(/위험한 장난|농담이라고 밝히는/);
+  });
+});

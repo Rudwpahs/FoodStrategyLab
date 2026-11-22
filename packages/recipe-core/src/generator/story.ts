@@ -45,7 +45,7 @@ export const AUDIENCE_INFO: Record<Audience, { label: string; short: string; car
  * 2026-11-19 사용자 지적("수사 파일·내기는 유치하다, 레파토리가 똑같다")과 조사로 추리·내기·구출·선물·시간 싸움을 뺐다.
  * 형식별 근거·맞는 시청자는 조사 문서 2장.
  */
-export const STORY_TYPES = ['one-fix', 'compare', 'standard', 'why', 'quick', 'occasion', 'season', 'leftover', 'qa', 'heritage'] as const;
+export const STORY_TYPES = ['one-fix', 'compare', 'standard', 'why', 'quick', 'occasion', 'season', 'leftover', 'qa', 'heritage', 'deadpan'] as const;
 export type StoryType = (typeof STORY_TYPES)[number];
 
 export interface StoryTypeInfo {
@@ -112,6 +112,22 @@ export const STORY_TYPE_INFO: Record<StoryType, StoryTypeInfo> = {
     beats: '시청자가 할 법한 질문 하나 → 연구자 답변 원문 내용 → 그 답이 보이는 조리 장면 → 재료 → 정리',
     guide: '답은 원본 "전문가답변"에 있는 내용만 바꾸지 않고 전한다. "댓글로 받은 질문"처럼 실제로 받은 질문인 척하지 않는다',
     fits: ['hobby-learner', 'young-home'],
+  },
+  /**
+   * 사용자 지정 (2026-11-23, 예시 영상 '엘리베이터 놓치는 사람을 위한 가이드'): 흔한 상황으로 훅 → 말도 안 되는 방법을
+   * 당연하다는 듯 진지하게 늘어놓기 → "물론 농담이고" 하고 진짜 방법(원본)으로. 웃음은 부조화가 풀리는 순간에서 나온다
+   * (부조화-해소 이론). 엉뚱한 부분은 누구도 믿지 않을 만큼 불가능하고 해가 없어야 한다: 그럴듯한 틀린 요리 팁은
+   * 정정해도 기억에 남고(계속된 영향 효과), 위험한 장난(불·기름·칼·가스)은 따라 할 수 있어 쓰지 않는다 (해가 없어야 웃긴다, 무해한 위반 이론).
+   */
+  deadpan: {
+    label: '진지한 엉뚱 가이드',
+    beats: '누구나 겪는 흔한 상황(훅) → 말도 안 되는 방법 2~3단계를 상식인 것처럼 담담하게, 점점 더 크게 → 농담이라고 분명히 밝히는 한 줄 → 진짜 방법(원본 원리·재료·순서) → 정리',
+    guide:
+      '엉뚱한 단계는 물리적으로 불가능하거나 터무니없는 일(집채만 한 도구, 엉뚱한 장소, 말도 안 되는 규모)로, 누구도 진짜로 믿지 않게. 말투는 끝까지 진지하고 태연하게 (웃기려는 티·비명·느낌표 금지). ' +
+      '엉뚱한 부분에는 재료 이름·분량·시간·온도를 넣지 마. 그럴듯한 틀린 요리 팁(예: 실제로 해 볼 법한 잘못된 순서·양)도 쓰지 마. ' +
+      '불·기름·뜨거운 물·칼·가스·전기·폭발·날고기 위생·아이·동물을 다치게 하는 장난은 절대 쓰지 마 (따라 할 수 있다). ' +
+      '전환 줄에서 지금까지는 농담이라고 분명히 말하고, 그 뒤는 원본 그대로 정확하게.',
+    fits: ['young-home', 'hobby-learner'],
   },
   heritage: {
     label: '음식 이야기',
@@ -459,6 +475,11 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   if (bangs > MAX_EXCLAMATIONS) warnings.push(`느낌표가 ${bangs}개예요: 호들갑스럽게 들릴 수 있어요 (${MAX_EXCLAMATIONS}개 이하)`);
   const claims = findHealthClaims(all);
   if (claims.length) warnings.push(`건강 효능처럼 들리는 말: ${claims.join(', ')}`);
+  if (draft.storyType === 'deadpan') {
+    const danger = findDeadpanDanger(all);
+    if (danger.length) warnings.push(`엉뚱 가이드에 따라 하면 위험한 장난이 들어 있어요: ${danger.map((d) => `"${d}"`).join(', ')}`);
+    if (!DEADPAN_TURN.test(all)) warnings.push('엉뚱한 부분이 농담이라고 밝히는 줄이 없어요 (시청자가 진짜로 믿을 수 있어요)');
+  }
   const fake = findFakeExperience(all);
   if (fake.length) warnings.push(`맛조수가 직접 해 보거나 맛본 것처럼 들리는 말(AI라 그런 경험이 없어요): ${fake.map((f) => `"${f}"`).join(', ')}`);
   const labCount = all.split(BRAND.labName).length - 1;
@@ -513,6 +534,15 @@ function pinExpertCards(recipe: RecipeInput, script: Script, notes: string[]): S
     return sc;
   });
   return { ...script, scenes };
+}
+
+/** 엉뚱 가이드: 농담이라고 밝히는 줄 (농담·장난·물론 아니고·진짜 방법·사실은) */
+export const DEADPAN_TURN = /농담|장난|물론\s?아니|진짜\s?(방법|정석)|사실은|사실\s?이건|진지하게\s?말하면/;
+/** 엉뚱 가이드에 넣으면 안 되는 위험한 장난 (따라 할 수 있는 것) */
+const DEADPAN_DANGER = [/터트|터뜨|폭발|불을\s?붙|불\s?속에|불에\s?(기름|물)|기름에\s?물|물을\s?(기름|팬)에|가스를|전기를|감전|칼을\s?(던|돌|입)|맨손으로\s?(불|기름|끓)/];
+
+export function findDeadpanDanger(text: string): string[] {
+  return DEADPAN_DANGER.map((re) => text.match(re)?.[0]).filter((m): m is string => Boolean(m));
 }
 
 /** 원본 대조에서 막히는 문제(분량·재료·순서 오류)가 있는지 */
