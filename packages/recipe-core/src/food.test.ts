@@ -49,6 +49,37 @@ describe('3D 음식 표현 규칙', () => {
     expect(ingredientProps(dish).find((x) => x.label.startsWith('두부'))?.piece?.shape).toBe('cube');
   });
 
+  it('김치는 빨간 잎+흰 줄기 조각, 고사리는 가는 줄기, 다진 마늘은 알갱이. 나물로 끝나는 채소는 물이 아니다', () => {
+    expect(ingredientPiece('잘 익은 김치')?.shape).toBe('kimchi');
+    expect(ingredientPiece('김치 국물')).toBeNull();
+    expect(ingredientPiece('고사리')?.shape).toBe('stalk');
+    expect(ingredientPiece('다진 마늘')?.shape).toBe('mince');
+    expect(ingredientPiece('다진마늘')?.shape).toBe('mince');
+    expect(ingredientPiece('마늘')?.shape).toBe('slice');
+    // 예전에는 '~물'로 끝나 찬물·국물처럼 빠졌다
+    expect(ingredientPiece('참나물')?.shape).toBe('leaf');
+    expect(ingredientPiece('콩나물')?.shape).toBe('strip');
+    expect(ingredientPiece('찬물')).toBeNull();
+    expect(ingredientPiece('얼음물')).toBeNull();
+  });
+
+  it('실제 레시피 건더기: 파스타는 고사리 줄기·참나물 고명이 있고, 시금치나물은 다진 마늘 알갱이가 있다 (원본에 없는 깨는 없다)', () => {
+    const pasta = foodProfile(SAMPLE_RECIPES.find((r) => r.dishName === '들깨고사리파스타')!);
+    expect(pasta.pieces.map((p) => p.shape)).toEqual(expect.arrayContaining(['stalk', 'leaf']));
+    expect(pasta.pieces.some((p) => p.shape === 'seed')).toBe(false);
+    expect(foodProfile(spinach).pieces.map((p) => p.shape)).toEqual(['leaf', 'mince']);
+    expect(foodProfile(kimchi).pieces.map((p) => p.shape)).toEqual(['kimchi']);
+  });
+
+  it('들깨 파스타 소스는 면보다 확실히 짙은 회갈색 (연한 밀색 면이 소스와 구별되게)', () => {
+    const pasta = foodProfile(SAMPLE_RECIPES.find((r) => r.dishName === '들깨고사리파스타')!);
+    const lum = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+    };
+    expect(lum(pasta.cookedColor) - lum(pasta.liquidColor!)).toBeGreaterThan(0.12);
+  });
+
   it('재료 색이 음식에 반영된다', () => {
     const p = foodProfile(kimchi);
     expect(p.vessel).toBe('pan');
@@ -67,6 +98,16 @@ describe('3D 음식 표현 규칙', () => {
     expect(props.map((p) => p.shape)).toEqual(['bowl', 'bowl', 'jar', 'cup', 'bottle']);
     expect(props[0]!.label).toBe('잘 익은 김치 200g');
     expect(ingredientProps(egg)[0]!.shape).toBe('egg');
+    // 다진 마늘은 작은 그릇의 알갱이 (통마늘 알이 아니다)
+    const garlic = ingredientProps(spinach).find((p) => p.label.startsWith('다진 마늘'))!;
+    expect(garlic.shape).toBe('bowl');
+    expect(garlic.piece?.shape).toBe('mince');
+    expect(ingredientProps(kimchi)[0]!.piece?.shape).toBe('kimchi');
+    const pasta = ingredientProps(SAMPLE_RECIPES.find((r) => r.dishName === '들깨고사리파스타')!);
+    // 마른 면은 면 묶음, 고추는 송송 썬 고리 (노란·빨간 물이 담긴 그릇이 아니다)
+    expect(pasta.find((p) => p.label.startsWith('스파게티니'))?.shape).toBe('noodles');
+    expect(pasta.find((p) => p.label.startsWith('매운고추'))?.piece?.shape).toBe('ring');
+    expect(pasta.find((p) => p.label.startsWith('고사리 '))?.piece?.shape).toBe('stalk');
   });
 
   it('실제 레시피: 호두정과는 팬 요리, 파스타는 면 요리이고 도구는 소품에서 빠진다', () => {

@@ -51,8 +51,10 @@ const KIND_RULES: { kind: FoodKind; words: string[] }[] = [
 /** 종류 판단을 헷갈리게 하는 단어 (설탕의 '탕', 국간장의 '국', 청국장의 '국' 등) */
 const KIND_NOISE = /설탕|국간장|국자|면수|전체|전자레인지|청국장|국물/g;
 
-/** 썬 모양 */
-export type PieceShape = 'chunk' | 'cube' | 'ring' | 'leaf' | 'bean' | 'slice' | 'strip' | 'nut' | 'seed' | 'curl';
+/**
+ * 썬 모양. kimchi: 배추김치 조각(빨간 잎 + 흰 줄기), stalk: 고사리 같은 가는 줄기, mince: 다진 마늘·생강 알갱이
+ */
+export type PieceShape = 'chunk' | 'cube' | 'ring' | 'leaf' | 'kimchi' | 'bean' | 'slice' | 'strip' | 'stalk' | 'nut' | 'seed' | 'curl' | 'mince';
 export interface FoodPiece {
   shape: PieceShape;
   color: string;
@@ -66,21 +68,25 @@ const PIECE_WORDS: { words: string[]; piece: FoodPiece }[] = [
   { words: ['청양고추', '풋고추', '꽈리고추'], piece: { shape: 'ring', color: '#3E8E2E' } },
   { words: ['홍고추'], piece: { shape: 'ring', color: '#C9302A' } },
   { words: ['대파', '쪽파', '실파'], piece: { shape: 'ring', color: '#6DB04F' } },
-  { words: ['김치'], piece: { shape: 'leaf', color: '#C8452E' } },
+  // 김치: 빨간 잎과 연한 줄기가 함께 있는 썬 조각 (예전 얇은 빨간 판은 종이 조각·피자 토핑처럼 보였다)
+  { words: ['김치'], piece: { shape: 'kimchi', color: '#B3311F' } },
   { words: ['배추'], piece: { shape: 'leaf', color: '#D3E2A2' } },
+  // 콩나물·숙주는 '나물'보다 먼저 (잎이 아니라 가는 줄기)
+  { words: ['콩나물', '숙주'], piece: { shape: 'strip', color: '#F2EBC9' } },
   { words: ['시금치', '부추', '깻잎', '쑥갓', '상추', '나물'], piece: { shape: 'leaf', color: '#4E9A3A' } },
   { words: ['청국장'], piece: { shape: 'bean', color: '#86562C' } },
-  { words: ['콩나물', '숙주'], piece: { shape: 'strip', color: '#F2EBC9' } },
   { words: ['콩'], piece: { shape: 'bean', color: '#D9B77A' } },
   { words: ['두부'], piece: { shape: 'cube', color: '#F4EEDC' } },
   { words: ['양파'], piece: { shape: 'strip', color: '#EFE4C8' } },
+  // 다진 마늘·생강은 작은 알갱이 (편 썬 마늘이 아니다)
+  { words: ['다진 마늘', '다진마늘', '다진 생강', '다진생강'], piece: { shape: 'mince', color: '#F3EBD8' } },
   { words: ['마늘'], piece: { shape: 'slice', color: '#F3EBD8' } },
   { words: ['당근'], piece: { shape: 'strip', color: '#F08A2C' } },
   { words: ['애호박', '오이'], piece: { shape: 'slice', color: '#A9C96A' } },
   { words: ['호박', '감자', '고구마', '무'], piece: { shape: 'cube', color: '#E8C977' } },
   { words: ['버섯'], piece: { shape: 'slice', color: '#9C7652' } },
-  // 고사리: 가늘고 긴 갈색 줄기 (예전에는 모양이 없어 파스타 위가 흰 조각뿐이었다)
-  { words: ['고사리'], piece: { shape: 'strip', color: '#6E4C2C' } },
+  // 고사리: 가늘고 긴 갈색 줄기, 몇 개는 끝이 말린 순 머리 (예전: 납작한 막대라 소시지처럼 보였다)
+  { words: ['고사리'], piece: { shape: 'stalk', color: '#5E3D22' } },
   { words: ['돼지', '소고기', '고기', '베이컨', '햄', '닭'], piece: { shape: 'strip', color: '#A95E44' } },
   { words: ['어묵'], piece: { shape: 'strip', color: '#E2B47A' } },
   { words: ['새우'], piece: { shape: 'curl', color: '#F28A6A' } },
@@ -89,8 +95,11 @@ const PIECE_WORDS: { words: string[]; piece: FoodPiece }[] = [
   { words: ['브로콜리'], piece: { shape: 'chunk', color: '#4E8A34' } },
   { words: ['참깨', '들깨', '깨'], piece: { shape: 'seed', color: '#EBDDB2' } },
 ];
-/** 양념 이름 안의 재료 단어는 건더기가 아니다 (고춧가루의 '고추', 파프리카가루 등) */
-const NOT_PIECE = /가루|장$|기름|소스|액젓|즙|육수|물$/;
+/**
+ * 양념 이름 안의 재료 단어는 건더기가 아니다 (고춧가루의 '고추', 파프리카가루 등). '~물'(김치 국물·찬물)도 아니다.
+ * 단 '나물'로 끝나는 채소(참나물·콩나물)는 물이 아니다 (예전에는 참나물 고명·콩나물이 빠졌다)
+ */
+const NOT_PIECE = /가루|장$|기름|소스|액젓|즙|육수|(?<!나)물$/;
 
 export function ingredientPiece(name: string): FoodPiece | null {
   if (NOT_PIECE.test(name) && !name.includes('청국장')) return null;
@@ -117,6 +126,7 @@ const COLOR_WORDS: { words: string[]; color: string }[] = [
   { words: ['호두', '땅콩', '밤', '잣', '아몬드'], color: '#A9733F' },
   { words: ['고사리'], color: '#7A5A3A' },
   { words: ['생크림', '우유', '치즈'], color: '#F6F0E2' },
+  { words: ['꿀', '조청'], color: '#D99A35' },
   { words: ['스파게티', '국수', '파스타', '소면'], color: '#F2DC9B' },
 ];
 
@@ -165,7 +175,8 @@ const BASE: Record<FoodKind, Omit<FoodProfile, 'kind' | 'bits' | 'pieces'>> = {
   greens: { vessel: 'pot', rawColor: '#5DB045', cookedColor: '#3E8E35', liquidColor: '#BFE3F2' },
   soup: { vessel: 'pot', rawColor: '#E9C88E', cookedColor: '#D98A4E', liquidColor: '#E0A15E' },
   rice: { vessel: 'pot', rawColor: '#FFFFFF', cookedColor: '#FFFDF5' },
-  noodles: { vessel: 'pot', rawColor: '#F6E3A8', cookedColor: '#F2D68A', liquidColor: '#E8C48A' },
+  // 면: 연한 밀색 (예전 #F2D68A는 만화 재질에서 주황 노랑으로 떠 보였다)
+  noodles: { vessel: 'pot', rawColor: '#F4E4B4', cookedColor: '#F0DCA2', liquidColor: '#E8C48A' },
   stirfry: { vessel: 'pan', rawColor: '#E7C79A', cookedColor: '#B8743E' },
   generic: { vessel: 'pan', rawColor: '#E8CFA0', cookedColor: '#C9853F' },
 };
@@ -214,12 +225,14 @@ export function foodProfile(recipe: RecipeInput): FoodProfile {
   if (kind === 'soup' && bits.includes('#D9472B')) profile.liquidColor = '#C8502E';
   // 김치전처럼 붉은 재료가 들어간 전은 반죽도 붉은 기
   if (kind === 'pancake' && bits.includes('#D9472B')) {
-    profile.rawColor = '#F0B98E';
-    profile.cookedColor = '#CF8A3E';
+    profile.rawColor = '#F2B47E';
+    profile.cookedColor = '#EA9C4A';
   }
   if (kind === 'greens' && bits[0]) profile.cookedColor = bits[0];
-  // 들깨·크림이 들어간 면 요리는 국물을 크림색으로
-  if (kind === 'noodles' && (bits.includes('#D8C6A0') || bits.includes('#F6F0E2'))) profile.liquidColor = '#E6D7B6';
+  // 들깨가 들어간 면 요리는 소스를 따뜻한 회갈색(들깨 크림)으로, 크림만 들어가면 크림색으로.
+  // 소스가 면보다 확실히 짙어야 연한 밀색 면이 소스와 구별된다 (예전: 소스·면이 거의 같은 크림색이라 면이 선만 남았다)
+  if (kind === 'noodles' && bits.includes('#D8C6A0')) profile.liquidColor = '#C9AD88';
+  else if (kind === 'noodles' && bits.includes('#F6F0E2')) profile.liquidColor = '#E8DCC0';
   // 견과류 위주 요리는 견과 색으로
   if (bits[0] === '#A9733F' && (kind === 'generic' || kind === 'stirfry')) {
     profile.rawColor = '#C99A62';
@@ -229,7 +242,7 @@ export function foodProfile(recipe: RecipeInput): FoodProfile {
 }
 
 /** 조리대 위에 놓이는 재료 소품 모양 */
-export type PropShape = 'egg' | 'bottle' | 'jar' | 'leaves' | 'bowl' | 'cup' | 'cloves';
+export type PropShape = 'egg' | 'bottle' | 'jar' | 'leaves' | 'bowl' | 'cup' | 'cloves' | 'noodles';
 
 export interface IngredientProp {
   label: string;
@@ -246,8 +259,12 @@ const PROP_RULES: { words: string[]; shape: PropShape; color?: string }[] = [
   { words: ['소금', '설탕', '가루', '후추', '깨'], shape: 'jar' },
   { words: ['육수'], shape: 'cup', color: '#E8D2A8' },
   { words: ['물'], shape: 'cup', color: '#9FD3EE' },
+  // 다진 마늘·생강은 작은 그릇에 담긴 알갱이 (통마늘 알은 '마늘'만 있을 때)
+  { words: ['다진 마늘', '다진마늘', '다진 생강', '다진생강'], shape: 'bowl' },
   { words: ['마늘', '생강'], shape: 'cloves', color: '#F3EBD8' },
   { words: ['시금치', '대파', '쪽파', '부추', '깻잎', '상추', '배추', '나물'], shape: 'leaves' },
+  // 마른 면 한 묶음 (예전: 노란 물이 담긴 그릇처럼 보였다)
+  { words: ['스파게티', '파스타', '국수', '소면', '당면', '칼국수면'], shape: 'noodles', color: '#EBCF8A' },
 ];
 
 const BOTTLE_COLORS: { words: string[]; color: string }[] = [
@@ -289,7 +306,8 @@ export function ingredientProps(recipe: RecipeInput): IngredientProp[] {
     if (shape === 'bottle') color = BOTTLE_COLORS.find((b) => includesAny(ing.name, b.words))?.color ?? '#C9A15A';
     if (shape === 'jar') color = ing.name.includes('후추') ? '#5A4A3A' : ing.name.includes('부침가루') || ing.name.includes('밀가루') ? '#F4ECD8' : '#FFFFFF';
     if (shape === 'leaves') color = ingredientPiece(ing.name)?.color ?? color;
-    const piece = shape === 'bowl' ? ingredientPiece(ing.name) : null;
+    // 조리대 그릇에는 손질한 모양. 고추처럼 음식 건더기 규칙에는 없지만(조각 수 제한) 소품으로는 썬 모양이 나은 재료도 있다
+    const piece = shape === 'bowl' ? ingredientPiece(ing.name) ?? (/고추$/.test(ing.name) ? { shape: 'ring' as const, color: '#C9302A' } : null) : null;
     return piece ? { label, shape, color, piece } : { label, shape, color };
   });
 }

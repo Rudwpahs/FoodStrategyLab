@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Color } from 'three';
 import { SAMPLE_RECIPES, foodProfile } from '@mat-lab/recipe-core';
-import { FOOD_RAMP, inkColor, inkMaterial, toonMaterial, toonRamp, vivid } from './toon.ts';
+import { FOOD_RAMP, TOON_LIGHT, inkColor, inkMaterial, toonExposure, toonMaterial, toonRamp, vivid } from './toon.ts';
 
 const hsl = (hex: string) => {
   const o = { h: 0, s: 0, l: 0 };
@@ -27,6 +27,13 @@ describe('만화풍 단계 음영표', () => {
     let flat = 0;
     for (let i = 1; i < r.length; i++) if (Math.abs(r[i]! - r[i - 1]!) <= 1) flat++;
     expect(flat / (r.length - 1)).toBeGreaterThan(0.75);
+  });
+
+  it('빛을 등진 면(표의 앞쪽 절반)은 확실히 어둡다: 뒤쪽 테두리 조명이 음식 앞면을 환하게 비추지 않게', () => {
+    const r = toonRamp(FOOD_RAMP.levels, FOOD_RAMP.edges, FOOD_RAMP.soft);
+    // 0.5 = 빛과 직각. 그보다 조금이라도 등지면 첫 단계(그늘)
+    expect(r[Math.floor(r.length * 0.4)]! / 255).toBeLessThan(0.4);
+    expect(r[r.length - 1]! / r[Math.floor(r.length * 0.4)]!).toBeGreaterThan(2.5);
   });
 
   it('경계 수가 맞지 않으면 알린다', () => {
@@ -56,12 +63,44 @@ describe('만화풍 색', () => {
   });
 });
 
+describe('빛 정리 (음식 색이 하얗게 날아가지 않게)', () => {
+  it('그늘·중간 밝기는 거의 그대로, 밝은 쪽은 눌러서 아무리 센 조명에도 음식 색의 max배를 넘지 않는다', () => {
+    expect(toonExposure(0.3)).toBeCloseTo(0.3 * TOON_LIGHT.exposure, 5);
+    expect(toonExposure(0.5)).toBeCloseTo(0.5 * TOON_LIGHT.exposure, 5);
+    let prev = 0;
+    for (let l = 0; l <= 6; l += 0.05) {
+      const t = toonExposure(l);
+      expect(t).toBeGreaterThanOrEqual(prev); // 밝은 빛일수록 밝다 (순서는 지킨다)
+      expect(t).toBeLessThan(TOON_LIGHT.max);
+      prev = t;
+    }
+    // 2026-11 영상의 팬 속 전(주광 + 주황 테두리 조명 + 불빛 ≈ 음식 색의 1.9배)도 음식 색 근처에 머문다
+    expect(toonExposure(1.9)).toBeLessThan(1.0);
+    expect(toonExposure(1.9)).toBeGreaterThan(0.85);
+    // 그늘(0.4)과 밝은 면(1.3)의 차이는 남는다 (단계 음영이 살아 있게)
+    expect(toonExposure(1.3) / toonExposure(0.4)).toBeGreaterThan(2.2);
+  });
+
+  it('음식 재질은 화면 톤 매핑(ACES)을 쓰지 않는다: ACES는 밝은 주황을 노랑·흰색으로 튼다', () => {
+    expect(toonMaterial({ color: '#E5A65C' }).toneMapped).toBe(false);
+    expect(inkMaterial('#3A2418').toneMapped).toBe(false);
+  });
+
+  it('색 조명은 조금만 물든다 (음식 자기 색이 먼저)', () => {
+    expect(TOON_LIGHT.tint).toBeGreaterThan(0);
+    expect(TOON_LIGHT.tint).toBeLessThanOrEqual(0.35);
+  });
+});
+
 describe('만화풍 재질', () => {
   it('같은 설정이면 같은 재질을 다시 쓰고, 모든 음식 재질이 셰이더 하나를 함께 쓴다', () => {
     const a = toonMaterial({ color: '#D9963A', gloss: 0.5 });
     expect(toonMaterial({ color: '#D9963A', gloss: 0.5 })).toBe(a);
     const b = toonMaterial({ color: '#D9963A', gloss: 0.9 });
     expect(b).not.toBe(a);
+    // 젖은 윤기(눅눅한 실패작)도 값만 다른 같은 셰이더
+    expect(toonMaterial({ color: '#D9963A', gloss: 0.5, wet: 1 })).not.toBe(a);
+    expect(toonMaterial({ color: '#D9963A', gloss: 0.5, wet: 1 }).customProgramCacheKey()).toBe(a.customProgramCacheKey());
     expect(a.customProgramCacheKey()).toBe(b.customProgramCacheKey());
     expect(inkMaterial('#3A2418')).toBe(inkMaterial('#3A2418'));
     expect(inkMaterial('#3A2418').side).toBe(1); // 뒷면만 (뒤집은 껍데기)
