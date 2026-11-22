@@ -2,15 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '../samples.ts';
 import { formatIngredient } from '../format.ts';
 import { BRAND } from '../brand.ts';
-import { DEFAULT_PERSONA, PERSONAS, PERSONA_IDS, SENSORY_RULE, findFakeExperience, isPersonaId } from './persona.ts';
-import { finalizeStory, storySystem, type StoryDraft } from './story.ts';
+import { DEFAULT_PERSONA, LIMIT_LINE_GAP, PERSONAS, PERSONA_IDS, SENSORY_RULE, findFakeExperience, hasLimitLine, isPersonaId, limitLineInstruction } from './persona.ts';
+import { finalizeStory, storySystem, storyUser, type StoryDraft } from './story.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
 
 describe('맛조수 성격 (페르소나)', () => {
-  it('기본은 지금 설정 그대로 (사용자가 고르기 전까지 스튜디오 대본이 바뀌지 않게)', () => {
-    expect(DEFAULT_PERSONA).toBe('calm-host');
+  it('기본은 사용자가 고른 성격: 기록 담당 + 맛 한계 한마디 가끔 + 2030 대본은 살림 말투 (2026-11-22)', () => {
+    expect(DEFAULT_PERSONA).toBe('lab-notes');
     const sys = storySystem();
+    expect(sys).toContain(`이번 대본의 성격: ${PERSONAS['lab-notes'].label}`);
+    expect(sys).toContain('노트를 가장 먼저 읽고 정리하는 기록 담당');
+    expect(sys).toContain('2030 젊은 주부(young-home) 대본은 살림 옆자리 동료처럼');
+    expect(sys).toContain('사용자 메시지가 허락할 때만');
+    expect(sys).toContain(SENSORY_RULE);
+  });
+
+  it('예전 설정(calm-host)은 예전 글자 그대로 남아 있다 (되돌릴 때)', () => {
+    const sys = storySystem('calm-host');
     expect(sys).toContain(`- ${BRAND.character}: 연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다.`);
     expect(sys).not.toContain('이번 대본의 성격');
     expect(sys).not.toContain(SENSORY_RULE);
@@ -38,6 +47,31 @@ describe('맛조수 성격 (페르소나)', () => {
     expect(isPersonaId('recorder')).toBe(true);
     expect(isPersonaId('robot')).toBe(false);
     expect(isPersonaId(undefined)).toBe(false);
+  });
+});
+
+describe('맛 한계 한마디는 가끔만 (4~5편에 한 번)', () => {
+  it('한계 한마디를 찾는다', () => {
+    expect(hasLimitLine('그 맛을 저는 확인할 수 없지만, 순서의 이유는 짚을 수 있어요.')).toBe(true);
+    expect(hasLimitLine('저는 맛 대신 색을 보는데, 선명한 초록이면 잘 멈춘 거예요.')).toBe(true);
+    expect(hasLimitLine('맛은 못 봐도 이유는 보여요.')).toBe(true);
+    expect(hasLimitLine('데치면 떫은맛이 빠지고 고소한 맛이 살아나요.')).toBe(false);
+  });
+  it('최근 몇 편 안에 썼으면 이번에는 넣지 말라고, 아니면 대본 하나에만 넣어도 된다고 알린다', () => {
+    const used = [['도시락 시금치예요.', '저는 맛 대신 색을 봐요.']];
+    expect(limitLineInstruction('lab-notes', used)).toContain('이번 대본들에는 넣지 마');
+    expect(limitLineInstruction('lab-notes', [['호두정과는 왜 데칠까요?']])).toContain('대본 하나에만');
+    // LIMIT_LINE_GAP편보다 예전에 쓴 것은 세지 않는다
+    const old = [...Array.from({ length: LIMIT_LINE_GAP }, () => ['평범한 대사예요.']), ['맛은 못 봐도 이유는 보여요.']];
+    expect(limitLineInstruction('lab-notes', old)).toContain('대본 하나에만');
+    // 다른 성격에는 이 안내가 없다
+    expect(limitLineInstruction('recorder', used)).toBe('');
+    expect(limitLineInstruction('ai-honest', used)).toBe('');
+  });
+  it('사용자 메시지에 들어간다 (기본 성격)', () => {
+    const walnut2 = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+    const user = storyUser(walnut2, { count: 3, recent: [{ storyType: 'why', title: 't', firstLine: 'f', lines: ['맛은 못 봐도 이유는 보여요.'] }] });
+    expect(user).toContain('이번 대본들에는 넣지 마');
   });
 });
 

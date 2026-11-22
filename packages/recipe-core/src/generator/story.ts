@@ -4,7 +4,7 @@ import { formatIngredient, splitSentences } from '../format.ts';
 import { checkScript, type Issue } from '../fidelity.ts';
 import { findHealthClaims } from '../wordLists.ts';
 import { CATEGORY_LABELS, EMOTIONS, PLACES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
-import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE, findFakeExperience, type PersonaId } from './persona.ts';
+import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE, findFakeExperience, limitLineInstruction, type PersonaId } from './persona.ts';
 import { enforceSourceData } from './prompt.ts';
 import { estimateScriptSeconds } from './template.ts';
 
@@ -274,7 +274,7 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 }
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
-export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number }): string {
+export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId }): string {
   const source = storySourceData(recipe, opts.expertAnswers);
   const recent = opts.recent ?? [];
   const overused = overusedTypes(recent);
@@ -289,10 +289,11 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
       (motifs.length ? `\n- 최근에 자주 나온 소재라 이번에는 쓰지 마: ${motifs.map((m) => `"${m}"`).join(', ')}` : '') +
       (phrases.length ? `\n- 최근 대본마다 되풀이된 표현이라 이번에는 쓰지 마 (비슷하게 돌려 쓰지도 마): ${phrases.map((m) => `"${m}"`).join(', ')}` : '')
     : '';
+  const limit = limitLineInstruction(opts.persona ?? DEFAULT_PERSONA, recent.map((r) => r.lines ?? [r.firstLine]));
   return `아래 원본 자료로 형식이 서로 다른 대본 ${opts.count}개를 써.
 ## 고를 수 있는 형식 (storyType — 이름: 구성 / 지킬 것 / 잘 맞는 시청자)
 ${types.map((t) => `- ${t}(${STORY_TYPE_INFO[t].label}): ${STORY_TYPE_INFO[t].beats} / ${STORY_TYPE_INFO[t].guide} / ${audienceLabels(STORY_TYPE_INFO[t].fits)}`).join('\n')}
-${avoid}${account}
+${avoid}${account}${limit}
 
 ## 원본 자료
 ${JSON.stringify(source, null, 2)}`;

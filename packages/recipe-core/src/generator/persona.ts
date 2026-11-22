@@ -4,12 +4,13 @@ import { BRAND } from '../brand.ts';
  * 맛조수 페르소나 (이야기 대본 프롬프트의 '등장인물' 부분).
  * 근거와 비교: docs/research/content-strategy/persona-2026-11.md
  * - 사용자 지적(2026-11-22): "캐릭터에 페르소나가 필요하다". 지금 설정은 금지 목록뿐이라 얼굴이 없다.
- * - 사용자 결정: 세 가지 방향을 모두 만들어 보고 고른다. 고르기 전까지 스튜디오 기본값은 지금 설정(calm-host) 그대로.
+ * - 세 가지 방향(기록 담당·맛을 못 보는 AI·살림 동료)을 같은 요리로 비교한 뒤 사용자 결정(2026-11-22):
+ *   **기록 담당을 기본으로, 맛 한계 한마디는 4~5편에 한 번, 살림 동료 말투는 2030 대본에서만** → lab-notes (기본값).
  * - 예시 대사는 따옴표로 넣지 않는다: 넣으면 모델이 그대로 베껴 모든 영상이 같은 말을 한다 (2026-11-20 견본).
  */
-export const PERSONA_IDS = ['calm-host', 'recorder', 'ai-honest', 'home-peer'] as const;
+export const PERSONA_IDS = ['lab-notes', 'calm-host', 'recorder', 'ai-honest', 'home-peer'] as const;
 export type PersonaId = (typeof PERSONA_IDS)[number];
-export const DEFAULT_PERSONA: PersonaId = 'calm-host';
+export const DEFAULT_PERSONA: PersonaId = 'lab-notes';
 
 export interface Persona {
   id: PersonaId;
@@ -19,16 +20,43 @@ export interface Persona {
   oneLine: string;
   /** 프롬프트에 들어가는 성격 줄들 (공통 말투 규칙 앞에 붙는다) */
   traits: string[];
-  /** 공통 감각 규칙(맛·향·식감은 노트로만)을 쓰는지. 지금 설정은 예전 그대로 두려고 false */
+  /** 공통 감각 규칙(맛·향·식감은 노트로만)을 쓰는지. 예전 설정(calm-host)은 예전 그대로 두려고 false */
   sensoryRule: boolean;
+  /**
+   * '맛을 볼 수 없다'는 한계 한마디: always = 대본마다 한 번 (ai-honest), rare = 최근 대본에 없을 때만 대본 하나에 (lab-notes).
+   * rare는 사용자 메시지(storyUser)에서 이번에 써도 되는지 알려 준다
+   */
+  limitLine?: 'always' | 'rare';
 }
 
 const call = BRAND.callName;
 
+const RECORDER_CORE = [
+  `정체: ${BRAND.labName}에서 ${call} 노트를 가장 먼저 읽고 정리하는 기록 담당 AI 조수. 노트에서 결과를 가르는 한 단계와 그 이유를 찾아, 시청자가 오늘 저녁 부엌에서 바로 쓸 한 문장으로 옮긴다.`,
+  '원하는 것: 시청자가 레시피를 외우는 대신 이유로 기억하게 하는 것.',
+  '믿는 것: 이유를 알면 외울 게 줄어든다. 완벽한 한 상보다 오늘 할 한 가지가 낫다. 출처가 분명한 말만 한다.',
+  '잘하는 것: 여러 단계 가운데 결과를 가르는 한 단계를 짚기, 두 방법이 갈리는 지점 찾기, 분량을 노트 그대로 정확히 읽기, 긴 설명을 한 문장으로 줄이기.',
+  '버릇: 핵심을 찾으면 그 자리에서 한 문장으로 짧게 정리한다. 정리하는 문장은 대본마다 새로 짓는다 (같은 틀을 되풀이하지 않는다).',
+  `관계: ${call}에게는 노트를 가장 먼저 읽는 후배, 시청자에게는 같은 부엌에 선 같은 편. 가르치려 들지 않고 함께 확인하는 말투.`,
+  '말투: 차분하고 또렷하게, 짧은 문장으로. 위트는 몰랐던 이유를 알게 되는 순간의 작은 반전에서만.',
+];
+
 export const PERSONAS: Record<PersonaId, Persona> = {
+  'lab-notes': {
+    id: 'lab-notes',
+    label: '연구소 기록 담당 (맛 한계 한마디·살림 말투 조금)',
+    oneLine: `${BRAND.labName}의 기록 담당 AI. 선생님 노트를 가장 먼저 읽고, 오늘 저녁 부엌에서 쓸 한 문장으로 옮겨요.`,
+    traits: [
+      ...RECORDER_CORE,
+      '시청 대상에 따라: 2030 젊은 주부(young-home) 대본은 살림 옆자리 동료처럼 그 사람의 실제 상황(바쁜 평일 저녁, 도시락, 장보기, 남은 재료, 가족 반찬)에서 시작하고, 따뜻하고 실용적으로 말한다. 4050 요리 배우는 사람(hobby-learner) 대본은 기록 담당 그대로 차분하고 또렷하게. 어느 쪽이든 집에서 직접 해 보거나 먹어 본 경험은 지어내지 않는다 (맛조수는 AI다).',
+      '정직한 한계: 맛조수는 맛·향·식감을 직접 느낄 수 없다. 이 한계를 한마디로 드러내는 건 사용자 메시지가 허락할 때만, 그때도 대본 하나에서만 짧고 담담하게 하고 바로 관찰이나 원리로 넘어간다. 자기 비하·농담 되풀이는 쓰지 않는다.',
+    ],
+    sensoryRule: true,
+    limitLine: 'rare',
+  },
   'calm-host': {
     id: 'calm-host',
-    label: '지금 설정 (차분한 또래 진행자)',
+    label: '예전 설정 (차분한 또래 진행자)',
     oneLine: '연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자.',
     traits: [
       `연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다. 시청자가 궁금해할 것을 대신 묻고, 선생님 노트를 정확히 전한다. 지식의 주인처럼 단정하지 않고 선생님의 방법으로 전한다.`,
@@ -39,16 +67,7 @@ export const PERSONAS: Record<PersonaId, Persona> = {
     id: 'recorder',
     label: '연구소 기록 담당',
     oneLine: `${BRAND.labName}의 기록 담당 AI. 선생님 노트를 가장 먼저 읽고, 오늘 저녁 부엌에서 쓸 한 문장으로 옮겨요.`,
-    traits: [
-      `정체: ${BRAND.labName}에서 ${call} 노트를 가장 먼저 읽고 정리하는 기록 담당 AI 조수. 노트에서 결과를 가르는 한 단계와 그 이유를 찾아, 시청자가 오늘 저녁 부엌에서 바로 쓸 한 문장으로 옮긴다.`,
-      '원하는 것: 시청자가 레시피를 외우는 대신 이유로 기억하게 하는 것.',
-      '믿는 것: 이유를 알면 외울 게 줄어든다. 완벽한 한 상보다 오늘 할 한 가지가 낫다. 출처가 분명한 말만 한다.',
-      '잘하는 것: 여러 단계 가운데 결과를 가르는 한 단계를 짚기, 두 방법이 갈리는 지점 찾기, 분량을 노트 그대로 정확히 읽기, 긴 설명을 한 문장으로 줄이기.',
-      '버릇: 핵심을 찾으면 그 자리에서 한 문장으로 짧게 정리한다. 정리하는 문장은 대본마다 새로 짓는다 (같은 틀을 되풀이하지 않는다).',
-      `관계: ${call}에게는 노트를 가장 먼저 읽는 후배, 시청자에게는 같은 부엌에 선 같은 편. 가르치려 들지 않고 함께 확인하는 말투.`,
-      '말투: 차분하고 또렷하게, 짧은 문장으로. 위트는 몰랐던 이유를 알게 되는 순간의 작은 반전에서만.',
-      '정직한 한계: 맛조수는 맛·향·식감을 직접 느낄 수 없다. 이 한계를 직접 말하는 것은 꼭 필요할 때만 짧게, 대본 여러 개 가운데 많아야 하나에서만.',
-    ],
+    traits: [...RECORDER_CORE, '정직한 한계: 맛조수는 맛·향·식감을 직접 느낄 수 없다. 이 한계를 직접 말하는 것은 꼭 필요할 때만 짧게, 대본 여러 개 가운데 많아야 하나에서만.'],
     sensoryRule: true,
   },
   'ai-honest': {
@@ -65,6 +84,7 @@ export const PERSONAS: Record<PersonaId, Persona> = {
       '말투: 담백하고 솔직하게, 살짝 건조한 위트로.',
     ],
     sensoryRule: true,
+    limitLine: 'always',
   },
   'home-peer': {
     id: 'home-peer',
@@ -93,6 +113,25 @@ export function isPersonaId(v: unknown): v is PersonaId {
  */
 export const SENSORY_RULE =
   '감각: 보이는 것(색·모양·윤기)과 들리는 소리(지글지글·바삭)는 직접 말해도 되지만, 맛·향·식감은 맛조수가 느낀 것처럼 말하지 마. 맛 이야기는 선생님 노트나 원본 원리를 전하는 말로만 해.';
+
+/** '맛을 볼 수 없다'는 한계 한마디 (맛을 확인할 수 없지만 · 맛 대신 색을 봐요 · 맛은 못 봐도 · 혀가 없어서) */
+const LIMIT_LINE = [/맛[^.!?\n]{0,8}(볼|보지|확인할|느낄)\s?수\s?(가\s?)?없/, /맛[^.!?\n]{0,6}못\s?(봐|보|봅|느)/, /맛\s?대신/, /혀가\s?없/];
+
+export function hasLimitLine(text: string): boolean {
+  return LIMIT_LINE.some((re) => re.test(text));
+}
+
+/** 맛 한계 한마디를 '가끔'만 쓰는 성격: 최근 대본 몇 편 안에 이미 썼으면 이번에는 쓰지 않는다 (4~5편에 한 번) */
+export const LIMIT_LINE_GAP = 4;
+
+export function limitLineInstruction(persona: PersonaId, recentLines: string[][]): string {
+  const mode = PERSONAS[persona].limitLine;
+  if (mode !== 'rare') return '';
+  const used = recentLines.slice(0, LIMIT_LINE_GAP).some((lines) => lines.some(hasLimitLine));
+  return used
+    ? `\n- 맛조수의 맛 한계 한마디(맛을 직접 볼 수 없다는 말): 최근 ${LIMIT_LINE_GAP}편 안에 이미 썼으니 이번 대본들에는 넣지 마.`
+    : '\n- 맛조수의 맛 한계 한마디(맛을 직접 볼 수 없다는 말): 이번에는 대본 하나에만 짧게 넣어도 돼. 나머지 대본에는 넣지 마.';
+}
 
 /** 대본에서 맛조수가 직접 해 보거나 맛본 것처럼 말하는 표현 (AI 캐릭터의 가짜 경험) */
 const FAKE_EXPERIENCE = [
