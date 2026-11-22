@@ -4,6 +4,7 @@ import { formatIngredient, splitSentences } from '../format.ts';
 import { checkScript, type Issue } from '../fidelity.ts';
 import { findHealthClaims } from '../wordLists.ts';
 import { CATEGORY_LABELS, EMOTIONS, PLACES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
+import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE, findFakeExperience, type PersonaId } from './persona.ts';
 import { enforceSourceData } from './prompt.ts';
 import { estimateScriptSeconds } from './template.ts';
 
@@ -217,12 +218,19 @@ const PLACE_GUIDE: Record<Place, string> = {
 
 const audienceLabels = (list: readonly Audience[]) => list.map((a) => AUDIENCE_INFO[a].short).join('·');
 
-/** 시스템 프롬프트 (레시피와 무관해 캐시된다) */
-export function storySystem(): string {
+/** 등장인물 부분의 맛조수 성격 (persona.ts). 지금 설정(calm-host)은 예전 글자 그대로 */
+function characterLines(persona: PersonaId): string {
+  const p = PERSONAS[persona];
+  if (persona === 'calm-host') return `- ${BRAND.character}: ${p.traits[0]}`;
+  return [`- ${BRAND.character} (이번 대본의 성격: ${p.label}):`, ...p.traits.map((t) => `  - ${t}`), ...(p.sensoryRule ? [`  - ${SENSORY_RULE}`] : [])].join('\n');
+}
+
+/** 시스템 프롬프트 (레시피와 무관해 캐시된다). persona: 맛조수 성격 (기본은 지금 설정) */
+export function storySystem(persona: PersonaId = DEFAULT_PERSONA): string {
   return `너는 요리 숏폼 채널 "${BRAND.labName}"의 구성 작가야. 30~40초짜리 세로 영상 대본을 써. 시청자는 어른이야.
 
 ## 등장인물 (말투 기준)
-- ${BRAND.character}: 연구소의 3D 진행자이자 조수. 차분하고 센스 있는 또래 진행자처럼 말한다. 시청자가 궁금해할 것을 대신 묻고, 선생님 노트를 정확히 전한다. 지식의 주인처럼 단정하지 않고 선생님의 방법으로 전한다.
+${characterLines(persona)}
   - 출처 말하기: 원리 카드에 이미 "${BRAND.notePhrase}"가 뜨므로 대사로 출처를 말하는 건 대본 하나에 많아야 한 번. 말할 때도 매번 같은 틀("선생님 노트를 보면")을 쓰지 말고 대본마다 새로 지어 (선생님을 주어로, 방법을 주어로, 또는 출처 없이 원리만). 대본 여러 개에서 같은 출처 문장이 되풀이되면 안 돼.
   - 말투 (마케팅 연구 근거, 2026-11-19 사용자 결정 "마케팅학에 나온 대로"): 두 시청자 모두 해요체. 해요체가 합쇼체보다 호감이 높고 음성에서 차이가 더 크다(국내 광고언어 실험). 낯선 브랜드의 과한 친근체(반말·이모지)는 신뢰를 깎는다(Gretry 외 2017).
     · 반말·아기 말투(~용, ~쥬, ~했지 뭐예요)·유행어·감탄사 연발 금지. 문장마다 "~거든요"를 되풀이하지 마.
@@ -450,6 +458,8 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
   if (bangs > MAX_EXCLAMATIONS) warnings.push(`느낌표가 ${bangs}개예요: 호들갑스럽게 들릴 수 있어요 (${MAX_EXCLAMATIONS}개 이하)`);
   const claims = findHealthClaims(all);
   if (claims.length) warnings.push(`건강 효능처럼 들리는 말: ${claims.join(', ')}`);
+  const fake = findFakeExperience(all);
+  if (fake.length) warnings.push(`맛조수가 직접 해 보거나 맛본 것처럼 들리는 말(AI라 그런 경험이 없어요): ${fake.map((f) => `"${f}"`).join(', ')}`);
   const labCount = all.split(BRAND.labName).length - 1;
   if (labCount === 0) warnings.push(`마지막 대사에 "${BRAND.labName}"이 없어요`);
   if (labCount > 1) warnings.push(`"${BRAND.labName}"을 ${labCount}번 말해요 (한 번이면 충분해요)`);

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       dish:
-        description: '예시 레시피 요리 이름. 쉼표로 여러 개, :대상(young-home|hobby-learner):형식(why|one-fix|standard|quick|occasion…) 붙이기 가능 (예: 호두정과:hobby-learner:why,바삭한 김치전:young-home:one-fix)'
+        description: '예시 레시피 요리 이름. 쉼표로 여러 개, :대상(young-home|hobby-learner):형식(why|one-fix|standard|quick|occasion…):성격(recorder|ai-honest|home-peer) 붙이기 가능 (예: 호두정과:hobby-learner:why:recorder,바삭한 김치전:young-home:one-fix)'
         required: false
         default: '호두정과'
       style:

@@ -431,18 +431,23 @@ def render_sample(dish: str = "호두정과", style: str = "", audience: str = "
 
 @app.local_entrypoint()
 def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample") -> None:
-    """dish는 쉼표로 여러 개, 요리:대상:형식 (예: "호두정과:hobby-learner:why,바삭한 김치전:young-home:one-fix"). 여러 개면 동시에 만들고 out/번호-요리/에 나눠 담는다."""
+    """dish는 쉼표로 여러 개, 요리:대상:형식:성격 (예: "호두정과:hobby-learner:why,바삭한 김치전:young-home:one-fix").
+    성격(맛조수 페르소나: recorder·ai-honest·home-peer, recipe-core persona.ts)을 붙이면 그 성격으로 대본을 쓴다 (이야기 대본만).
+    여러 개면 동시에 만들고 out/번호-요리[-성격]/에 나눠 담는다."""
     jobs = []
+    personas = []
     for part in [p.strip() for p in dish.split(",") if p.strip()]:
         name, _, rest = part.partition(":")
-        audience, _, story_type = rest.partition(":")
+        audience, _, rest = rest.partition(":")
+        story_type, _, persona = rest.partition(":")
         jobs.append((name.strip(), style, audience.strip(), story_type.strip()))
+        personas.append(persona.strip())
     failed = []
     stories = [""] * len(jobs)
     if style == "ai-story" and len(jobs) > 1:
         # 이야기 대본은 실제 스튜디오처럼 차례로 쓴다 (앞 영상의 대본을 '최근 대본'으로 넘겨 같은 말·형식이 되풀이되지 않게).
         # 따로따로 동시에 쓰면 서로를 몰라 4편 중 3편이 같은 출처 문장·형식이었다 (2026-11-20). 렌더는 그 뒤에 동시에 한다
-        written = write_stories.remote(json.dumps([{"dish": n, "audience": a, "type": t} for n, _, a, t in jobs], ensure_ascii=False))
+        written = write_stories.remote(json.dumps([{"dish": n, "audience": a, "type": t, **({"persona": p} if p else {})} for (n, _, a, t), p in zip(jobs, personas)], ensure_ascii=False))
         for name, data in written["files"].items():
             target = Path(out) / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -453,8 +458,8 @@ def sample(dish: str = "호두정과", style: str = "", out: str = "out-sample")
         if written["code"] != 0:
             failed.append(f"대본 쓰기: 원본 대조를 통과한 대본이 없는 요리가 있어요 ({out}/picks.json)")
     results = list(render_sample.starmap([(*job, story) for job, story in zip(jobs, stories)], return_exceptions=True))
-    for i, ((name, _, audience, _t), result) in enumerate(zip(jobs, results), start=1):
-        folder = Path(out) if len(jobs) == 1 else Path(out) / f"{i:02d}-{name.replace(' ', '_')}"
+    for i, ((name, _, audience, _t), persona, result) in enumerate(zip(jobs, personas, results), start=1):
+        folder = Path(out) if len(jobs) == 1 else Path(out) / f"{i:02d}-{name.replace(' ', '_')}{'-' + persona if persona else ''}"
         folder.mkdir(parents=True, exist_ok=True)
         if isinstance(result, BaseException):
             (folder / "error.txt").write_text(str(result))
