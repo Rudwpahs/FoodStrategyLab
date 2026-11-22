@@ -80,7 +80,7 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
     case 'intro':
       return (
         <div style={{ ...style, textAlign: 'center', top: 300 }}>
-          <Label>오늘의 실험</Label>
+          <Label>오늘의 노트</Label>
           <div style={{ fontSize: fitSize(scene.cardTitle ?? topic, 84, 14), fontWeight: 900, lineHeight: 1.22 }}>{scene.cardTitle ?? topic}</div>
         </div>
       );

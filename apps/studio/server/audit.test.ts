@@ -124,7 +124,7 @@ describe('계정 진단 규칙', () => {
     const waiting = [project({ id: 101, updatedAt: daysAgo(3) }), project({ id: 102, updatedAt: daysAgo(1) }), project({ id: 103, updatedAt: daysAgo(2), status: 'review', latestScript: SHORT_CTA })];
     const a = buildAudit(input([done, ...waiting], pubs), NOW);
     const best = a.good.find((f) => f.id === 'style-best')!;
-    expect(best.title).toBe("'캐릭터 코미디형' 연출이 가장 잘 됐어요");
+    expect(best.title).toBe("'캐릭터 문답형' 연출이 가장 잘 됐어요");
     expect(best.numbers).toContainEqual({ label: '저장+보내기 (도달 1,000명당)', value: '40' });
     expect(a.holdBack.find((f) => f.id === 'style-worst')!.title).toContain('문제 해결형');
     expect(a.good.some((f) => f.id === 'hook-best')).toBe(true);
@@ -137,7 +137,7 @@ describe('계정 진단 규칙', () => {
     const inReview = a.next.find((s) => s.projectId === 103)!;
     expect(inReview.style).toBe('problem');
     expect(inReview.reason).toContain('검수·승인만 남았어요');
-    expect(inReview.reason).toContain("'캐릭터 코미디형'이 더 좋았어요");
+    expect(inReview.reason).toContain("'캐릭터 문답형'이 더 좋았어요");
   });
 
   it('대본: 첫 장면이 길거나 끝에 부탁하는 말이 없으면 발목 잡는 점', () => {

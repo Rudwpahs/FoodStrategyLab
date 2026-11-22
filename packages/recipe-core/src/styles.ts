@@ -1,4 +1,4 @@
-import { BRAND } from './brand.ts';
+import { BRAND, hostLines } from './brand.ts';
 import { formatIngredient, splitSentences } from './format.ts';
 import { HOOK_TYPES, hookCandidate, suggestHooks, type HookCandidate, type HookType } from './hooks.ts';
 import { MAX_STEPS_ON_CARD } from './generator/template.ts';
@@ -44,15 +44,17 @@ export const STYLE_INFO: Record<StyleId, StyleInfo> = {
     hooks: ['mistake', 'problem-solve', 'skit', 'compare'],
     needs: ['흔한 실수'],
   },
+  // id는 저장된 대본·게시 기록과 맞추려고 그대로 둔다. 예전 '캐릭터 코미디형'(맛조수가 실수하고 당황하는 구성)은
+  // 맛조수 성격(기록 담당 AI, 실수하지 않음: persona.ts lab-notes)과 맞지 않아, 맛조수가 시청자 대신 묻고 노트로 답을 찾는 구성으로 바꿨다
   comedy: {
-    label: '캐릭터 코미디형',
-    summary: '맛조수의 실수 → 반응 → 연구자 노트로 해결 → 반전 성공',
-    beats: ['훅: 맛조수 실수', '당황 반응', '연구자 노트', '다시 조리', '성공 반전', '서명 엔딩'],
+    label: '캐릭터 문답형',
+    summary: '흔한 실패·궁금증 → 맛조수가 대신 묻기 → 연구자 노트로 원인 → 바른 순서',
+    beats: ['훅: 흔한 실패·궁금증', '맛조수가 대신 묻기', '연구자 노트(원인)', '바른 순서', '서명 엔딩'],
     seconds: [25, 40],
-    visuals: '실패 음식, 맛조수 반응 클로즈업, 완성 접시',
-    sound: '실수·반응에 효과음, 짧은 정적 뒤 해결',
-    captions: '맛조수 감탄은 크게, 원리는 연구자 자막 스타일',
-    transitions: '반응 클로즈업 → 조리 장면 점프컷',
+    visuals: '실패 음식 클로즈업(설명용), 맛조수 질문 클로즈업, 완성 접시',
+    sound: '훅에 짧은 효과음, 질문 뒤 짧은 정적, 노트 장면은 차분하게',
+    captions: '맛조수 질문은 크게, 원리는 연구자 자막 스타일',
+    transitions: '질문 클로즈업 → 노트·조리 장면 점프컷',
     hooks: ['skit', 'mistake', 'twist'],
     needs: [],
   },
@@ -133,7 +135,7 @@ function alreadySaid(said: string, sentence: string): boolean {
 export function pickHook(recipe: RecipeInput, style: StyleId, hookType?: HookType): HookCandidate {
   const preferred = STYLE_INFO[style].hooks;
   if (hookType) return hookCandidate(recipe, hookType, { preferred });
-  // 연출 유형의 대표 훅을 먼저 쓴다 (코미디형이면 상황극). 만들 수 없을 때만 전체 추천에서 고른다.
+  // 연출 유형의 대표 훅을 먼저 쓴다 (문답형이면 공감형). 만들 수 없을 때만 전체 추천에서 고른다.
   const ranked = suggestHooks(recipe, { preferred });
   return preferred.map((t) => ranked.find((h) => h.type === t && h.available)).find(Boolean) ?? ranked.find((h) => h.available)!;
 }
@@ -154,15 +156,17 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
   const tip = recipe.tips.find((t) => !alreadySaid(hookSaid, t));
   const style = opts.style;
   const body: Draft[] = [];
+  // 고정 자리(연결·노트·팁·엔딩)의 말은 묶음에서 고른다: 같은 레시피·연출이면 같은 문장, 레시피가 다르면 대개 다른 문장
+  const say = hostLines(recipe, style);
 
   // 훅 다음 장면: 주제를 아직 말하지 않았으면 주제를, 말했으면 짧은 연결 문장을 말한다. 연구소 이름은 엔딩 서명에서 말한다
   const topicSaid = alreadySaid(hookSaid, recipe.topic);
-  const brand = (): Draft => ({ type: 'intro', emotion: 'joy', line: topicSaid ? '맛 연구소에서 같이 알아봐요!' : `오늘의 실험! ${recipe.topic}`, cardTitle: recipe.topic });
+  const brand = (): Draft => ({ type: 'intro', emotion: 'joy', line: topicSaid ? say.bridge : `${say.topicLead} ${recipe.topic}`, cardTitle: recipe.topic });
   // 화면 카드는 원본 문장 그대로, 대사는 맛조수 말투(~해요)로
-  const explain = (i: number, lead: string = BRAND.noteLead): Draft | null => {
+  const explain = (i: number): Draft | null => {
     const s = principle[i];
     if (!s) return null;
-    const line = i === 0 ? `${lead} ${spoken(s)}` : spoken(s);
+    const line = i === 0 ? `${say.noteLead} ${spoken(s)}` : spoken(s);
     return { type: 'explain', emotion: i === 0 ? 'surprised' : 'confident', line: line.trim(), cardTitle: BRAND.notePhrase, cardItems: [s] };
   };
   const ingredients = (): Draft | null => {
@@ -176,7 +180,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
     const rest = recipe.steps.length - shown.length;
     return { type: 'steps', emotion: 'confident', line: line(shown.length, rest), cardTitle: '조리 순서', cardItems: shown };
   };
-  const tipScene = (): Draft | null => (tip ? { type: 'tip', emotion: 'confident', line: `${BRAND.tipLead} ${spoken(tip)}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] } : null);
+  const tipScene = (): Draft | null => (tip ? { type: 'tip', emotion: 'confident', line: `${say.tipLead} ${spoken(tip)}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] } : null);
   const signature = (line: string): Draft => ({ type: 'outro', emotion: 'joy', line, visual: 'signature' });
   // 영상에는 앞의 몇 단계만 보여 줄 때: "딱 5단계"라고 하면 원본(6단계)과 달라지므로 "핵심 5단계, 전체 6단계는 블로그에"로 말한다
   const total = recipe.steps.length;
@@ -190,41 +194,44 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       // 원리 문장이 원인 설명일 수도, 바른 방법일 수도 있어서 "원인은요"로 단정하지 않는다 (실패 장면 뒤에 해결법 문장이 오면 앞뒤가 안 맞았다)
       body.push(explain(0)!);
       body.push(ingredients()!, steps((n, r) => `바른 순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
-      body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${BRAND.signOff}`));
+      body.push(signature(`다음에 만들 때 꺼내 보게 저장! ${say.signOff}`));
       break;
     }
     case 'comedy': {
-      // 훅이 실패 장면일 때만 "왜 이렇게 됐냐"고 묻는다 (질문 훅 뒤에는 이어지는 질문으로)
+      // 캐릭터 문답형: 맛조수가 시청자 편에서 선생님께 대신 묻고, 노트로 원인을 짚는다.
+      // 맛조수는 실수하지 않는다: 실패 훅의 실패는 시청자·일반 사례이고, 비명·당황·"대성공" 같은 반응 없이 바로 원인으로 간다
       const failed = hook.type === 'skit' || hook.type === 'mistake' || hook.type === 'problem-solve';
-      const ask = failed ? '대체 왜 이렇게 된 거죠?' : hook.type === 'curiosity-gap' ? '어떤 단계예요?' : '왜 그런 거예요?';
-      body.push({ type: 'question', emotion: failed ? 'disappointed' : 'curious', line: `${BRAND.callName}! ${ask}`, visual: 'react' });
-      body.push(explain(0, '노트에 답이 있었어요!')!, explain(1)!);
-      body.push(steps((n, r) => `${failed ? '이번엔 제대로!' : '그럼 만들어 볼게요!'} ${count(n, r)}${restNote(r)}!`)!);
-      body.push(signature(`${failed ? '대성공! ' : ''}${BRAND.signOff}`));
+      // 완성·식감·이야기처럼 무언가를 보여 주는 훅 뒤에는 "왜?" 대신 어디가 중요한지 묻는다
+      const presenting = hook.type === 'result-first' || hook.type === 'sensory' || hook.type === 'story' || hook.type === 'time-saver' || hook.type === 'expert-view';
+      const ask = failed ? '이렇게 되는 이유가 뭘까요?' : hook.type === 'curiosity-gap' ? '그 한 단계가 뭘까요?' : presenting ? '어디가 가장 중요할까요?' : '왜 그런 걸까요?';
+      body.push({ type: 'question', emotion: 'curious', line: `${BRAND.callName}, ${ask}`, visual: 'react' });
+      body.push(explain(0)!, explain(1)!);
+      body.push(steps((n, r) => `${failed ? '노트대로 하면' : '순서는'} ${count(n, r)}${restNote(r)}!`)!);
+      body.push(signature(say.signOff));
       break;
     }
     case 'experiment': {
       body.push(brand());
       body.push({ ...explain(0)!, visual: 'sizzle' }, explain(1)!);
       body.push(ingredients()!, steps((n, r) => `순서는 ${count(n, r)}${restNote(r)}!`)!, tipScene()!);
-      body.push(signature(`실험 노트는 저장해 두세요! ${BRAND.signOff}`));
+      body.push(signature(`원리까지 저장해 두세요! ${say.signOff}`));
       break;
     }
     case 'before-after': {
       body.push(brand(), ingredients()!, steps((n, r) => `만드는 법은 ${count(n, r)}${restNote(r)}!`)!);
       const ce = splitSentences(recipe.principle).map(causeEffect).find(Boolean);
       if (ce) {
-        body.push({ type: 'explain', emotion: 'surprised', line: `${BRAND.noteLead} ${ce.cause} ${spoken(ce.effect)}`, visual: 'compare', cardTitle: `${dish} 비교`, cardItems: ['건너뛰면', '노트대로 하면'] });
+        body.push({ type: 'explain', emotion: 'surprised', line: `${say.noteLead} ${ce.cause} ${spoken(ce.effect)}`, visual: 'compare', cardTitle: `${dish} 비교`, cardItems: ['건너뛰면', '노트대로 하면'] });
         notes.push('비교 장면은 실제 실험 영상이 아닌 설명용 연출입니다. 화면에 "설명용 연출"이 표시돼요.');
       } else {
         body.push(explain(0)!);
       }
-      body.push(tipScene()!, signature(`완성 사진처럼 만들었다면 저장! ${BRAND.signOff}`));
+      body.push(tipScene()!, signature(`완성 사진처럼 만들었다면 저장! ${say.signOff}`));
       break;
     }
     case 'sensory': {
       body.push(ingredients()!, steps((n, r) => (r > 0 ? `핵심 ${n}단계${restNote(r)}!` : `${n}단계면 끝!`))!, tipScene()!);
-      body.push(signature(`저장해 두고 만들어 보세요! ${BRAND.signOff}`));
+      body.push(signature(`저장해 두고 만들어 보세요! ${say.signOff}`));
       break;
     }
     case 'story': {
@@ -233,7 +240,7 @@ export function buildStyledScript(recipe: RecipeInput, opts: StyledOptions): Sty
       if (story.length > 1) body.push({ type: 'explain', emotion: 'curious', line: story.slice(1, 3).join(' '), cardTitle: '맛 연구소 이야기' });
       else notes.push('이야기가 짧아 이야기 장면 하나로 구성했어요. 연구자의 경험담을 더 입력하면 이야기 장면이 늘어나요.');
       body.push(explain(0)!, ingredients()!, steps((n, r) => `만드는 법은 ${n}단계${restNote(r)}!`)!);
-      body.push(signature(`이야기가 있는 요리였어요. ${BRAND.signOff}`));
+      body.push(signature(`이야기가 있는 요리였어요. ${say.signOff}`));
       break;
     }
   }

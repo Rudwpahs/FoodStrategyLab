@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api, type VoiceInfo, type VoiceSampleResult, type VoiceSamples } from '../api.ts';
 import { useApp } from '../App.tsx';
 
-const SAMPLE_TEXT = '잠깐! 청국장덮밥, 이렇게 하면 안 돼요! 이희재의 맛 연구소, 오늘의 실험!';
+/** 목소리 비교용 문장: 질문(끝이 올라감)·설명·연구소 이름(발음 확인)이 다 들어가게, 맛조수 성격(차분한 기록 담당) 말투로 */
+const SAMPLE_TEXT = '청국장덮밥, 청국장은 왜 맨 나중에 넣을까요? 이유는 선생님 노트에 있어요. 이희재의 맛 연구소였어요.';
 
 /**
  * 맛조수 목소리 고르기: 저장소에 기준 녹음이 있는 목소리들(모두 VoxCPM2) 중 하나 + 말 빠르기.

@@ -77,7 +77,9 @@ describe('3D 장면 상태', () => {
 
 describe('자막과 얼굴', () => {
   it('얼굴 범위는 맛조수의 눈·입을 담는다', () => {
-    for (const type of ['intro', 'question', 'mistake', 'outro']) {
+    // 실수 장면은 실패한 음식만 클로즈업으로 보여 주고 맛조수는 나오지 않는다 (맛조수는 실수하지 않는다: persona.ts lab-notes)
+    expect(faceBox(stageAt(script, timings, frameOf('mistake', 0.5), 'pancake', props)!, 1080, 1920)).toBeNull();
+    for (const type of ['intro', 'question', 'outro']) {
       const st = stageAt(script, timings, frameOf(type, 0.5), 'pancake', props)!;
       const box = faceBox(st, 1080, 1920)!;
       const facing = chefFacing(st);

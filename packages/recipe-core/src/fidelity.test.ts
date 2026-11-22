@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStyledScript, checkScript, extractQuantities, quantityIssues, type RecipeInput, type Script } from './index.ts';
+import { BRAND, NOTE_LEADS, SIGN_OFFS, buildStyledScript, checkScript, extractQuantities, quantityIssues, type RecipeInput, type Script } from './index.ts';
 
 /** 원칙 1(원본 재료·분량·순서를 바꾸지 않음)을 지키는 검사. 감사에서 찾은 실제 한국어 입력을 그대로 고정한다. */
 const base: RecipeInput = {
@@ -99,6 +99,27 @@ describe('단위·수사 목록', () => {
     ['한컵', '1컵'],
   ])('%s → %s', (t, n) => {
     expect(extractQuantities(t).map((q) => q.normalized)).toEqual([n]);
+  });
+});
+
+describe('브랜드 노트 문구 검사', () => {
+  const noteMissing = (s: Script) => checkScript(base, s).filter((i) => i.code === 'branding' && i.message.includes(BRAND.notePhrase));
+  const withExplain = (line: string, cardTitle?: string): Script => ({
+    title: 't',
+    scenes: [
+      { id: 's1', type: 'intro', emotion: 'joy', line: '불고기 양념 이야기예요.' },
+      { id: 's2', type: 'explain', emotion: 'joy', line, ...(cardTitle ? { cardTitle } : {}) },
+      { id: 's3', type: 'outro', emotion: 'joy', line: SIGN_OFFS[0] },
+    ],
+  });
+
+  it('노트 첫머리가 묶음 가운데 어느 것이든 대사에 있으면 통과한다 (첫머리는 레시피마다 달라진다)', () => {
+    for (const lead of NOTE_LEADS) expect(noteMissing(withExplain(`${lead} 설탕이 먼저 스며들어야 고기가 부드러워져요.`)), lead).toEqual([]);
+  });
+
+  it('원리 카드 제목(노트 문구)이 있어도 통과, 둘 다 없으면 알린다', () => {
+    expect(noteMissing(withExplain('설탕이 먼저 스며들어야 고기가 부드러워져요.', BRAND.notePhrase))).toEqual([]);
+    expect(noteMissing(withExplain('설탕이 먼저 스며들어야 고기가 부드러워져요.'))).toHaveLength(1);
   });
 });
 

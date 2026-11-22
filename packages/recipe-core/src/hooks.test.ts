@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HOOK_INFO,
   HOOK_TYPES,
   STYLE_IDS,
   SAMPLE_RECIPES,
@@ -118,6 +119,31 @@ describe('시간 절약 훅은 시간·보관 팁에만', () => {
   });
 });
 
+describe('맛조수는 실수하지 않는다 (고른 성격: 기록 담당 AI)', () => {
+  it('실패를 꺼내는 훅(실수 경고·문제 해결·공감)은 실패를 시청자·일반 사례로 두고, 맛조수는 당황·실망하지 않는다', () => {
+    for (const t of ['mistake', 'problem-solve', 'skit'] as const) {
+      const h = hookCandidate(walnutFull, t);
+      expect(h.available, t).toBe(true);
+      const s = h.scenes[0]!;
+      expect(['embarrassed', 'disappointed'], `${t}: ${s.emotion}`).not.toContain(s.emotion);
+      // 'fail'은 맛조수가 실패 접시를 든 화면: 음식만 보이는 클로즈업(설명용 연출)을 쓴다
+      expect(s.visual, t).toBe('fail-closeup');
+      expect(h.line, t).not.toMatch(/으악|망했|(^|\s)제\s|저의|당황/);
+    }
+    expect(HOOK_INFO.skit.label).toBe('공감형');
+  });
+
+  it('모든 훅의 맛조수 설명·첫 화면에 실수·당황·자신만만·맛보는 연기가 없다', () => {
+    for (const t of HOOK_TYPES) {
+      const info = HOOK_INFO[t];
+      expect(`${info.mascot} ${info.firstScreen}`, t).not.toMatch(/대신 실수|당황|자신만만|덜렁|맛보고 감탄|맛보려다|뛰어다니|실험 조수|실험대/);
+    }
+    // 반전형은 맛조수가 확신하다 놀라는 대신, 흔한 믿음을 꺼내 묻는다
+    const twist = hookCandidate(walnutFull, 'twist');
+    expect(twist.scenes[0]!.emotion).toBe('curious');
+  });
+});
+
 describe('추천 이유 문구', () => {
   it('실수 훅의 이유는 후보 이유와 같은 말("흔한 실수")을 쓴다', () => {
     expect(hookCandidate(walnutFull, 'mistake').reason).toContain('연구자가 입력한 흔한 실수가 있어요');
@@ -190,11 +216,14 @@ describe('연출 유형별 대본', () => {
     expect(script.scenes.at(-1)!.visual).toBe('signature');
   });
 
-  it('캐릭터 코미디형과 실험형은 장면 구성이 다르다', () => {
+  it('캐릭터 문답형과 실험형은 장면 구성이 다르다', () => {
     const comedy = buildStyledScript(walnutFull, { style: 'comedy' }).script;
     const experiment = buildStyledScript(walnutFull, { style: 'experiment' }).script;
-    expect(comedy.scenes[0]!.visual).toBe('fail');
-    expect(comedy.scenes[0]!.emotion).toBe('embarrassed');
+    // 문답형의 대표 훅(공감형)은 실패한 음식만 클로즈업으로 보여 준다: 맛조수가 실패 접시를 들고 당황하지 않는다
+    expect(comedy.hookType).toBe('skit');
+    expect(comedy.scenes[0]!.visual).toBe('fail-closeup');
+    expect(comedy.scenes[0]!.emotion).toBe('curious');
+    expect(comedy.scenes[0]!.cardTitle).toBe(walnutFull.commonMistake);
     expect(experiment.scenes[0]!.visual).toBe('compare');
     expect(comedy.scenes.map((s) => s.type).join()).not.toBe(experiment.scenes.map((s) => s.type).join());
     expect(comedy.scenes.some((s) => s.visual === 'react')).toBe(true);

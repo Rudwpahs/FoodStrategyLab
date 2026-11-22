@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAND, SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, causeEffect, contentCandidates, formal, plainDishName, spoken, type RecipeInput } from './index.ts';
+import { BRAND, SAMPLE_RECIPES, STYLE_IDS, buildStyledScript, causeEffect, contentCandidates, formal, hostLines, plainDishName, spoken, type RecipeInput } from './index.ts';
 
 /**
  * 대본이 사람이 말하는 것처럼 들리는지 (맛조수 말투, 이름 반복, 앞뒤 연결).
@@ -64,7 +64,7 @@ describe('말하는 문장으로 바꾸기 (끝맺음만)', () => {
 });
 
 describe('요리 이름에서 꾸미는 말 빼기', () => {
-  it('실패 장면에서 "제 바삭한 김치전이 왜 이렇죠?"가 되지 않게', () => {
+  it('실패 장면에서 "바삭한 김치전이 이렇게 된 적"처럼 앞뒤가 안 맞지 않게', () => {
     expect(plainDishName('바삭한 김치전')).toBe('김치전');
     expect(plainDishName('부드러운 계란찜')).toBe('계란찜');
     expect(plainDishName('반숙 달걀')).toBe('반숙 달걀');
@@ -131,8 +131,8 @@ describe('연출 엔진 대본이 자연스럽게 들린다', () => {
         expect(lines.split(BRAND.labName).length - 1, `${r.dishName}/${c.key}`).toBe(1);
         expect(lines).not.toContain('에 따르면');
         expect(lines).not.toContain(BRAND.tipPhrase);
-        // 엔딩은 매번 같은 말로 끝난다 (고정 엔딩)
-        expect(c.script.scenes.at(-1)!.line.endsWith(BRAND.signOff)).toBe(true);
+        // 엔딩 자리는 고정이고, 문장은 이 레시피·연출 몫으로 묶음에서 고른다 (모든 영상이 같은 말로 끝나지 않게)
+        expect(c.script.scenes.at(-1)!.line.endsWith(hostLines(r, c.style).signOff)).toBe(true);
       }
   });
 
@@ -145,21 +145,26 @@ describe('연출 엔진 대본이 자연스럽게 들린다', () => {
     expect(fact.scenes.filter((s) => s.line.includes('신선한 달걀일수록'))).toHaveLength(1);
   });
 
-  it('코미디형: 실패 장면이 없으면 "왜 이렇게 된 거죠?"·"이번엔 제대로!"라고 하지 않는다', () => {
+  it('문답형: 실패 장면이 없으면 실패 이유를 묻지 않고, 실패 훅 뒤에도 "이번엔 제대로"·"대성공" 같은 반응이 없다', () => {
     const spinach = SAMPLE_RECIPES.find((r) => r.dishName === '시금치나물')!;
     const q = buildStyledScript(spinach, { style: 'comedy', hookType: 'question' }).script.scenes.map((s) => s.line).join(' ');
-    expect(q).not.toContain('이렇게 된 거죠');
-    expect(q).not.toContain('이번엔 제대로');
-    expect(q).not.toContain('대성공');
-    const skit = buildStyledScript(spinach, { style: 'comedy', hookType: 'skit' }).script.scenes.map((s) => s.line).join(' ');
-    expect(skit).toContain('대체 왜 이렇게 된 거죠');
+    expect(q).not.toContain('이렇게 되는 이유');
+    expect(q).not.toMatch(/이번엔 제대로|대성공|으악/);
+    const skit = buildStyledScript(spinach, { style: 'comedy', hookType: 'skit' }).script;
+    const skitLines = skit.scenes.map((s) => s.line).join(' ');
+    // 맛조수가 시청자 대신 선생님께 묻는다 (예전: "희재 선생님! 대체 왜 이렇게 된 거죠?" → "대성공!")
+    expect(skitLines).toContain(`${BRAND.callName}, 이렇게 되는 이유가 뭘까요?`);
+    expect(skitLines).not.toMatch(/이번엔 제대로|대성공|으악|대체 왜/);
+    // 완성을 먼저 보여 준 뒤에는 "왜?" 대신 어디가 중요한지 묻는다
+    const shown = buildStyledScript(spinach, { style: 'comedy', hookType: 'result-first' }).script.scenes.map((s) => s.line).join(' ');
+    expect(shown).toContain('어디가 가장 중요할까요?');
   });
 
   it('문제 해결형: 실패 장면 뒤에 "원인은요"라고 단정하지 않는다 (원리가 해결법 문장일 수 있다)', () => {
     const fix = { ...cheonggukjang, commonMistake: '청국장을 처음부터 오래 볶으면 향이 날아간다.' };
     const { script } = buildStyledScript(fix, { style: 'problem', hookType: 'problem-solve' });
     const explain = script.scenes.find((s) => s.type === 'explain')!;
-    expect(explain.line.startsWith(BRAND.noteLead)).toBe(true);
+    expect(explain.line.startsWith(hostLines(fix, 'problem').noteLead)).toBe(true);
     expect(script.scenes.map((s) => s.line).join(' ')).not.toContain('원인은요');
   });
 

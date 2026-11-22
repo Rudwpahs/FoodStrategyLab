@@ -63,7 +63,7 @@ export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): R
   for (const id of STYLE_IDS) {
     let [score, reason, ready] = base[id];
     score += CATEGORY_STYLE[recipe.category][id] ?? 0;
-    // 레시피 입력 화면에서 고른 영상 포맷 (캐릭터 코미디형이면 코미디 연출을 앞에)
+    // 레시피 입력 화면에서 고른 영상 포맷 (캐릭터 문답형이면 문답형 연출을 앞에)
     if (id === 'comedy' && recipe.format === 'comedy') {
       score += 1;
       reason += ` · 고른 영상 포맷(${FORMAT_LABELS.comedy})이에요`;
@@ -80,7 +80,10 @@ export function styleScores(recipe: RecipeInput, recent: RecentFormat[] = []): R
 
 const dishOf = (r: RecipeInput) => r.dishName || r.topic;
 
-/** 후보 제목: 원본에 있는 내용만 쓴다 (결과를 보장하는 표현 없이) */
+/**
+ * 후보 제목: 원본에 있는 내용만 쓴다 (결과를 보장하는 표현 없이).
+ * 맛조수가 직접 만들거나 실험한 것처럼 들리는 말('도전기', '실험:')은 쓰지 않는다 (맛조수는 노트를 정리하는 AI)
+ */
 export function candidateTitle(recipe: RecipeInput, style: StyleId): string {
   const dish = dishOf(recipe);
   const sensory = findSensory([recipe.topic, recipe.principle, ...recipe.tips].join(' '))[0];
@@ -88,9 +91,9 @@ export function candidateTitle(recipe: RecipeInput, style: StyleId): string {
     case 'problem':
       return `${dish}, 이 실수만 피하세요`;
     case 'comedy':
-      return `맛조수의 ${dish} 도전기`;
+      return `${dish}, 노트에서 찾은 이유`;
     case 'experiment':
-      return `${dish} 실험: 이 단계가 맛을 바꿀까?`;
+      return `${dish}, 이 단계가 맛을 바꿀까?`;
     case 'before-after':
       return `${dish}, 완성부터 보고 시작해요`;
     case 'sensory':
@@ -236,7 +239,7 @@ export function instagramCaption(recipe: RecipeInput, script: Script | null, rev
     [
       hookLine,
       '',
-      `🧪 ${BRAND.series} · ${dish}`,
+      `📒 ${BRAND.series} · ${dish}`,
       principle ? spoken(principle) : '',
       '',
       ...(withIngredients && ingredientLines.length ? ['[재료]', ...ingredientLines, ''] : []),
@@ -246,7 +249,7 @@ export function instagramCaption(recipe: RecipeInput, script: Script | null, rev
       '',
       '📌 저장해 두면 만들 때 바로 꺼내 볼 수 있어요.',
       `📤 ${plainDishName(dish)} 좋아하는 사람에게 보내 주세요.`,
-      '💬 다음에 실험해 볼 요리를 댓글로 알려 주세요!',
+      '💬 다음에 궁금한 요리를 댓글로 알려 주세요!',
     ]
       .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
       .join('\n')

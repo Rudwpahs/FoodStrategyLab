@@ -25,14 +25,17 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   tradition: '전통조리·음식문화',
 };
 
-/** 영상 포맷: 10주 실험에서 비교할 두 가지 유형 */
+/**
+ * 영상 포맷: 10주 실험에서 비교할 두 가지 유형.
+ * 'comedy'는 저장된 레시피와 맞추려고 id를 그대로 두고, 이름만 '캐릭터 문답형'으로 바꿨다 (맛조수가 실수하는 코미디 → 시청자 대신 묻는 문답, styles.ts)
+ */
 export const FORMATS = ['explainer', 'comedy'] as const;
 export const FormatSchema = z.enum(FORMATS);
 export type Format = z.infer<typeof FormatSchema>;
 
 export const FORMAT_LABELS: Record<Format, string> = {
   explainer: '실험 설명형',
-  comedy: '캐릭터 코미디형',
+  comedy: '캐릭터 문답형',
 };
 
 export const IngredientSchema = z.object({
