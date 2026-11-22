@@ -2,6 +2,7 @@ import React from 'react';
 import { SphereGeometry, type BufferGeometry } from 'three';
 import type { Emotion } from '@mat-lab/recipe-core';
 import { ARM_POSES, mouthOpen } from '../characterMotion.ts';
+import type { GogglePose } from '../hostCues.ts';
 import { COLORS } from '../theme.ts';
 import { deform } from './foodShapes.ts';
 import type { ChefAction } from './shots.ts';
@@ -10,8 +11,12 @@ import type { ChefAction } from './shots.ts';
  * 3D 맛조수: 2D 캐릭터와 같은 디자인(찐빵 몸통·조리모·고글·토마토색 앞치마).
  * 귀엽게 보이도록: 말랑한 찐빵 몸통(아래가 살짝 퍼짐), 큰 눈과 반짝임, 작은 입,
  * 볼터치, 고글은 모자 위로 올려 쓴다(눈처럼 보이지 않게). 원점 = 발바닥.
+ * 고정 동작(영상마다 한 번, 첫 노트 카드 장면): 고글을 눈앞으로 내려 들여다본 뒤 모자 위로 올린다 (goggles, hostCues.ts).
  */
 const BODY = { rx: 0.3, ry: 0.31, rz: 0.285, cy: 0.33 };
+/** 눈 높이(발바닥 기준). 자막이 피할 얼굴 범위(captionPlacement.ts FACE_SPAN)의 기준 */
+export const EYE_Y = 0.41;
+const EYE_X = 0.09;
 /** 몸통 아래쪽을 눌러 퍼지게 (찐빵이 앉은 모양) */
 const SQUAT = 0.82;
 const SPREAD = 0.07;
@@ -84,6 +89,8 @@ interface Props {
   position: [number, number, number];
   /** 등장 애니메이션 (0~1) */
   pop?: number;
+  /** 고글 동작 자세 (없으면 평소 모습) */
+  goggles?: GogglePose;
 }
 
 /** 고정 난수 (프레임마다 같은 값) */
@@ -105,21 +112,25 @@ export function eyeOpenness(frame: number): number {
   return Math.max(0.06, Math.min(close(frame - start), twice));
 }
 
-export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, mouth, action, facing, position, pop = 1 }) => {
+export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, mouth, action, facing, position, pop = 1, goggles: g }) => {
   const open = mouth ?? (talking ? mouthOpen(frame) : 0);
-  const lids = emotion === 'joy' || emotion === 'embarrassed' ? 1 : eyeOpenness(frame);
+  // 고글 너머로 들여다볼 때는 눈을 깜빡이지 않는다
+  const lids = emotion === 'joy' || emotion === 'embarrassed' ? 1 : Math.max(eyeOpenness(frame), g?.peer ?? 0);
   const rad = (d: number) => (d * Math.PI) / 180;
+  /** 고글이 내려온 정도 (0~1). 내려와 있는 동안은 모자 흔들림을 줄여 고글이 얼굴에 붙어 있게 */
+  const goggleDown = Math.max(0, Math.min(1, g?.down ?? 0));
 
   // 숨쉬기(늘었다 줄었다) + 말할 때 입 모양 따라 살짝 늘어남 + 몸 흔들림
   const breath = Math.sin(frame / 16);
-  const stretch = 1 + breath * 0.012 + open * 0.018 - (emotion === 'disappointed' ? 0.04 : 0);
-  const widen = 1 - breath * 0.008 - open * 0.009 + (emotion === 'disappointed' ? 0.02 : 0);
+  const found = g?.pop ?? 0;
+  const stretch = 1 + breath * 0.012 + open * 0.018 - (emotion === 'disappointed' ? 0.04 : 0) + found * 0.03;
+  const widen = 1 - breath * 0.008 - open * 0.009 + (emotion === 'disappointed' ? 0.02 : 0) - found * 0.012;
   const hop = emotion === 'joy' && action === 'idle' ? Math.max(0, Math.sin(frame / 5)) * 0.025 : 0;
-  const bob = Math.sin(frame / 7) * (talking ? 0.008 : 0.004) + hop;
+  const bob = Math.sin(frame / 7) * (talking ? 0.008 : 0.004) + hop + found * 0.022;
   const sway = Math.sin(frame / 29) * 0.025 + (emotion === 'curious' ? 0.12 : 0) + (emotion === 'embarrassed' ? -0.06 : 0);
   const look = Math.sin(frame / 37) * 0.05;
   // 모자는 몸보다 조금 늦게 따라 흔들린다
-  const hatLag = Math.sin(frame / 7 - 1.1) * (talking ? 0.045 : 0.02) - sway * 0.3;
+  const hatLag = (Math.sin(frame / 7 - 1.1) * (talking ? 0.045 : 0.02) - sway * 0.3) * (1 - goggleDown);
 
   let [leftDeg, rightDeg] = ARM_POSES[emotion];
   let rightForward = 0;
@@ -144,10 +155,20 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, mouth, action
   if (action === 'point') {
     rightDeg = -120 + Math.sin(frame / 6) * 6;
   }
+  // 고글 동작: 오른손을 관자놀이 앞 고글 끈에 댔다가(1), 고글을 위로 밀어 올리며 더 높이(1.3) 든 뒤 내린다.
+  // 팔이 짧은 장난감 몸이라 손은 머리 옆(눈높이)까지만 닿는다. 접시를 든 장면은 손을 쓰지 않고 고글만 움직인다
+  const hand = g && action !== 'present' ? g.hand : 0;
+  if (hand > 0) {
+    const w = Math.min(1, hand);
+    const push = Math.max(0, hand - 1) / 0.3;
+    rightDeg += (-169 - 9 * push - rightDeg) * w;
+    rightForward += (0.82 - 0.27 * push - rightForward) * w;
+  }
 
   return (
     <group position={position} rotation={[0, facing, 0]} scale={[pop, pop, pop]}>
-      <group position={[0, bob, 0]} rotation={[0, look, sway * 0.35]} scale={[widen, stretch, widen]}>
+      {/* 고글로 들여다볼 때 몸을 살짝 앞으로 (발바닥 기준으로 기울인다) */}
+      <group position={[0, bob, 0]} rotation={[(g?.lean ?? 0) * 0.08, look, sway * 0.35]} scale={[widen, stretch, widen]}>
         {/* 신발 */}
         {[-1, 1].map((s) => (
           <mesh key={s} position={[s * 0.11, 0.032, 0.06]} rotation={[0, s * 0.25, 0]} scale={[0.085, 0.048, 0.115]} castShadow>
@@ -182,18 +203,20 @@ export const Chef3D: React.FC<Props> = ({ emotion, frame, talking, mouth, action
           );
         })}
 
-        <Eyes emotion={emotion} lids={lids} />
+        {/* 렌즈 너머로 들여다볼 때 눈이 커 보인다 (돋보기처럼) */}
+        <Eyes emotion={emotion} lids={lids} zoom={1 + (g?.peer ?? 0) * 0.12} />
         <Brows emotion={emotion} />
         <Mouth emotion={emotion} open={open} />
 
         {/* 조리모 (몸보다 조금 늦게 흔들림) + 이마 위로 올려 쓴 연구용 고글 */}
-        <group position={[0, BODY.cy + BODY.ry - 0.04, 0]} rotation={[0.04, 0, hatLag]}>
+        <group position={[0, HAT_Y, 0]} rotation={[0.04 * (1 - goggleDown), 0, hatLag]}>
           <Hat />
+          <Goggles down={g?.down ?? 0} glint={g?.glint ?? 0} />
         </group>
 
         {/* 팔 */}
         <Arm side={-1} raise={-rad(leftDeg)} forward={leftForward} />
-        <Arm side={1} raise={-rad(rightDeg)} forward={rightForward} spatula={action === 'cook'} thumb={emotion === 'confident' && action === 'idle'} />
+        <Arm side={1} raise={-rad(rightDeg)} forward={rightForward} spatula={action === 'cook'} thumb={emotion === 'confident' && action === 'idle' && hand === 0} />
 
         <Effects emotion={emotion} frame={frame} />
       </group>
@@ -249,36 +272,80 @@ const Hat: React.FC = () => (
         <meshPhysicalMaterial color="#FFFFFF" roughness={0.8} sheen={0.6} sheenColor="#E3ECF7" />
       </mesh>
     ))}
-    {/* 고글: 모자 앞에 걸쳐 위로 젖혀 쓴 모양 (끈 + 두 렌즈) */}
-    <mesh position={[0, 0.07, 0]} rotation={[Math.PI / 2, 0, 0]}>
-      <torusGeometry args={[0.166, 0.008, 10, 64]} />
-      <Mat color="#3A4150" rough={0.5} />
-    </mesh>
-    <group position={[0, 0.072, 0.178]} rotation={[-0.22, 0, 0]}>
-      {[-1, 1].map((s) => (
-        <group key={s} position={[s * 0.045, 0, 0]}>
-          <mesh>
-            <torusGeometry args={[0.034, 0.01, 14, 40]} />
-            <meshPhysicalMaterial color="#4A5262" roughness={0.3} metalness={0.5} clearcoat={0.6} />
-          </mesh>
-          <mesh position={[0, 0, 0.002]}>
-            <circleGeometry args={[0.032, 32]} />
-            <Gloss color="#7FD6B6" rough={0.1} />
-          </mesh>
-          {/* 렌즈 반짝임 */}
-          <mesh position={[0.011, 0.011, 0.004]} rotation={[0, 0, -0.6]} scale={[0.013, 0.005, 1]}>
-            <circleGeometry args={[1, 16]} />
-            <meshBasicMaterial color="#FFFFFF" transparent opacity={0.8} />
-          </mesh>
-        </group>
-      ))}
-      <mesh>
-        <boxGeometry args={[0.024, 0.01, 0.01]} />
-        <Mat color="#4A5262" rough={0.4} />
-      </mesh>
-    </group>
   </group>
 );
+
+/** 모자(띠 아래 끝) 높이: 모자·고글 묶음의 원점 */
+const HAT_Y = BODY.cy + BODY.ry - 0.04;
+/** 몸통 가운데 (모자 묶음 기준). 고글은 이 점을 중심으로 이마를 따라 돌아 내려온다 */
+const GOGGLE_CENTER_Y = BODY.cy - HAT_Y;
+/** 고글 렌즈 묶음 자리 (모자 묶음 기준): 평소 = 모자 띠 앞에 젖혀 걸침, 내림 = 눈앞 (얼굴 앞면에서 2.4cm 띄움) */
+const GOGGLE_REST = { y: 0.072, z: 0.178, tilt: -0.22, strapY: 0.07, strapR: 0.166 };
+const GOGGLE_DOWN = {
+  y: EYE_Y - HAT_Y + 0.004,
+  z: BODY.rz * Math.sqrt(1 - ((EYE_Y - BODY.cy) / BODY.ry) ** 2) + 0.024,
+  tilt: -0.24,
+  strapY: EYE_Y + 0.01 - HAT_Y,
+};
+const polar = (y: number, z: number) => ({ r: Math.hypot(y - GOGGLE_CENTER_Y, z), phi: Math.atan2(y - GOGGLE_CENTER_Y, z) });
+const GOGGLE_PATH = { rest: polar(GOGGLE_REST.y, GOGGLE_REST.z), down: polar(GOGGLE_DOWN.y, GOGGLE_DOWN.z) };
+/** 몸통 단면 반지름 (몸통 가운데보다 위, 모자 묶음 기준 높이 y) */
+const bodyRadiusAt = (y: number) => BODY.rx * Math.sqrt(Math.max(0, 1 - ((y + HAT_Y - BODY.cy) / BODY.ry) ** 2));
+
+/**
+ * 연구용 고글 (끈 + 두 렌즈). down 0 = 모자 앞에 걸쳐 위로 젖혀 쓴 평소 모양 (예전과 같은 모양·자리),
+ * 1 = 눈앞으로 내려 쓴 모양: 렌즈가 눈을 감싸도록 벌어지고 커지며(장난감처럼 늘어남), 반투명해져 눈이 비친다.
+ * 끈은 머리둘레를 따라 눈높이로 내려오고, 얼굴 앞을 가로지르지 않게 앞쪽이 열린다. 음수 = 올린 뒤 모자 위에서 한 번 더 젖혀지는 튕김.
+ */
+const Goggles: React.FC<{ down: number; glint: number }> = ({ down, glint }) => {
+  const d = Math.max(0, Math.min(1, down));
+  const bounce = Math.min(0, down);
+  // 렌즈 묶음: 몸 가운데를 중심으로 이마를 따라 돈다. 가운데쯤에서 이마 위로 3.5cm 떠서 지나가고, 이마 곡면을 따라 젖혀진다
+  const phi = GOGGLE_PATH.rest.phi + (GOGGLE_PATH.down.phi - GOGGLE_PATH.rest.phi) * d;
+  const r = GOGGLE_PATH.rest.r + (GOGGLE_PATH.down.r - GOGGLE_PATH.rest.r) * d + 0.035 * Math.sin(Math.PI * d);
+  const lensY = GOGGLE_CENTER_Y + r * Math.sin(phi) - bounce * 0.02;
+  const lensZ = r * Math.cos(phi);
+  const tilt = GOGGLE_REST.tilt + (GOGGLE_DOWN.tilt - GOGGLE_REST.tilt) * d - 0.5 * Math.sin(Math.PI * d) + bounce * 1.5;
+  const spread = 0.045 + 0.043 * d;
+  const grow = 1 + 0.7 * d;
+  // 끈: 눈높이로 내려오며 몸통 둘레보다 조금 크게, 앞쪽(렌즈 사이)은 열어 둔다
+  const strapY = GOGGLE_REST.strapY + (GOGGLE_DOWN.strapY - GOGGLE_REST.strapY) * d;
+  const strapR = Math.max(GOGGLE_REST.strapR + (bodyRadiusAt(GOGGLE_DOWN.strapY) + 0.012 - GOGGLE_REST.strapR) * d, d > 0 ? bodyRadiusAt(strapY) + 0.012 : 0);
+  const gap = 1.0 * Math.min(1, d * 1.4);
+  // 렌즈 반짝임: 들여다보는 동안 렌즈를 가로질러 지나간다
+  const sweep = glint > 0 && glint < 1;
+  return (
+    <group>
+      <mesh position={[0, strapY, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2 + gap / 2]} scale={[strapR / GOGGLE_REST.strapR, (strapR / GOGGLE_REST.strapR) * (1 - 0.05 * d), 1]}>
+        <torusGeometry args={[GOGGLE_REST.strapR, 0.008, 10, 64, Math.PI * 2 - gap]} />
+        <Mat color="#3A4150" rough={0.5} />
+      </mesh>
+      <group position={[0, lensY, lensZ]} rotation={[tilt, 0, 0]}>
+        {[-1, 1].map((s) => (
+          <group key={s} position={[s * spread, 0, 0]} rotation={[0, s * 0.3 * d, 0]} scale={grow}>
+            <mesh>
+              <torusGeometry args={[0.034, 0.01, 14, 40]} />
+              <meshPhysicalMaterial color="#4A5262" roughness={0.3} metalness={0.5} clearcoat={0.6} />
+            </mesh>
+            <mesh position={[0, 0, 0.002]}>
+              <circleGeometry args={[0.032, 32]} />
+              <meshPhysicalMaterial color="#7FD6B6" roughness={0.1} clearcoat={1} clearcoatRoughness={0.08} transparent opacity={1 - 0.62 * d} />
+            </mesh>
+            {/* 렌즈 반짝임 */}
+            <mesh position={[sweep ? -0.022 + 0.044 * glint : 0.011, 0.011, 0.004]} rotation={[0, 0, -0.6]} scale={[0.013, 0.005, 1]}>
+              <circleGeometry args={[1, 16]} />
+              <meshBasicMaterial color="#FFFFFF" transparent opacity={sweep ? 0.95 : 0.8} />
+            </mesh>
+          </group>
+        ))}
+        <mesh scale={[1 + 1.6 * d, 1 + 0.3 * d, 1 + 0.3 * d]}>
+          <boxGeometry args={[0.024, 0.01, 0.01]} />
+          <Mat color="#4A5262" rough={0.4} />
+        </mesh>
+      </group>
+    </group>
+  );
+};
 
 const Arm: React.FC<{ side: -1 | 1; raise: number; forward: number; spatula?: boolean; thumb?: boolean }> = ({ side, raise, forward, spatula, thumb }) => (
   <group position={[side * 0.265, BODY.cy - 0.02, 0.02]} rotation={[forward, 0, raise]}>
@@ -312,10 +379,6 @@ const Arm: React.FC<{ side: -1 | 1; raise: number; forward: number; spatula?: bo
   </group>
 );
 
-/** 눈 높이(발바닥 기준). 자막이 피할 얼굴 범위(captionPlacement.ts FACE_SPAN)의 기준 */
-export const EYE_Y = 0.41;
-const EYE_X = 0.09;
-
 /** 반짝이는 큰 눈 (검은 눈동자 + 아래쪽 갈색 + 큰·작은 반짝임) */
 const GlossyEye: React.FC<{ r: number; open: number; squint?: number }> = ({ r, open, squint = 1 }) => {
   const sy = 1.22 * open * squint;
@@ -345,71 +408,65 @@ const GlossyEye: React.FC<{ r: number; open: number; squint?: number }> = ({ r, 
   );
 };
 
-const Eyes: React.FC<{ emotion: Emotion; lids: number }> = ({ emotion, lids }) => (
+/** 눈 한 쌍. zoom: 고글 렌즈 너머로 들여다볼 때 눈이 커 보이는 정도 (1 = 평소) */
+const Eyes: React.FC<{ emotion: Emotion; lids: number; zoom?: number }> = ({ emotion, lids, zoom = 1 }) => (
   <group>
     {[-1, 1].map((s) => {
       const y = emotion === 'disappointed' ? EYE_Y - 0.012 : EYE_Y;
       const f = onFace(s * EYE_X, y, 0.006);
-      switch (emotion) {
-        case 'joy':
-          // 웃는 눈 ^ ^
-          return (
-            <mesh key={s} position={f.p} rotation={f.r}>
-              <torusGeometry args={[0.03, 0.009, 14, 32, Math.PI]} />
-              <Gloss color={INK} />
-            </mesh>
-          );
-        case 'embarrassed':
-          // > <
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              {[1, -1].map((k) => (
-                <mesh key={k} position={[-s * 0.006, k * 0.011, 0]} rotation={[0, 0, k * s * 0.55]}>
-                  <capsuleGeometry args={[0.0065, 0.036, 6, 12]} />
-                  <Gloss color={INK} />
-                </mesh>
-              ))}
-            </group>
-          );
-        case 'surprised':
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              <GlossyEye r={0.046} open={lids} />
-            </group>
-          );
-        case 'curious':
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              <GlossyEye r={s === 1 ? 0.044 : 0.037} open={lids} />
-            </group>
-          );
-        case 'confident':
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              <GlossyEye r={0.04} open={lids} squint={0.62} />
-              {/* 윗눈꺼풀 */}
-              <mesh position={[0, 0.026, 0.012]} rotation={[0, 0, -s * 0.12]}>
-                <capsuleGeometry args={[0.006, 0.07, 6, 12]} />
-                <Gloss color={INK} />
-              </mesh>
-            </group>
-          );
-        case 'disappointed':
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              <GlossyEye r={0.034} open={lids} squint={0.85} />
-            </group>
-          );
-        default:
-          return (
-            <group key={s} position={f.p} rotation={f.r}>
-              <GlossyEye r={0.04} open={lids} />
-            </group>
-          );
-      }
+      return (
+        <group key={s} position={f.p} rotation={f.r} scale={zoom}>
+          <EyeShape emotion={emotion} side={s} lids={lids} />
+        </group>
+      );
     })}
   </group>
 );
+
+/** 감정별 눈 모양 (눈 자리 기준) */
+const EyeShape: React.FC<{ emotion: Emotion; side: number; lids: number }> = ({ emotion, side: s, lids }) => {
+  switch (emotion) {
+    case 'joy':
+      // 웃는 눈 ^ ^
+      return (
+        <mesh>
+          <torusGeometry args={[0.03, 0.009, 14, 32, Math.PI]} />
+          <Gloss color={INK} />
+        </mesh>
+      );
+    case 'embarrassed':
+      // > <
+      return (
+        <>
+          {[1, -1].map((k) => (
+            <mesh key={k} position={[-s * 0.006, k * 0.011, 0]} rotation={[0, 0, k * s * 0.55]}>
+              <capsuleGeometry args={[0.0065, 0.036, 6, 12]} />
+              <Gloss color={INK} />
+            </mesh>
+          ))}
+        </>
+      );
+    case 'surprised':
+      return <GlossyEye r={0.046} open={lids} />;
+    case 'curious':
+      return <GlossyEye r={s === 1 ? 0.044 : 0.037} open={lids} />;
+    case 'confident':
+      return (
+        <>
+          <GlossyEye r={0.04} open={lids} squint={0.62} />
+          {/* 윗눈꺼풀 */}
+          <mesh position={[0, 0.026, 0.012]} rotation={[0, 0, -s * 0.12]}>
+            <capsuleGeometry args={[0.006, 0.07, 6, 12]} />
+            <Gloss color={INK} />
+          </mesh>
+        </>
+      );
+    case 'disappointed':
+      return <GlossyEye r={0.034} open={lids} squint={0.85} />;
+    default:
+      return <GlossyEye r={0.04} open={lids} />;
+  }
+};
 
 const BROWS: Partial<Record<Emotion, [number, number]>> = {
   curious: [0.05, -0.25],

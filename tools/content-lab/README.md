@@ -11,6 +11,8 @@
 | `frames.ts` | 후보 대본의 프레임을 일정 간격으로 뽑아 한 장으로 붙임 (화면 구성 확인). `npx tsx tools/content-lab/frames.ts <recipe.json> <출력폴더> [후보번호] [간격초]` |
 | `foodframes.ts` | 샘플 레시피 5개마다 같은 규칙으로 고른 프레임(첫 화면·조리·완성 접시·엔딩)을 한 장으로 (음식·배경 전후 비교). `npx tsx tools/content-lab/foodframes.ts <출력폴더> [후보번호] [r0-plate,r3-cook 처럼 일부만]` |
 | `storyframes.ts` | 실제 영상 대본 묶음(이야기 대본 JSON, `[{ script }]`)으로 음식이 나오는 장면(첫 화면·재료·조리 앞뒤·연구실 불 위·완성 접시·비교·엔딩)을 그려 요리별 한 줄로 (작은 비교 그림이 아니라 실제 영상과 같은 장면으로 음식 전후 확인). 브라우저 하나로 그려 빠르고, 540px JPEG로 저장. `npx tsx tools/content-lab/storyframes.ts <대본묶음.json> <출력폴더> [레시피 번호=3,0,1,4] [d1-cook2 처럼 일부만]` |
+| `goggleframes.ts` | 맛조수 고정 동작·소리 확인: 첫 노트 장면의 고글 동작 앞·중간·뒤 프레임 한 장(gesture.jpg)과 소리 포함 짧은 MP4. `npx tsx tools/content-lab/goggleframes.ts <출력폴더> [목소리.wav]` |
+| `synth-page.ts` | 노트 넘기는 소리 합성 → `packages/video/assets/sfx/page.wav` (그 뒤 `embed-sfx.ts`) |
 | `rendertime.ts` | 정해진 60프레임 구간의 실제 렌더 시간 측정 (전후 비교, 네 번째 값으로 예전 video 패키지 폴더 지정). `npx tsx tools/content-lab/rendertime.ts <출력폴더> [레시피번호] [시작 비율] [video 폴더]` |
 | `seed-pilot-render.ts` | 이미 만든 파일럿 영상을 프로젝트의 검수용 영상으로 붙임 (e2e 점검에서 30분 렌더 대신). `MATLAB_DATA_DIR=… npx tsx tools/content-lab/seed-pilot-render.ts <projectId> <영상.mp4> [첫화면.png]` |
 | `hooktable.ts` | 호두정과 15가지 훅 비교표 (hook-library.md 3절) |

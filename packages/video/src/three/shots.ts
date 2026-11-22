@@ -1,6 +1,6 @@
 import type { Scene, SceneType, Script, Visual } from '@mat-lab/recipe-core';
 import { seeded } from '../random.ts';
-import { BURNER, CHEF_FACE, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
+import { BURNER, CHEF_FACE, FAIL_PLATE, PLATE, PROP_CENTER, type Vec3 } from './layout.ts';
 import { PLACE_HAS_STOVE, placePlan, planKey, videoLook, type Place } from './places.ts';
 
 /**
@@ -25,6 +25,8 @@ export interface Shot {
   cook: [number, number];
   /** 접시 위 완성 음식 표시 */
   plated: 'none' | 'done' | 'failed';
+  /** 접시가 놓인 자리 (손에 들지 않을 때). 없으면 조리대 오른쪽 완성 접시 자리(PLATE) */
+  plate?: Vec3;
   mood: Mood;
 }
 
@@ -61,6 +63,15 @@ const PLATE_CLOSE = {
   from: { pos: add(PLATE, [0.32, 0.62, 0.86]), target: add(PLATE, [0, 0.13, 0]) },
   to: { pos: add(PLATE, [-0.16, 0.58, 0.84]), target: add(PLATE, [0, 0.13, 0]) },
 };
+// 실패한 음식은 맛조수가 들지 않는다 (기록 담당 맛조수는 실수하지 않는다, persona-2026-11.md): 조리대 위 실패 접시(FAIL_PLATE)와
+// 그 옆에 선 맛조수를 함께. 위에서 조금 내려다봐야 접시 위 음식이 보인다. 맛조수 얼굴은 아래 자막(1250~1480) 위, 접시는 그 오른쪽 위
+const FAIL_SIDE = {
+  name: 'fail-side',
+  from: { pos: add(CHEF_FACE, [0.75, 0.95, 2.45]), target: add(CHEF_FACE, [0.26, -0.05, -0.35]) },
+  to: { pos: add(CHEF_FACE, [0.68, 0.92, 2.36]), target: add(CHEF_FACE, [0.26, -0.05, -0.35]) },
+};
+/** 실패 접시 옆 맛조수 화면 (실수 장면·실패 연출) */
+const failSide = (): Omit<Shot, 'cook'> => ({ ...FAIL_SIDE, fov: 44, mood: 'gloom', plated: 'failed', plate: FAIL_PLATE, action: 'idle', face: 'camera', burnerOn: false });
 // 접시를 든 캐릭터 정면. 얼굴(아래)과 접시(그 밑)가 함께 보이고, 자막은 얼굴 위(모자 앞)에 들어가도록
 // 조금 떨어져서 찍는다 (가까우면 얼굴+접시가 화면 가운데를 다 차지해 자막이 얼굴이나 접시를 가렸다)
 const PRESENT = {
@@ -83,7 +94,7 @@ export function shotFor(type: SceneType, indexOfType: number): Shot {
     case 'intro':
       return { ...base, ...WIDE };
     case 'mistake':
-      return { ...base, ...PRESENT, mood: 'gloom', plated: 'failed', action: 'present' };
+      return { ...base, ...failSide() };
     case 'question':
       return { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42 };
     case 'explain':
@@ -332,10 +343,12 @@ const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>[]> = {
     { ...FOOD_MACRO, mood: 'golden', fov: 36, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
     { ...TOP_TABLE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1], action: 'idle', burnerOn: false },
   ],
-  fail: () => [{ ...PRESENT, mood: 'gloom', plated: 'failed', action: 'present', face: 'camera' }],
+  // 실패 연출: 맛조수가 실패작을 들고 당황하지 않는다. 조리대 위 실패 접시 옆에서 차분히 살펴본다 (stage.ts가 표정을 '궁금'으로)
+  fail: () => [failSide()],
   'fail-closeup': () => [
-    { ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false },
-    { ...FOOD_MACRO, mood: 'gloom', fov: 36, plated: 'failed', cook: [1, 1], action: 'idle', burnerOn: false },
+    // 실수 장면의 기본 화면(맛조수 옆 실패 접시)을 이어받지 않고 조리대 오른쪽 접시(PLATE)를 비춘다
+    { ...PLATE_CLOSE, mood: 'gloom', fov: 36, plated: 'failed', plate: undefined, cook: [1, 1], action: 'idle', burnerOn: false },
+    { ...FOOD_MACRO, mood: 'gloom', fov: 36, plated: 'failed', plate: undefined, cook: [1, 1], action: 'idle', burnerOn: false },
   ],
   // 비교 장면은 화면을 위아래로 나눠 두 접시를 보여 준다 (KitchenVideo). 기본 상태는 '노트대로 한' 쪽.
   compare: () => [
@@ -359,6 +372,22 @@ const VISUAL_SHOTS: Record<Visual, (base: Shot) => Partial<Shot>[]> = {
 /** 비교 화면의 '건너뛴 쪽' 상태 */
 export function compareFailShot(shot: Shot): Shot {
   return { ...shot, plated: 'failed', mood: 'gloom' };
+}
+
+// 고글 동작 화면 (hostCues.ts): 맛조수 정면 가슴 위. 모자 위 고글이 위쪽 노트 카드 아래에, 얼굴 전체가 아래 자막(1250~1480) 위에 들어오도록
+// CHEF_CLOSE보다 조금 멀리·얼굴을 화면 위쪽으로 둔다 (CHEF_CLOSE는 자막이 얼굴 위로 올라가 모자·고글을 가린다)
+const INSIGHT = {
+  name: 'insight',
+  from: { pos: add(CHEF_FACE, [0.42, 0.3, 2.55]), target: add(CHEF_FACE, [0.03, 0.07, 0]) },
+  to: { pos: add(CHEF_FACE, [0.34, 0.28, 2.42]), target: add(CHEF_FACE, [0.03, 0.07, 0]) },
+};
+
+/**
+ * 고글 장면 첫머리 화면: 그 장면 본래 화면의 불·음식·접시 상태는 그대로 두고 카메라만 맛조수 정면으로.
+ * 고글을 손으로 내리고 올리므로 평소 팔(idle)로 둔다. 접시를 든 장면이면 접시는 그대로 들고 고글만 움직인다 (Chef3D).
+ */
+export function insightShot(base: Shot): Shot {
+  return { ...base, ...INSIGHT, fov: 42, face: 'camera', action: base.action === 'present' ? 'present' : 'idle', mood: base.mood === 'fire' ? 'curious' : base.mood };
 }
 
 

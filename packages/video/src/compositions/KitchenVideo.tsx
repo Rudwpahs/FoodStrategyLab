@@ -6,6 +6,7 @@ import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { captionKeywords, type CaptionKeywords } from '../captionStyle.ts';
 import { SpeechAudio } from '../components/SpeechAudio.tsx';
 import { sfxCues, sfxUrl } from '../sfx.ts';
+import { PAGE_TURN_VOLUME, pageTurnCues } from '../hostCues.ts';
 import { musicGain, speechIntervals } from '../music.ts';
 import { signatureNote } from '../brandText.ts';
 import { SceneCard } from '../components/SceneCard.tsx';
@@ -32,10 +33,6 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const food = useMemo(() => foodFor(recipe, photoColor), [recipe, photoColor]);
   const props = useMemo(() => ingredientProps(recipe), [recipe]);
   const labels = useMemo(() => props.map((p) => p.label), [props]);
-  const state = stageAt(script, timings, frame, food.kind, labels);
-  // 비교 장면: 화면을 위(건너뛴 결과)·아래(노트대로 한 결과)로 나눈다 — 설명용 연출
-  const compare = sceneAt(script, timings, frame)?.scene.visual === 'compare';
-  const failState = compare ? stageAt(script, timings, frame, food.kind, labels, 'compare-fail') : null;
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
@@ -43,6 +40,14 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   // 실제 완성 사진을 화면 가득: 첫 장면(훅)과 '완성 음식 먼저' 장면 (그 장면에 촬영 영상이 있으면 영상이 우선)
   const photos = useMemo(() => photoLayers(script, timings, photoUrl, clips), [script, timings, photoUrl, clips]);
   const real = layerAt(clips, frame) ?? layerAt(photos, frame);
+  // 실제 촬영 영상·사진으로 시작하는 장면 (3D 맛조수가 가려진다): 고글 동작은 그다음 노트 장면에서, 첫 장면이면 노트 카드도 띄우지 않는다
+  const realScenes = useMemo(() => new Set(timings.filter((t) => layerAt(clips, t.from) ?? layerAt(photos, t.from)).map((t) => t.sceneId)), [timings, clips, photos]);
+  // 맛조수 고정 소리: 연구자 노트 카드가 뜰 때마다 노트 넘기는 소리 (hostCues.ts)
+  const pages = useMemo(() => pageTurnCues(script, realScenes), [script, realScenes]);
+  const state = stageAt(script, timings, frame, food.kind, labels, 'main', { realScenes });
+  // 비교 장면: 화면을 위(건너뛴 결과)·아래(노트대로 한 결과)로 나눈다 — 설명용 연출
+  const compare = sceneAt(script, timings, frame)?.scene.visual === 'compare';
+  const failState = compare ? stageAt(script, timings, frame, food.kind, labels, 'compare-fail') : null;
   const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
   const captionBottom = state && !real && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
   const now = sceneAt(script, timings, frame);
@@ -132,7 +137,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
               photoUrl={photoUrl}
               captionBottom={captionBottom}
               keywords={keywords}
-              realMedia={Boolean(layerAt(clips, timing.from) ?? layerAt(photos, timing.from))}
+              realMedia={realScenes.has(scene.id)}
               opening={timing.from === 0}
             />
             <SpeechAudio timing={timing} />
@@ -146,6 +151,16 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
         return (
           <Sequence key={`sfx-${c.sceneId}`} from={t.from + c.offset} durationInFrames={30} name={`sfx ${c.name}`}>
             <Audio src={sfxUrl(c.name)} volume={0.32} />
+          </Sequence>
+        );
+      })}
+      {/* 노트 넘기는 소리: 장면 직전 쉼에서 사각, 노트 카드가 나타날 때 '탁' (목소리보다 약 13dB 작게) */}
+      {pages.map((c) => {
+        const t = byId.get(c.sceneId);
+        if (!t) return null;
+        return (
+          <Sequence key={`page-${c.sceneId}`} from={Math.max(0, t.from + c.offset)} durationInFrames={20} name="sfx page">
+            <Audio src={sfxUrl('page')} volume={PAGE_TURN_VOLUME} />
           </Sequence>
         );
       })}

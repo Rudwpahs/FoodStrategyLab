@@ -4,8 +4,9 @@ import type { SceneTiming } from '../timeline.ts';
 import type { StageState } from './KitchenScene.tsx';
 import type { Vec3 } from './layout.ts';
 import { PLACE_HAS_STOVE, placePlan, videoLook } from './places.ts';
-import { beatAt, cameraAt, compareFailShot, shotPlan } from './shots.ts';
+import { beatAt, cameraAt, compareFailShot, insightShot, shotPlan } from './shots.ts';
 import { mouthAt } from '../lipSync.ts';
+import { GOGGLE_LEAD, goggleSceneIndex, gogglePose, insightFrames } from '../hostCues.ts';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -96,8 +97,17 @@ const PROP_CUE_LEAD = 3;
 /**
  * 프레임 → 3D 장면 상태 (카메라·캐릭터·음식·소품). 순수 함수라 테스트할 수 있다.
  * props: 소품 수, 또는 소품 라벨 (라벨이 있으면 목소리가 이름을 말할 때 그 소품이 나온다)
+ * opts.realScenes: 실제 촬영 영상·사진으로 시작하는 장면 id (그 장면은 3D가 가려지므로 고글 동작을 다음 노트 장면으로 넘긴다, hostCues.ts)
  */
-export function stageAt(script: Script, timings: SceneTiming[], frame: number, foodKind: FoodKind, props: number | string[], variant: 'main' | 'compare-fail' = 'main'): StageState | null {
+export function stageAt(
+  script: Script,
+  timings: SceneTiming[],
+  frame: number,
+  foodKind: FoodKind,
+  props: number | string[],
+  variant: 'main' | 'compare-fail' = 'main',
+  opts: { realScenes?: ReadonlySet<string> } = {},
+): StageState | null {
   const propCount = typeof props === 'number' ? props : props.length;
   const at = sceneAt(script, timings, frame);
   if (!at) return null;
@@ -108,7 +118,14 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
   const sceneIndex = script.scenes.indexOf(scene);
   const place = placePlan(script)[sceneIndex] ?? 'kitchen';
   const head = index === 0 ? OPENING_HEAD_START : 0;
-  const beat = beatAt(scene, sameTypeBefore, local + head, timing.durationInFrames + head, { variant: shotPlan(script)[sceneIndex] ?? 0, place });
+  const plan = { variant: shotPlan(script)[sceneIndex] ?? 0, place };
+  // 고글 장면: 첫머리는 맛조수를 비추며 고글 동작을 하고(insight), 나머지 시간에 장면 본래 화면들을 차례로 보여 준다
+  const goggleScene = variant === 'main' && sceneIndex === goggleSceneIndex(script, opts.realScenes);
+  const insight = goggleScene ? insightFrames(timing.durationInFrames) : 0;
+  const beat =
+    local < insight
+      ? { shot: insightShot(beatAt(scene, sameTypeBefore, 0, timing.durationInFrames, plan).shot), progress: Math.min(1, local / Math.max(1, insight - 1)) }
+      : beatAt(scene, sameTypeBefore, local - insight + head, timing.durationInFrames - insight + head, plan);
   const shot = variant === 'compare-fail' ? compareFailShot(beat.shot) : beat.shot;
   const raw = cameraAt(shot, beat.progress);
   const push = index === 0 ? openingPush(local) : 1;
@@ -130,7 +147,8 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
 
   return {
     camera: { pos: cam.pos as Vec3, target: cam.target as Vec3, fov: shot.fov },
-    emotion: scene.emotion,
+    // 실패한 음식이 나오는 화면에서 맛조수는 당황·실망하지 않고 차분히 살펴본다 (실수하지 않는 기록 담당, persona-2026-11.md)
+    emotion: shot.plated === 'failed' ? 'curious' : scene.emotion,
     talking: local < timing.speechFrames,
     mouth: mouthAt(timing.mouth, local),
     action: shot.action,
@@ -140,8 +158,10 @@ export function stageAt(script: Script, timings: SceneTiming[], frame: number, f
     cook,
     flip,
     plated: shot.plated,
+    plateAt: shot.plate,
     propPop,
     chefPop: index === 0 ? popIn((local + head) / 10) : 1,
+    goggles: goggleScene ? gogglePose(local - GOGGLE_LEAD) : undefined,
     mood: shot.mood,
     place,
     dayTime: videoLook(script.title).dayTime,

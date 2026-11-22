@@ -4,6 +4,7 @@ import type { Script } from '@mat-lab/recipe-core';
 import { decodeGrayPng, splitPngs } from './audio.ts';
 import { QA_STEP, auditAudio, auditFrames, hardWordHeard, lineMatch, quietRuns, rmsDb } from './qa.ts';
 import { sfxSamples } from './sfx.ts';
+import { PAGE_TURN_OFFSET, PAGE_TURN_VOLUME } from './hostCues.ts';
 import { speechBounds } from './speech.ts';
 import { speechPlayback, speechVolume } from './speechPlayback.ts';
 import { buildTimeline, totalFrames, type SceneTiming } from './timeline.ts';
@@ -235,6 +236,20 @@ describe('대사 잘림 검사: 실제 렌더처럼 끝 페이드가 걸린 소�
       for (let i = 0; i < 0.3 * RATE; i++) track[mid + i]! += 0.2 * Math.sin(i / 3);
     });
     expect(cuts(r)).toEqual([]);
+  });
+
+  it('노트 넘기는 소리(다음 장면 0.2초 앞)는 없는 잘림을 만들지 않고, 앞 장면의 진짜 잘림을 가리지도 않는다', () => {
+    const { samples: page, rate: pageRate } = sfxSamples('page');
+    const addPage = (track: Float32Array, timings: SceneTiming[]) => {
+      const at = Math.round(((timings[1]!.from + PAGE_TURN_OFFSET) / FPS) * RATE);
+      for (let i = 0; i < (page.length * RATE) / pageRate && at + i < track.length; i++) track[at + i]! += PAGE_TURN_VOLUME * page[Math.floor((i * pageRate) / RATE)]!;
+    };
+    // 짧은 대사가 조용하게 끝난 뒤 노트 소리 → 잘림 아님
+    for (const endAmp of [0.3, 0.05, 0.02]) expect(cuts(render([{ audio: utterance(0.2, endAmp, 4, 1) }, { audio: utterance(0.25, 0.3) }], addPage)), `endAmp ${endAmp}`).toEqual([]);
+    // 오래된 말소리 캐시로 잘린 대사는 노트 소리가 있어도 잡는다
+    const audio = utterance(0.25, 0.08);
+    const r = render([{ audio, measured: staleAt(audio, lastSyllableMiddle(0.25)) }, { audio: utterance(0.25, 0.3) }], addPage);
+    expect(cuts(r).map((c) => c.scene)).toEqual([1]);
   });
 });
 
