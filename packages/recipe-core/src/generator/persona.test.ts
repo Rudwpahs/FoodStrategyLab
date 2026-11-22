@@ -160,3 +160,10 @@ describe('진지한 엉뚱 가이드 (deadpan)', () => {
     expect(c.warnings.join(' ')).not.toMatch(/위험한 장난|농담이라고 밝히는/);
   });
 });
+
+describe('꼭 쓸 형식', () => {
+  it('요청한 형식(엉뚱 가이드)을 대본 하나에 꼭 넣으라고 알린다', () => {
+    const user = storyUser(walnut, { count: 3, mustInclude: 'deadpan' });
+    expect(user).toContain('반드시 형식 deadpan');
+  });
+});

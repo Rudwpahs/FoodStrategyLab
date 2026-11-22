@@ -290,13 +290,16 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 }
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
-export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId }): string {
+export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType }): string {
   const source = storySourceData(recipe, opts.expertAnswers);
   const recent = opts.recent ?? [];
   const overused = overusedTypes(recent);
   // 다른 형식이 남아 있을 때만 최근에 많이 쓴 형식을 뺀다
   const all = availableStoryTypes(recipe, { expertAnswers: opts.expertAnswers, realClips: opts.realClips });
-  const types = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
+  const rest = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
+  // 꼭 쓸 형식(견본·사용자가 고른 형식)은 최근에 많이 썼어도 넣는다
+  const must = opts.mustInclude && all.includes(opts.mustInclude) ? opts.mustInclude : undefined;
+  const types = must && !rest.includes(must) ? [must, ...rest] : rest;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 대본은 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
   const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
   const phrases = repeatedPhrases(recent.map((r) => r.lines ?? []), [recipe.dishName]);
@@ -309,7 +312,7 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
   return `아래 원본 자료로 형식이 서로 다른 대본 ${opts.count}개를 써.
 ## 고를 수 있는 형식 (storyType — 이름: 구성 / 지킬 것 / 잘 맞는 시청자)
 ${types.map((t) => `- ${t}(${STORY_TYPE_INFO[t].label}): ${STORY_TYPE_INFO[t].beats} / ${STORY_TYPE_INFO[t].guide} / ${audienceLabels(STORY_TYPE_INFO[t].fits)}`).join('\n')}
-${avoid}${account}${limit}
+${must ? `\n- 대본 가운데 하나는 반드시 형식 ${must}(${STORY_TYPE_INFO[must].label})로 써.` : ''}${avoid}${account}${limit}
 
 ## 원본 자료
 ${JSON.stringify(source, null, 2)}`;

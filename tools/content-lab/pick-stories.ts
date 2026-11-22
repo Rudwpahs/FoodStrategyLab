@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.MATLAB_DATA_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'pick-stories-'));
-const { SAMPLE_RECIPES, finalizeStory, isPersonaId } = await import('@mat-lab/recipe-core');
+const { SAMPLE_RECIPES, STORY_TYPES, finalizeStory, isPersonaId } = await import('@mat-lab/recipe-core');
 const { openDb } = await import('../../apps/studio/server/db.ts');
 const { StoryWriter } = await import('../../apps/studio/server/storyWriter.ts');
 const { pickStory } = await import('../../apps/studio/e2e/pickStory.ts');
@@ -40,7 +40,7 @@ for (const [i, job] of jobs.entries()) {
   const persona = job.persona && isPersonaId(job.persona) ? job.persona : undefined;
   const recent = recentBy.get(persona ?? '') ?? [];
   recentBy.set(persona ?? '', recent);
-  const { drafts, costUsd } = await writer.write(recipe, { recent: recent.slice(0, 12), persona });
+  const { drafts, costUsd } = await writer.write(recipe, { recent: recent.slice(0, 12), persona, mustInclude: job.type && (STORY_TYPES as readonly string[]).includes(job.type) ? (job.type as (typeof STORY_TYPES)[number]) : undefined });
   total += costUsd;
   const stories = drafts.map((d, k) => finalizeStory(recipe, d, `story-${k + 1}`));
   fs.writeFileSync(path.join(dir, 'stories.json'), JSON.stringify(stories, null, 2));
