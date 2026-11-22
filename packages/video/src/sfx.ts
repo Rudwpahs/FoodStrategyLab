@@ -5,8 +5,10 @@ import { SFX_WAV_BASE64 } from './sfxData.ts';
  * 효과음: 실제 녹음 (CC0, 출처는 packages/video/assets/sfx/LICENSES.md).
  * 예전에는 코드로 합성했는데, 합성음은 귀로 확인하지 못해 어색하게 들릴 수 있어 실제 녹음으로 바꿨다.
  * 근거: 놀람이 주의를 모은다는 연구(sources.md S44), 1분 넘는 Shorts의 음원 클레임 위험(S16) — CC0라 클레임 대상이 아니다.
+ * page(노트 넘기는 소리)만 이 저장소에서 합성했다 (tools/content-lab/synth-page.ts, 참고 녹음과 같은 잣대로 재어 맞춤).
+ * 연출 효과음(sfxCues)과 따로, 노트 카드가 뜰 때마다 나는 맛조수의 고정 소리다 (hostCues.ts).
  */
-export type SfxName = 'whoosh' | 'ding' | 'boing' | 'pop';
+export type SfxName = 'whoosh' | 'ding' | 'boing' | 'pop' | 'page';
 
 /** Remotion <Audio>에 바로 넣을 수 있는 data URL (화면 미리보기와 렌더가 같은 소리) */
 export function sfxUrl(name: SfxName): string {
@@ -43,12 +45,12 @@ export interface SfxCue {
   offset: number;
 }
 
-/** 장면 연출에 맞춰 효과음 자리를 정한다. 장면마다 최대 1개, 영상 전체 4개 이하 (과하지 않게) */
+/** 장면 연출에 맞춰 효과음 자리를 정한다 (훅·공개·서명). 장면마다 최대 1개, 영상 전체 4개 이하 (과하지 않게) */
 export function sfxCues(script: Script): SfxCue[] {
   const cues: SfxCue[] = [];
   const pick = (s: Scene): Omit<SfxCue, 'sceneId'> | null => {
     // 연출 엔진이 붙인 화면 연출·훅에만 넣는다 (기존 템플릿 영상은 소리가 바뀌지 않게)
-    if (s.visual === 'fail' || s.visual === 'fail-closeup') return { name: 'boing', offset: 2 };
+    // 실패 장면에는 소리를 넣지 않는다: 예전 'boing'(구금)은 실패를 개그처럼 들리게 했다 (맛조수는 실수를 웃음거리로 삼지 않는 차분한 기록 담당)
     if (s.hook) return { name: 'whoosh', offset: 0 };
     if (s.visual === 'result' || s.visual === 'compare') return { name: 'ding', offset: 6 };
     if (s.visual === 'signature') return { name: 'pop', offset: 4 };

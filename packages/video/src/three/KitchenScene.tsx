@@ -3,6 +3,7 @@ import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
 import { ACESFilmicToneMapping, Color, Object3D, PerspectiveCamera, Scene } from 'three';
 import { foodProfile, type Emotion, type FoodProfile, type IngredientProp, type RecipeInput } from '@mat-lab/recipe-core';
+import type { GogglePose } from '../hostCues.ts';
 import { Chef3D } from './Chef3D.tsx';
 import { CookingFood, Flame, IngredientModel, PlatedFood, Steam } from './Food3D.tsx';
 import { BURNER, CHEF_POS, PLATE, chefFacing, handPlate, propPositions, type Vec3 } from './layout.ts';
@@ -31,9 +32,13 @@ export interface StageState {
   cook: number;
   flip: number;
   plated: Shot['plated'];
+  /** 접시 자리 (손에 들지 않을 때). 없으면 PLATE. 실패 접시는 맛조수 옆 조리대(FAIL_PLATE) */
+  plateAt?: Vec3;
   /** 재료 소품별 등장 정도 (0~1) */
   propPop: number[];
   chefPop: number;
+  /** 고글 동작 자세 (영상마다 한 번, 첫 노트 카드 장면. hostCues.ts). 없으면 평소 모습 */
+  goggles?: GogglePose;
   mood: Mood;
   /** 장면이 펼쳐지는 곳 (3D 무대) */
   place: Place;
@@ -152,12 +157,12 @@ const SceneContents: React.FC<{ frame: number; state: StageState; food: FoodProf
       {state.action === 'present' ? (
         <PlatedFood food={state.plated === 'none' ? null : food} failed={state.plated === 'failed'} frame={frame} origin={handPlate(facing)} />
       ) : (
-        <PlatedFood food={state.plated === 'none' ? null : food} failed={state.plated === 'failed'} frame={frame} origin={PLATE} />
+        <PlatedFood food={state.plated === 'none' ? null : food} failed={state.plated === 'failed'} frame={frame} origin={state.plateAt ?? PLATE} />
       )}
       {props.map((p, i) => (
         <IngredientModel key={i} prop={p} position={positions[i]!} pop={state.propPop[i] ?? 0} />
       ))}
-      <Chef3D emotion={state.emotion} frame={frame} talking={state.talking} mouth={state.mouth} action={state.action} facing={facing} position={CHEF_POS} pop={state.chefPop} />
+      <Chef3D emotion={state.emotion} frame={frame} talking={state.talking} mouth={state.mouth} action={state.action} facing={facing} position={CHEF_POS} pop={state.chefPop} goggles={state.goggles} />
     </>
   );
 };

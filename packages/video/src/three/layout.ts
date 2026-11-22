@@ -14,6 +14,11 @@ export const CHEF_FACE: Vec3 = [CHEF_POS[0], CHEF_POS[1] + 0.42, CHEF_POS[2]];
 export const BURNER: Vec3 = [-1.08, COUNTER_TOP + 0.015, -1.14];
 /** 완성 접시 위치 */
 export const PLATE: Vec3 = [1.12, COUNTER_TOP + 0.01, -1.15];
+/**
+ * 실패한 음식 접시 자리: 맛조수 바로 오른쪽 조리대 위 (맛조수와 한 화면에 들어오게).
+ * 맛조수는 실수하지 않는 기록 담당이라 실패작을 들지 않는다: 흔히 겪는 결과를 조리대에 놓고 옆에서 살펴본다 (shots.ts FAIL_SIDE)
+ */
+export const FAIL_PLATE: Vec3 = [CHEF_POS[0] + 0.46, COUNTER_TOP + 0.01, -1.2];
 /** 재료 소품이 놓이는 줄 (x 시작·끝, z) */
 export const PROP_CENTER: Vec3 = [0.36, COUNTER_TOP, -1.14];
 const PROP_GAP = 0.21;

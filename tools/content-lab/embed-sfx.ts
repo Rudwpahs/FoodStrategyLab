@@ -1,5 +1,5 @@
 /**
- * packages/video/assets/sfx/*.wav (실제 녹음 효과음, CC0) → packages/video/src/sfxData.ts
+ * packages/video/assets/sfx/*.wav (실제 녹음 효과음 + 이 저장소에서 합성한 노트 넘기는 소리, 모두 CC0) → packages/video/src/sfxData.ts
  * 화면 미리보기(Vite)와 렌더(Remotion)가 같은 소리를 쓰도록 data URL로 코드에 넣는다.
  * 실행: npx tsx tools/content-lab/embed-sfx.ts   (WAV를 바꾼 뒤에만)
  */
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dir = path.join(root, 'packages/video/assets/sfx');
-const names = ['whoosh', 'ding', 'boing', 'pop'] as const;
+const names = ['whoosh', 'ding', 'boing', 'pop', 'page'] as const;
 
 const lines = names.map((n) => {
   const buf = fs.readFileSync(path.join(dir, `${n}.wav`));
