@@ -39,9 +39,15 @@ describe('효과음', () => {
     expect(cues[0]).toMatchObject({ sceneId: comedy.scenes[0]!.id, name: 'boing' });
     expect(cues.some((c) => c.name === 'pop')).toBe(true);
     expect(cues.length).toBeLessThanOrEqual(4);
-    // 기존 템플릿 대본(연출 없음)에는 효과음이 없다 — 기존 영상은 그대로
+    // 템플릿 대본(연출 없음)에는 효과음이 없다
     expect(sfxCues(generateTemplateScript(walnut))).toEqual([]);
-    // 흔한 실수가 있는 템플릿(김치전 코미디형)도 기존과 같이 효과음 없음
-    for (const r of SAMPLE_RECIPES) expect(sfxCues(generateTemplateScript(r)), r.dishName).toEqual([]);
+    // 흔한 실수가 있는 템플릿(김치전 문답형)은 실패 장면을 음식 클로즈업(설명용 연출)으로 보여 주므로, 그 장면에만 효과음 하나
+    // (예전에는 맛조수가 실패 접시를 드는 기본 화면이었다. 맛조수는 실수하지 않는다: persona.ts lab-notes)
+    for (const r of SAMPLE_RECIPES) {
+      const script = generateTemplateScript(r);
+      const failure = script.scenes.find((s) => s.type === 'mistake');
+      expect(sfxCues(script), r.dishName).toEqual(failure ? [{ sceneId: failure.id, name: 'boing', offset: 2 }] : []);
+    }
+    expect(SAMPLE_RECIPES.filter((r) => generateTemplateScript(r).scenes.some((s) => s.type === 'mistake')).map((r) => r.dishName)).toEqual(['바삭한 김치전']);
   });
 });

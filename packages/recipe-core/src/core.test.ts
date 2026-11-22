@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   BRAND,
+  CASE_LEADS,
+  DEFAULT_PERSONA,
+  PERSONAS,
   RecipeInputSchema,
   SAMPLE_RECIPES,
+  SENSORY_RULE,
+  SIGN_OFFS,
   brandDescription,
   buildAiPrompt,
   canApprove,
@@ -13,6 +18,7 @@ import {
   extractQuantities,
   formatIngredient,
   generateTemplateScript,
+  hostLines,
   parseAiScript,
   type Script,
 } from './index.ts';
@@ -50,17 +56,34 @@ describe('분량 추출', () => {
 describe('템플릿 대본 생성', () => {
   it('브랜드 문구가 중간·팁·엔딩에 들어가고, 연구소 이름은 엔딩에서 한 번만 말한다 (연출 엔진과 같은 규칙)', () => {
     const script = generateTemplateScript(spinach);
+    const say = hostLines(spinach, 'template');
     const lines = script.scenes.map((s) => s.line).join('\n');
     expect(lines.split(BRAND.labName).length - 1).toBe(1);
-    expect(script.scenes.at(-1)!.line.endsWith(BRAND.signOff)).toBe(true);
-    expect(script.scenes.some((s) => s.type === 'explain' && s.cardTitle === BRAND.notePhrase && s.line.startsWith(BRAND.noteLead))).toBe(true);
-    expect(script.scenes.some((s) => s.type === 'tip' && s.cardTitle === BRAND.tipPhrase && s.line.startsWith(BRAND.tipLead))).toBe(true);
+    // 자리는 고정, 문장은 묶음에서 이 레시피 몫을 고른다
+    expect(script.scenes.at(-1)!.line.endsWith(say.signOff)).toBe(true);
+    expect(script.scenes.some((s) => s.type === 'explain' && s.cardTitle === BRAND.notePhrase && s.line.startsWith(say.noteLead))).toBe(true);
+    expect(script.scenes.some((s) => s.type === 'tip' && s.cardTitle === BRAND.tipPhrase && s.line.startsWith(say.tipLead))).toBe(true);
+    expect(script.scenes[0]!.line).toBe(say.opening);
     expect(checkScript(spinach, script).filter((i) => i.code === 'branding')).toEqual([]);
   });
 
-  it('코미디형은 실수 장면이 들어간다', () => {
+  it('같은 레시피는 다시 만들어도 같은 대본이다 (승인한 대본과 어긋나지 않게)', () => {
+    for (const r of SAMPLE_RECIPES) expect(generateTemplateScript(r)).toEqual(generateTemplateScript(structuredClone(r)));
+  });
+
+  it('문답형 포맷의 흔한 실수는 맛조수의 실수가 아니라 많은 사람이 겪는 일로 꺼내고, 바로 원인(노트)으로 간다', () => {
     const script = generateTemplateScript(kimchi);
-    expect(script.scenes.some((s) => s.type === 'mistake' && s.emotion === 'embarrassed')).toBe(true);
+    const i = script.scenes.findIndex((s) => s.type === 'mistake');
+    const mistake = script.scenes[i]!;
+    expect(CASE_LEADS.some((lead) => mistake.line.startsWith(lead))).toBe(true);
+    // 당황·실망 표정 없이, 맛조수가 든 실패 접시 대신 음식만 클로즈업(설명용 연출), 카드에는 원본 문장 그대로
+    expect(['embarrassed', 'disappointed']).not.toContain(mistake.emotion);
+    expect(mistake.visual).toBe('fail-closeup');
+    expect(mistake.cardTitle).toBe(kimchi.commonMistake);
+    expect(script.scenes[i + 1]!.type).toBe('question');
+    expect(script.scenes[i + 2]!.type).toBe('explain');
+    const lines = script.scenes.map((s) => s.line).join('\n');
+    expect(lines).not.toMatch(/으악|망했|대성공|이번엔 제대로|실험/);
   });
 
   it('샘플 대본은 원본에 없는 분량 오류가 없고 30초 안팎이다', () => {
@@ -139,10 +162,15 @@ describe('검수·승인 흐름', () => {
 describe('AI 붙여넣기 모드', () => {
   it('프롬프트에 원본과 규칙이 들어간다', () => {
     const prompt = buildAiPrompt(kimchi);
+    const say = hostLines(kimchi, 'ai-paste');
     expect(prompt).toContain('잘 익은 김치 200g');
-    expect(prompt).toContain(BRAND.signOff);
+    // 엔딩·노트·팁 첫머리는 고정 한 문장이 아니라 이 레시피 몫 (템플릿과 같은 묶음)
+    expect(prompt).toContain(`마지막 장면 대사는 "${say.signOff}"로 끝내`);
+    expect(prompt).toContain(`원리 장면은 "${say.noteLead}"로 시작`);
+    expect(prompt).toContain(`팁 장면은 "${say.tipLead}"로 시작`);
     // 연구소 이름을 첫 대사에 넣으라는 규칙과 "이름은 엔딩에 한 번만" 규칙이 부딪히지 않는다
-    expect(prompt).not.toContain(BRAND.openingLine);
+    expect(prompt).toContain('마지막 장면에서 말해');
+    expect(prompt).not.toMatch(/첫\s?(장면|대사)[^\n]*연구소/);
     // 규칙 번호가 1부터 차례대로
     const numbers = [...prompt.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
     expect(numbers).toEqual(numbers.map((_, i) => i + 1));
@@ -152,13 +180,27 @@ describe('AI 붙여넣기 모드', () => {
     expect(full).toContain('명절마다 부치던 전이에요.');
   });
 
+  it('프롬프트의 맛조수는 고른 성격(기록 담당 AI)이다: 실수하지 않고, 경험을 지어내지 않는다', () => {
+    const prompt = buildAiPrompt(kimchi);
+    const persona = PERSONAS[DEFAULT_PERSONA];
+    expect(prompt).toContain(persona.oneLine);
+    for (const t of persona.traits) expect(prompt).toContain(t);
+    expect(prompt).toContain(SENSORY_RULE);
+    expect(prompt).toContain('맛조수는 실수하지 않아');
+    expect(prompt).toContain('경험을 지어내지 마');
+    // 예전 설정(성급하고 가끔 요리 실수를 하는 조수, 캐릭터가 실수하는 장면)은 없다
+    expect(prompt).not.toMatch(/성급|가끔 요리 실수|실수를 하는 장면|캐릭터 코미디형/);
+    // 레시피가 다르면 엔딩 문장도 대개 다르다
+    expect(new Set(SAMPLE_RECIPES.map((r) => hostLines(r, 'ai-paste').signOff)).size).toBeGreaterThan(1);
+  });
+
   it('AI가 바꿔 쓴 조리 순서 카드는 원본 순서 문장으로 되돌린다', () => {
     const answer = JSON.stringify({
       title: '김치전',
       scenes: [
         { type: 'intro', emotion: 'joy', line: '시작!' },
         { type: 'steps', emotion: 'confident', line: '순서!', cardItems: ['김치를 썬다', '반죽을 부친다'] },
-        { type: 'outro', emotion: 'joy', line: BRAND.signOff },
+        { type: 'outro', emotion: 'joy', line: SIGN_OFFS[0] },
       ],
     });
     const res = parseAiScript(answer, kimchi);

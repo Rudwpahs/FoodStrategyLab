@@ -1,11 +1,14 @@
-import { BRAND } from '../brand.ts';
+import { BRAND, hostLines } from '../brand.ts';
 import { formatIngredient } from '../format.ts';
 import { MAX_STEPS_ON_CARD } from './template.ts';
+import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE } from './persona.ts';
 import { EMOTIONS, SCENE_TYPES, ScriptSchema, type RecipeInput, type Script, CATEGORY_LABELS, FORMAT_LABELS } from '../types.ts';
 
 /**
- * 무료 AI 채팅(ChatGPT·Claude·Gemini 웹)에 붙여넣을 프롬프트.
+ * 무료 AI 채팅 웹에 붙여넣을 프롬프트.
  * API 비용 없이 AI 대본을 받기 위한 '복사-붙여넣기' 방식이다.
+ * 맛조수는 스튜디오 기본 성격(persona.ts DEFAULT_PERSONA: 기록 담당 AI)으로 말한다.
+ * 고정 자리(엔딩·노트·팁)의 말은 템플릿과 같은 묶음(brand.ts)에서 이 레시피 몫을 골라 준다: 모든 영상이 같은 문장으로 끝나지 않게.
  */
 export function buildAiPrompt(recipe: RecipeInput): string {
   const source = {
@@ -22,20 +25,29 @@ export function buildAiPrompt(recipe: RecipeInput): string {
     이야기: recipe.story || undefined,
   };
 
+  const persona = PERSONAS[DEFAULT_PERSONA];
+  const say = hostLines(recipe, 'ai-paste');
+
   return `너는 숏폼 요리 채널 "${BRAND.labName}"의 대본 작가야.
-진행자는 캐릭터 "${BRAND.character}"(성급하고 궁금한 게 많은 연구소 조수, 가끔 요리 실수를 함)이고,
-모든 전문 지식은 ${BRAND.researcherTitle} ${BRAND.researcher} 연구자의 원본 자료에서만 가져와.
+진행자는 캐릭터 "${BRAND.character}"이고, 모든 전문 지식은 ${BRAND.researcherTitle} ${BRAND.researcher} 연구자의 원본 자료에서만 가져와.
+
+## 맛조수 성격 (${persona.label})
+한 줄 소개: ${persona.oneLine}
+${persona.traits.map((t) => `- ${t}`).join('\n')}
+${persona.sensoryRule ? `- ${SENSORY_RULE}\n` : ''}- 실수: 맛조수는 실수하지 않아. 실패는 많은 사람이 겪는 일반 사례로만 꺼내고, 바로 원인 한 가지와 선생님 노트를 붙여. 비명·과장된 감탄·당황 연기·자기 비하 농담은 쓰지 마.
+- 경험: 맛조수는 AI라서 직접 만들거나 맛보거나 실험해 본 경험이 없어. 그런 경험을 지어내지 마.
+- 맛 한계 한마디(맛을 직접 볼 수 없다는 말)는 이번 대본에는 넣지 마.
 
 ## 반드시 지킬 규칙
 1. 아래 원본 자료에 없는 분량·시간·온도·사실을 새로 만들지 마. 숫자는 원본 그대로 써.
 2. 가상의 설명을 "실험 결과", "연구 결과", "증명됐다"처럼 사실로 표현하지 마.
-3. 연구소 이름("${BRAND.labName}")은 대사에서 한 번만, 마지막 장면에서 말해. 마지막 장면 대사는 "${BRAND.signOff}"로 끝내. 중간에 연구자를 부를 때는 "${BRAND.callName}"이라고 해.
-4. 원리 장면은 "${BRAND.noteLead}"로 시작하고 cardTitle을 "${BRAND.notePhrase}"로 해.
-5. 팁 장면은 "${BRAND.tipLead}"로 시작하고 cardTitle을 "${BRAND.tipPhrase}"로 해.
+3. 연구소 이름("${BRAND.labName}")은 대사에서 한 번만, 마지막 장면에서 말해. 마지막 장면 대사는 "${say.signOff}"로 끝내. 중간에 연구자를 부를 때는 "${BRAND.callName}"이라고 해.
+4. 원리 장면은 "${say.noteLead}"로 시작하고 cardTitle을 "${BRAND.notePhrase}"로 해.
+5. 팁 장면은 "${say.tipLead}"로 시작하고 cardTitle을 "${BRAND.tipPhrase}"로 해.
 6. 대사는 소리 내어 읽는 말이야. "~한다", "~합니다" 대신 "~해요"로 끝내고, 원본 문장은 끝맺음만 말투로 바꿔. 화면 카드(cardItems)에는 원본 문장을 그대로 써.
 7. 전체 대사는 공백 제외 220자 안팎(약 30초). 한 장면 대사는 한두 문장.
-8. 캐릭터는 시청자 대신 질문하는 역할이야. 반말 대신 친근한 존댓말을 써.
-9. 포맷이 "캐릭터 코미디형"이면 캐릭터가 흔한 실수를 하는 장면(type "mistake")을 넣어. 흔한 실수·오해·이야기는 원본 자료에 있을 때만 써.
+8. 캐릭터는 시청자 편에서 같이 확인하는 역할이야. 가르치려 들지 말고, 반말 대신 친근한 해요체를 써.
+9. 포맷이 "${FORMAT_LABELS.comedy}"이면 흔한 실수 장면(type "mistake")을 넣되, 맛조수가 실수하는 장면이 아니라 많은 사람이 겪는 일로 말하고 바로 원인(선생님 노트)으로 이어 가. 흔한 실수·오해·이야기는 원본 자료에 있을 때만 써.
 
 ## 출력 형식
 설명 없이 JSON만 출력해.

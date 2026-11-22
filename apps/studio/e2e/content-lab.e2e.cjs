@@ -20,7 +20,7 @@ const base = process.env.STUDIO_URL ?? 'http://127.0.0.1:5190';
   await p.locator('.steps').getByText('주제·영상 고르기').click();
   await p.locator('summary', { hasText: '다른 방법으로 대본 만들기' }).click();
   await p.waitForSelector('text=연출과 첫 장면 고르기', { timeout: 15000 });
-  await p.locator('button', { hasText: '캐릭터 코미디형' }).click();
+  await p.locator('button', { hasText: '캐릭터 문답형' }).click();
   await p.waitForTimeout(800);
   await p.screenshot({ path: 'hookpicker.png', fullPage: false });
   await p.getByText('③ 이 연출과 첫 장면으로 새 대본 만들기').click();

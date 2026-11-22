@@ -1,5 +1,5 @@
-import { BRAND } from '../brand.ts';
-import { formatIngredient, splitSentences } from '../format.ts';
+import { BRAND, hostLines } from '../brand.ts';
+import { firstSentence, formatIngredient, splitSentences } from '../format.ts';
 import { spoken } from '../korean.ts';
 import type { RecipeInput, Scene, Script } from '../types.ts';
 
@@ -12,18 +12,21 @@ type Draft = Omit<Scene, 'id'>;
 /**
  * 비용 0원 기본 생성기: LLM 없이 입력 데이터만으로 대본을 조립한다.
  * 분량·재료·단계는 원본을 그대로 옮기고, 캐릭터 대사만 템플릿으로 만든다.
- * 브랜드 규칙은 연출 엔진(styles.ts)과 같다: 연구소 이름(연구자 이름)은 엔딩 인사(signOff)에서 한 번만 말한다.
- * 영상 포맷이 캐릭터 코미디형이고 흔한 실수가 있으면 실수 장면을 넣는다.
+ * 브랜드 규칙은 연출 엔진(styles.ts)과 같다: 연구소 이름(연구자 이름)은 엔딩 인사(SIGN_OFFS 중 하나)에서 한 번만 말한다.
+ * 맛조수는 기록 담당 AI 성격(persona.ts lab-notes)으로 말한다: 실수·비명 없이, 직접 만들거나 맛본 척하지 않는다.
+ * 영상 포맷이 캐릭터 문답형이고 흔한 실수가 있으면, 그 실수를 많은 사람이 겪는 일로 꺼내고 바로 원인(선생님 노트)으로 넘어간다.
  */
 export function generateTemplateScript(recipe: RecipeInput): Script {
   const drafts: Draft[] = [];
-  const comedy = recipe.format === 'comedy' && recipe.commonMistake.length > 0;
+  const withMistake = recipe.format === 'comedy' && recipe.commonMistake.length > 0;
+  const say = hostLines(recipe, 'template');
 
-  drafts.push({ type: 'intro', emotion: 'joy', line: '맛 연구소에서 오늘도 실험!', cardTitle: recipe.topic });
+  drafts.push({ type: 'intro', emotion: 'joy', line: say.opening, cardTitle: recipe.topic });
 
-  if (comedy) {
-    drafts.push({ type: 'mistake', emotion: 'embarrassed', line: `으악, 망했어요! ${recipe.commonMistake}` });
-    drafts.push({ type: 'question', emotion: 'disappointed', line: '대체 왜 그럴까요?', cardTitle: '오늘의 질문' });
+  if (withMistake) {
+    // 실패는 맛조수의 것이 아니다: 맛조수가 든 접시 대신 음식 클로즈업(설명용 연출)으로 보여 주고, 카드에는 원본 문장 그대로
+    drafts.push({ type: 'mistake', emotion: 'curious', line: `${say.caseLead} ${spoken(recipe.commonMistake)}`, visual: 'fail-closeup', cardTitle: firstSentence(recipe.commonMistake) });
+    drafts.push({ type: 'question', emotion: 'curious', line: '왜 이렇게 되는지 같이 볼게요.', cardTitle: '오늘의 질문' });
   } else {
     drafts.push({ type: 'question', emotion: 'curious', line: `오늘의 질문! ${recipe.topic}`, cardTitle: '오늘의 질문' });
   }
@@ -33,7 +36,7 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
     drafts.push({
       type: 'explain',
       emotion: i === 0 ? 'surprised' : 'confident',
-      line: i === 0 ? `${BRAND.noteLead} ${spoken(sentence)}` : spoken(sentence),
+      line: i === 0 ? `${say.noteLead} ${spoken(sentence)}` : spoken(sentence),
       cardTitle: BRAND.notePhrase,
       cardItems: [sentence],
     });
@@ -56,8 +59,8 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
     drafts.push({
       type: 'steps',
       emotion: 'confident',
-      line: comedy
-        ? `이번엔 제대로! ${rest > 0 ? `핵심 ${shown.length}단계, 전체 ${recipe.steps.length}단계는 블로그에` : `딱 ${shown.length}단계`}!`
+      line: withMistake
+        ? `노트대로 하면 ${rest > 0 ? `핵심 ${shown.length}단계예요. 전체 ${recipe.steps.length}단계는 블로그에 정리했어요.` : `딱 ${shown.length}단계예요.`}`
         : `순서는 ${rest > 0 ? `핵심 ${shown.length}단계, 전체 ${recipe.steps.length}단계는 블로그에 정리했어요` : `딱 ${shown.length}단계`}!`,
       cardTitle: '조리 순서',
       cardItems: shown,
@@ -66,13 +69,13 @@ export function generateTemplateScript(recipe: RecipeInput): Script {
 
   const tip = recipe.tips[0];
   if (tip) {
-    drafts.push({ type: 'tip', emotion: 'confident', line: `${BRAND.tipLead} ${spoken(tip)}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] });
+    drafts.push({ type: 'tip', emotion: 'confident', line: `${say.tipLead} ${spoken(tip)}`, cardTitle: BRAND.tipPhrase, cardItems: [tip] });
   }
 
   drafts.push({
     type: 'outro',
     emotion: 'joy',
-    line: `${comedy ? '대성공! ' : ''}저장해 두세요! ${BRAND.signOff}`,
+    line: `저장해 두세요! ${say.signOff}`,
   });
 
   return {

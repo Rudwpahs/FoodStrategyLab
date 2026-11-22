@@ -1,5 +1,5 @@
 import type { RecipeInput, Script } from './types.ts';
-import { BRAND } from './brand.ts';
+import { BRAND, NOTE_LEADS } from './brand.ts';
 import { formatIngredient, splitSentences } from './format.ts';
 import { normalizeText } from './text.ts';
 
@@ -293,14 +293,15 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
   // 연구자 이름·직함은 대사가 아니라 화면 카드 제목으로 보여도 된다 (대사에서 매번 말하면 어색하다)
   const cards = script.scenes.map((s) => s.cardTitle ?? '').join('\n');
   const engine = Boolean(script.style);
-  // 연구소 이름은 엔딩 인사(signOff)에서 한 번 말하는 것이 기본 규칙이다 (오프닝에 있어도 된다)
+  // 연구소 이름은 엔딩 인사(SIGN_OFFS 중 하나)에서 한 번 말하는 것이 기본 규칙이다 (오프닝에 있어도 된다)
   if (!first.includes(BRAND.labName) && !last.includes(BRAND.labName) && !(engine && all.includes(BRAND.labName))) {
     issues.push({ level: 'info', code: 'branding', message: `오프닝이나 엔딩에 "${BRAND.labName}"이 없습니다.` });
   }
-  // 원리 장면이 없는 연출(감각 중심형)은 노트 문구를, 팁 장면을 넣지 않는 연출(코미디·스토리형)은 팁 문구를 검사하지 않는다
+  // 원리 장면이 없는 연출(감각 중심형)은 노트 문구를, 팁 장면을 넣지 않는 연출(문답·스토리형)은 팁 문구를 검사하지 않는다
+  // 노트 문구는 원리 카드 제목(notePhrase)이나, 대사 첫머리 묶음(NOTE_LEADS) 가운데 어느 것이든 있으면 된다
   const noNote = script.style === 'sensory';
   const noTip = script.style === 'comedy' || script.style === 'story' || script.style === 'ai-story' || recipe.tips.length === 0;
-  if (!noNote && !all.includes(BRAND.notePhrase) && !all.includes(BRAND.noteLead) && !cards.includes(BRAND.notePhrase)) {
+  if (!noNote && !all.includes(BRAND.notePhrase) && !NOTE_LEADS.some((lead) => all.includes(lead)) && !cards.includes(BRAND.notePhrase)) {
     issues.push({ level: 'info', code: 'branding', message: `중간에 "${BRAND.notePhrase}" 문구가 없습니다.` });
   }
   if (!noTip && !script.scenes.some((s) => s.type === 'tip' && (s.line.includes(BRAND.tipPhrase) || s.cardTitle === BRAND.tipPhrase)) && !last.includes(BRAND.tipPhrase)) {

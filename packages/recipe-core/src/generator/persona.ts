@@ -107,6 +107,39 @@ export function isPersonaId(v: unknown): v is PersonaId {
   return typeof v === 'string' && (PERSONA_IDS as readonly string[]).includes(v);
 }
 
+export interface PersonaProfile {
+  label: string;
+  oneLine: string;
+  /** 핵심 특징: 프롬프트의 '이름: 내용' 줄을 나눈 것 (화면에 보일 것만) */
+  traits: { name: string; text: string }[];
+  /** 늘 지키는 것 (대본 검사로도 막는 것), 쉬운 말로 */
+  rules: string[];
+}
+
+/** 프롬프트 줄 가운데 화면에는 쉬운 말 규칙(rules)으로 대신 보여 줄 것 ('사용자 메시지' 같은 프롬프트 속 말이 들어 있다) */
+const PROFILE_HIDDEN = new Set(['정직한 한계', '이 성격의 표시']);
+
+/** 맛조수 화면(캐릭터 페이지)에 보여 줄 성격 요약. 글은 PERSONAS에서 그대로 가져온다 (프롬프트와 화면이 어긋나지 않게) */
+export function personaProfile(id: PersonaId = DEFAULT_PERSONA): PersonaProfile {
+  const p = PERSONAS[id];
+  const traits = p.traits
+    .map((t) => {
+      const m = t.match(/^([^:]{1,12}):\s*(.+)$/s);
+      // 프롬프트에만 필요한 영어 이름표("(young-home)")는 화면에서 뺀다
+      return m ? { name: m[1]!.trim(), text: m[2]!.replace(/\s?\((?:young-home|hobby-learner)\)/g, '') } : { name: '성격', text: t };
+    })
+    .filter((t) => !PROFILE_HIDDEN.has(t.name));
+  const rules = [
+    '실수하지 않아요. 흔한 실패는 많은 사람이 겪는 일로 꺼내고, 바로 원인과 선생님 노트로 이어 가요.',
+    '직접 만들거나 맛보거나 실험한 척하지 않아요 (AI예요).',
+    ...(p.sensoryRule ? ['맛·향·식감은 선생님 노트로만 전해요. 직접 말하는 건 보이고 들리는 것뿐이에요.'] : []),
+    ...(p.limitLine === 'rare' ? [`맛을 볼 수 없다는 한마디는 가끔만 해요 (최근 ${LIMIT_LINE_GAP}편 안에 쓰지 않았을 때 대본 하나에).`] : []),
+    ...(p.limitLine === 'always' ? ['맛을 볼 수 없다는 한마디를 대본마다 한 번, 짧고 담담하게 해요.'] : []),
+    '해요체로 말하고, 비명·과장된 반응·자기 비하 농담은 하지 않아요.',
+  ];
+  return { label: p.label, oneLine: p.oneLine, traits, rules };
+}
+
 /**
  * 맛·향·식감 규칙 (페르소나 공통, 지금 설정 제외).
  * 가상 인플루언서가 맛·향·촉감 경험을 내세우면 구매 의도가 떨어지고, 보이고 들리는 것은 차이가 작았다 (Zhou·Yan·Jiang 2024).

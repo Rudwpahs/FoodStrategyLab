@@ -8,6 +8,8 @@ import { CATEGORY_LABELS, type Category, type Emotion, type RecipeInput, type Sc
 /**
  * 훅(첫 장면) 유형 15종.
  * 근거와 사례는 docs/research/content-strategy/hook-library.md 에 정리했다.
+ * 맛조수는 기록 담당 AI 성격(persona.ts lab-notes)이다: 실수·당황·비명 없이, 실패는 시청자·일반 사례로만 꺼낸다.
+ * (유형 id는 저장된 대본·게시 기록과 맞추려고 그대로 둔다. skit은 예전 '상황극형'에서 '공감형'으로 바뀌었다)
  */
 export const HOOK_TYPES = [
   'question',
@@ -69,29 +71,29 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '완성 음식을 가리키는 한 문장',
     editing: '완성 → 처음으로 되감기 → 과정',
     accuracy: '화면 속 완성 모습이 실제 레시피 결과와 비슷해야 한다',
-    mascot: '접시를 들고 자랑하거나, 맛보려다 멈춤',
+    mascot: '완성 접시를 가리키며 소개하는 조수 (맛보는 연기는 하지 않는다)',
   },
   mistake: {
     label: '실수 경고형',
     interest: '"나도 저렇게 하는데?" 하는 걱정',
     fits: '연구자가 실제로 자주 보는 실수가 있는 레시피',
     avoid: '흔한 실수가 확인되지 않았을 때 (만들어 내지 않는다)',
-    firstScreen: '실패한 결과 + 맛조수 당황',
-    firstLine: '"잠깐!" + 실수 한 문장',
+    firstScreen: '실패한 결과 클로즈업 + 실수 내용 카드',
+    firstLine: '많은 사람이 틀리는 지점을 짚는 짧은 한 문장 (실수 내용은 카드로)',
     editing: '실패 → 원인 → 바른 방법 순서, 실패와 성공을 나란히',
     accuracy: '실수 내용은 연구자가 입력한 것만 쓴다',
-    mascot: '맛조수가 대신 실수해서 시청자가 민망하지 않게',
+    mascot: '실수는 시청자·일반 사례의 것. 맛조수는 그 지점을 짚고 노트로 원인을 전한다 (맛조수는 실수하지 않는다)',
   },
   myth: {
     label: '오해 반박형',
     interest: '내가 알던 게 틀렸을지 모른다는 궁금증',
     fits: '사람들이 흔히 잘못 아는 조리 상식이 있을 때',
     avoid: '근거가 연구자 경험뿐인데 "과학적으로 틀렸다"고 단정할 때',
-    firstScreen: '흔한 믿음을 적은 카드 + 맛조수 의심 표정',
+    firstScreen: '흔한 믿음을 적은 카드 + 맛조수 갸웃하는 표정',
     firstLine: '"이렇게 알고 계셨죠?"',
     editing: '믿음 → 멈춤 → 바른 설명',
     accuracy: '반박 근거가 원본에 있어야 하고, 단정 표현을 피한다',
-    mascot: '맛조수도 그렇게 알고 있었다는 설정',
+    mascot: '흔한 믿음과 노트를 나란히 놓고 차이를 짚는 조수 (맛조수가 속았던 척하지 않는다)',
   },
   compare: {
     label: '비교형',
@@ -102,7 +104,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '"이거 하면 뭐가 달라질까요?"',
     editing: '좌우 분할, 차이가 나는 부분 확대',
     accuracy: '그림 비교는 설명용임을 화면에 표시한다',
-    mascot: '두 접시 사이에서 고민하는 맛조수',
+    mascot: '두 방법이 갈리는 지점을 짚는 조수',
   },
   'curiosity-gap': {
     label: '호기심 공백형',
@@ -113,7 +115,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '"이 단계에 비밀이 있대요"',
     editing: '중간에 힌트, 마지막 전에 공개',
     accuracy: '공개하는 답이 실제로 핵심 원리여야 한다',
-    mascot: '연구자에게 들은 비밀을 전하는 조수',
+    mascot: '노트에서 결과를 가르는 한 단계를 찾아 전하는 조수',
   },
   'problem-solve': {
     label: '문제 해결형',
@@ -131,22 +133,22 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     interest: '직접 확인하는 과정을 보고 싶은 마음',
     fits: '조리 과학 원리가 분명한 레시피',
     avoid: '실제 실험 없이 "실험 결과"라고 말할 때',
-    firstScreen: '두 조건을 나란히 놓은 실험대',
+    firstScreen: '두 조건을 나란히 놓은 비교 화면 (설명용 연출 표시)',
     firstLine: '"그림으로 비교해 볼게요"',
     editing: '조건 소개 → 과정 → 결과 공개 → 원리',
     accuracy: '실제 실험 영상이 없으면 "설명용"으로 표시한다',
-    mascot: '실험 조수 역할 그대로',
+    mascot: '설명용 비교 화면에서 갈리는 지점을 짚는 조수 (직접 실험한 척하지 않는다)',
   },
   skit: {
-    label: '상황극형',
-    interest: '캐릭터의 실수와 반응을 보는 재미',
-    fits: '맛조수의 성격을 보여 주고 싶은 회차',
-    avoid: '실수 장면이 실제 조리 실패 원인과 다를 때',
-    firstScreen: '맛조수가 실패한 음식을 들고 당황',
-    firstLine: '"으악!" 같은 감탄 + 상황',
-    editing: '반응 클로즈업, 짧은 정적, 해결 후 반전',
+    label: '공감형',
+    interest: '"나도 이렇게 된 적 있는데" 하는 공감',
+    fits: '집에서 흔히 겪는 실패가 있는 음식',
+    avoid: '실패 모습이 실제 조리 실패 원인과 다를 때, 맛조수가 직접 망친 것처럼 보일 때',
+    firstScreen: '실패한 음식 클로즈업 (설명용 연출)',
+    firstLine: '시청자가 겪어 봤을 장면을 묻는 짧은 한 문장',
+    editing: '공감 → 원인(연구자 노트) → 바른 순서',
     accuracy: '실패 원인은 원리 설명과 맞아야 한다',
-    mascot: '덜렁대지만 배우는 조수',
+    mascot: '시청자 편에서 같이 원인을 찾는 조수 (실패는 시청자·일반 사례, 맛조수는 망치지 않는다)',
   },
   'surprising-fact': {
     label: '놀라운 사실형',
@@ -157,7 +159,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '"알고 계셨나요?" + 원리 한 문장',
     editing: '핵심어 강조 자막, 바로 근거 장면',
     accuracy: '원리 문장을 그대로 쓴다',
-    mascot: '놀라서 연구자 노트를 다시 보는 조수',
+    mascot: '노트 속 숫자·원리를 짚어 보여 주는 조수',
   },
   sensory: {
     label: '감각 자극형',
@@ -168,7 +170,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '식감 단어 하나로 시작',
     editing: '느린 확대, 대사 적게',
     accuracy: '식감 표현은 원본 문장에 있는 것만',
-    mascot: '맛보고 감탄하는 표정',
+    mascot: '보이는 변화(색·윤기)를 짚는 조수 (맛을 본 척하지 않는다)',
   },
   'time-saver': {
     label: '시간·편의형',
@@ -179,7 +181,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '"바쁜 날엔 이렇게!"',
     editing: '빠른 단계 넘김, 결과 확인',
     accuracy: '시간·분량은 원본 그대로',
-    mascot: '바쁜 척 뛰어다니는 조수',
+    mascot: '보관·준비 요령을 차분히 정리하는 조수',
   },
   story: {
     label: '스토리형',
@@ -190,7 +192,7 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     firstLine: '이야기의 첫 문장',
     editing: '이야기 → 원리 → 과정',
     accuracy: '이야기는 연구자가 입력한 것만',
-    mascot: '이야기를 듣고 신기해하는 조수',
+    mascot: '선생님 노트 속 이야기를 전하는 조수',
   },
   'expert-view': {
     label: '전문가 관점형',
@@ -208,11 +210,11 @@ export const HOOK_INFO: Record<HookType, HookInfo> = {
     interest: '예상이 뒤집히는 재미',
     fits: '흔한 오해가 있는 레시피',
     avoid: '반전 근거가 없을 때',
-    firstScreen: '맛조수가 확신하는 표정',
+    firstScreen: '흔한 믿음을 꺼내 묻는 맛조수 클로즈업',
     firstLine: '"~라고 생각했죠?"',
-    editing: '확신 → 정적 → 반전 공개',
+    editing: '흔한 믿음 → 정적 → 반전 공개',
     accuracy: '반전 내용이 원본·연구자 입력에 있어야 한다',
-    mascot: '자신만만하다가 깜짝 놀라는 조수',
+    mascot: '흔한 믿음을 꺼내 놓고 노트로 뒤집는 조수 (위트는 이유가 뒤집히는 작은 반전에서만)',
   },
 };
 
@@ -240,7 +242,7 @@ export interface HookCandidate {
 
 interface Facts {
   dish: string;
-  /** 꾸미는 말을 뺀 요리 이름 ("바삭한 김치전" → "김치전"): 실패 장면에서 "제 바삭한 김치전이…"처럼 앞뒤가 안 맞지 않게 */
+  /** 꾸미는 말을 뺀 요리 이름 ("바삭한 김치전" → "김치전"): 실패 장면에서 "바삭한 김치전이 이렇게 된 적…"처럼 앞뒤가 안 맞지 않게 */
   plainDish: string;
   topic: string;
   principle: string[];
@@ -321,8 +323,9 @@ const BUILDERS: Record<HookType, Builder> = {
   mistake: (f) => {
     if (!f.mistake) return { missing: '흔한 실수 (연구자가 실제로 자주 보는 실수)' };
     // 파일럿에서 실수 문장을 통째로 말하면 약 5초 걸렸다 → 말은 짧게, 실수 내용은 카드로 (첫 3초)
-    const line = `잠깐! ${f.plainDish}, 이렇게 하면 안 돼요!`;
-    return { line, firstScreen: '실패한 음식 클로즈업 + 실수 내용 카드', scenes: [scene('mistake', 'embarrassed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
+    // 실수는 많은 사람이 하는 일로 짚는다: 맛조수가 실수하거나 당황하지 않는다 (persona.ts lab-notes)
+    const line = `잠깐만요, ${josa(f.plainDish, '은/는')} 여기서 자주 틀려요.`;
+    return { line, firstScreen: '실패한 음식 클로즈업 + 실수 내용 카드', scenes: [scene('mistake', 'confident', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   myth: (f) => {
     if (!f.misconception) return { missing: '흔한 오해 (사람들이 잘못 아는 점)' };
@@ -353,9 +356,9 @@ const BUILDERS: Record<HookType, Builder> = {
   },
   'problem-solve': (f) => {
     if (!f.mistake) return { missing: '흔한 실수 또는 자주 겪는 실패' };
-    // 실패 내용은 화면 카드로 보여 주고, 말은 짧게 (첫 3초)
+    // 실패 내용은 화면 카드로 보여 주고, 말은 짧게 (첫 3초). 실패는 시청자의 것이고 맛조수는 해결법을 아는 쪽이다
     const line = `${f.plainDish}, 이렇게 실패했다면 해결법 있어요!`;
-    return { line, firstScreen: '실패한 음식 클로즈업 + 실패 내용 카드', scenes: [scene('mistake', 'disappointed', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
+    return { line, firstScreen: '실패한 음식 클로즈업 + 실패 내용 카드', scenes: [scene('mistake', 'confident', line, 'fail-closeup', { title: firstSentence(f.mistake) })], needsReview: [], uses: ['요리 이름', '흔한 실수'] };
   },
   experiment: (f) => {
     if (!f.causeEffect) return { missing: '"~하면 ~합니다" 형태의 핵심 원리 문장' };
@@ -372,12 +375,14 @@ const BUILDERS: Record<HookType, Builder> = {
     };
   },
   skit: (f) => {
-    const line = `으악! 제 ${josa(f.plainDish, '이/가')} 왜 이렇죠?`;
+    // 공감형: 시청자가 겪어 봤을 실패를 묻는다. 맛조수가 망친 접시를 들고 당황하던 예전 상황극 대신,
+    // 실패한 음식만 클로즈업으로(설명용 연출) 보여 주고 흔한 실수가 있으면 카드에 원본 문장을 그대로 띄운다
+    const line = `${josa(f.plainDish, '이/가')} 이렇게 된 적, 있으시죠?`;
     return {
       line,
-      firstScreen: '실패한 음식을 든 맛조수 당황',
-      scenes: [scene('mistake', 'embarrassed', line, 'fail')],
-      needsReview: f.mistake ? [] : ['맛조수의 실패 장면은 설명용 연출입니다. 실패 모습이 원리 설명과 맞는지 확인하세요.'],
+      firstScreen: f.mistake ? '실패한 음식 클로즈업 + 실수 내용 카드' : '실패한 음식 클로즈업',
+      scenes: [scene('mistake', 'curious', line, 'fail-closeup', f.mistake ? { title: firstSentence(f.mistake) } : undefined)],
+      needsReview: f.mistake ? [] : ['실패 장면은 설명용 연출입니다. 흔한 실수가 입력되지 않았으니 화면 속 실패 모습이 원리 설명과 맞는지 확인하세요.'],
       uses: f.mistake ? ['요리 이름', '흔한 실수'] : ['요리 이름'],
     };
   },
@@ -418,7 +423,7 @@ const BUILDERS: Record<HookType, Builder> = {
   twist: (f) => {
     if (!f.misconception) return { missing: '흔한 오해 (반전에 쓸 믿음)' };
     const line = `${firstSentence(f.misconception).replace(/[.!?。]$/, '')}, 라고 생각했죠? 반전이 있어요!`;
-    return { line, firstScreen: '자신만만한 맛조수', scenes: [scene('question', 'confident', line, 'react')], needsReview: [], uses: ['흔한 오해'] };
+    return { line, firstScreen: '흔한 믿음을 꺼내 묻는 맛조수 클로즈업', scenes: [scene('question', 'curious', line, 'react')], needsReview: [], uses: ['흔한 오해'] };
   },
 };
 

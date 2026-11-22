@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SAMPLE_RECIPES } from '../samples.ts';
 import { formatIngredient } from '../format.ts';
 import { BRAND } from '../brand.ts';
-import { DEFAULT_PERSONA, LIMIT_LINE_GAP, PERSONAS, PERSONA_IDS, SENSORY_RULE, findFakeExperience, hasLimitLine, isPersonaId, limitLineInstruction } from './persona.ts';
+import { DEFAULT_PERSONA, LIMIT_LINE_GAP, PERSONAS, PERSONA_IDS, SENSORY_RULE, findFakeExperience, hasLimitLine, isPersonaId, limitLineInstruction, personaProfile } from './persona.ts';
 import { finalizeStory, storySystem, storyUser, type StoryDraft } from './story.ts';
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
@@ -47,6 +47,30 @@ describe('맛조수 성격 (페르소나)', () => {
     expect(isPersonaId('recorder')).toBe(true);
     expect(isPersonaId('robot')).toBe(false);
     expect(isPersonaId(undefined)).toBe(false);
+  });
+});
+
+describe('맛조수 화면에 보이는 성격 요약 (캐릭터 페이지)', () => {
+  it('기본 성격(lab-notes)의 한 줄 소개와 핵심 특징을 프롬프트와 같은 글로 보여 준다', () => {
+    const p = personaProfile();
+    expect(p.oneLine).toBe(PERSONAS['lab-notes'].oneLine);
+    expect(p.label).toBe(PERSONAS['lab-notes'].label);
+    const names = p.traits.map((t) => t.name);
+    for (const n of ['정체', '원하는 것', '믿는 것', '잘하는 것', '관계', '말투', '시청 대상에 따라']) expect(names).toContain(n);
+    // 화면 글은 프롬프트 글 그대로 (이름표만 떼고, 프롬프트에만 필요한 영어 이름표는 뺀다)
+    for (const t of p.traits) expect(PERSONAS['lab-notes'].traits.some((src) => src.replace(/\s?\((?:young-home|hobby-learner)\)/g, '') === `${t.name}: ${t.text}`), t.name).toBe(true);
+  });
+
+  it('프롬프트 속 말("사용자 메시지", 영어 이름표)은 화면에 내보내지 않고, 늘 지키는 것을 쉬운 말로 알려 준다', () => {
+    const p = personaProfile('lab-notes');
+    const shown = [...p.traits.map((t) => `${t.name} ${t.text}`), ...p.rules].join('\n');
+    expect(shown).not.toMatch(/사용자 메시지|young-home|hobby-learner/);
+    expect(p.rules.join(' ')).toContain('실수하지 않아요');
+    expect(p.rules.join(' ')).toContain('척하지 않아요');
+    // 맛 한계 한마디는 가끔만 (lab-notes = rare)
+    expect(p.rules.join(' ')).toContain(`최근 ${LIMIT_LINE_GAP}편`);
+    expect(personaProfile('ai-honest').rules.join(' ')).toContain('대본마다 한 번');
+    expect(personaProfile('recorder').rules.join(' ')).not.toContain('맛을 볼 수 없다는 한마디');
   });
 });
 

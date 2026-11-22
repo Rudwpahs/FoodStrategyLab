@@ -66,7 +66,7 @@ export const KitchenCover: React.FC<{ title: string; recipe: RecipeInput; photoC
               letterSpacing: -1,
             }}
           >
-            🧪 {BRAND.series} · 레시피 {BRAND.researcherTitle} {BRAND.researcher}
+            📒 {BRAND.series} · 레시피 {BRAND.researcherTitle} {BRAND.researcher}
           </div>
         </div>
       )}

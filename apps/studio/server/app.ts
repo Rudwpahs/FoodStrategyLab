@@ -398,7 +398,7 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
    */
   api.post('/voice/samples', (req, res) => {
     if (samplesJob?.status === 'running') return res.json(samplesJob);
-    const text = String(req.body?.text ?? '').trim().slice(0, 200) || '이희재의 맛 연구소, 오늘의 실험!';
+    const text = String(req.body?.text ?? '').trim().slice(0, 200) || '이희재의 맛 연구소, 오늘 노트를 펼칠게요.';
     const tempo = isVoiceTempo(Number(req.body?.tempo)) ? Number(req.body.tempo) : voiceTempo();
     const presets = voicePresets();
     if (!presets.length) throw new HttpError(409, '고를 수 있는 목소리 목록이 없어요.');

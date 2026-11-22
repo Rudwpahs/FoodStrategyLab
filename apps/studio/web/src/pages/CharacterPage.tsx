@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BRAND, EMOTIONS, EMOTION_LABELS, brandDescription } from '@mat-lab/recipe-core';
+import { BRAND, DEFAULT_PERSONA, EMOTIONS, EMOTION_LABELS, brandDescription, personaProfile } from '@mat-lab/recipe-core';
 import { COLORS, Character } from '@mat-lab/video';
 import { useApp } from '../App.tsx';
 import { VoicePanel } from '../components/VoicePanel.tsx';
@@ -35,6 +35,9 @@ const CharacterGrid: React.FC<{ talking: boolean }> = ({ talking }) => {
   );
 };
 
+/** 사용자가 고른 성격 (persona.ts 기본값 lab-notes): 한 줄 소개·핵심 특징·늘 지키는 것. 글은 대본 프롬프트와 같은 곳에서 온다 */
+const profile = personaProfile(DEFAULT_PERSONA);
+
 export const CharacterPage: React.FC = () => {
   const { meta } = useApp();
   const [talking, setTalking] = useState(false);
@@ -46,9 +49,30 @@ export const CharacterPage: React.FC = () => {
           <h1>
             {BRAND.character} <span className="tentative">(가칭)</span>
           </h1>
-          <div className="lead">귀엽지만 유치하지 않은 조리 연구소 조수예요. 성급하고 궁금한 게 많아 가끔 실수하고, 시청자 대신 질문해요.</div>
+          <div className="lead">{profile.oneLine}</div>
         </div>
       </div>
+
+      <section className="card stack" aria-label="성격">
+        <div className="card-head">
+          <h2>성격</h2>
+          <span className="muted">{profile.label}</span>
+        </div>
+        {profile.traits.map((t) => (
+          <div className="line" key={t.name}>
+            <b>{t.name}</b>
+            <div>{t.text}</div>
+          </div>
+        ))}
+        <div className="small">
+          <b>늘 지키는 것</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+            {profile.rules.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
       <VoicePanel />
 
@@ -67,11 +91,12 @@ export const CharacterPage: React.FC = () => {
       <div className="grid2">
         <section className="card stack" aria-label="영상 브랜딩 규칙">
           <h2>영상 브랜딩 규칙</h2>
-          <div className="line"><b>오프닝</b><div>"{BRAND.openingLine}"</div></div>
-          <div className="line"><b>원리</b><div>대사 "{BRAND.noteLead} …" · 화면 카드 "{BRAND.notePhrase}"</div></div>
-          <div className="line"><b>팁</b><div>대사 "{BRAND.tipLead} …" · 화면 카드 "{BRAND.tipPhrase}"</div></div>
-          <div className="line"><b>엔딩</b><div>"…{BRAND.labName}였어요" (연구소 이름은 대사에서 한 번만)</div></div>
+          <div className="line"><b>시리즈</b><div>"{BRAND.series}"</div></div>
+          <div className="line"><b>원리</b><div>화면 카드 "{BRAND.notePhrase}"</div></div>
+          <div className="line"><b>팁</b><div>화면 카드 "{BRAND.tipPhrase}"</div></div>
+          <div className="line"><b>엔딩</b><div>마지막 대사에 "{BRAND.labName}"을 한 번만</div></div>
           <div className="line"><b>설명</b><div>{brandDescription(true)}</div></div>
+          <div className="muted small">원리·팁 장면의 첫마디와 엔딩 문장은 한 문장으로 고정하지 않고 레시피마다 달라져요 (같은 말이 영상마다 되풀이되지 않게).</div>
           <div className="muted small">'검토한' 표현은 실제 승인이 끝난 콘텐츠에만 자동으로 들어가요.</div>
         </section>
         <section className="card stack" aria-label="고정 규격">
