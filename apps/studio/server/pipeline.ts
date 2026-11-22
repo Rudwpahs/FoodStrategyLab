@@ -270,7 +270,7 @@ async function runRender(repo: Repo, projectId: number, version: number, renderI
     if (voice.provider === 'edge') qa.issues.push({ level: 'warning', code: 'skipped', message: 'VoiceStudio(맛조수 목소리)에 연결되지 않아 edge-tts 기본 음성으로 만들었어요. VoiceStudio를 켠 뒤 다시 만들어 주세요.' });
     // 받아쓰기로 대사와 음성을 맞춰 본다: 중간에 끊겨 만들어진 음성은 한 번 다시 만든다
     set('음성 확인', 0.05);
-    await checkVoiceLines(script, qa, () => job.canceled);
+    await checkVoiceLines(script, qa, () => job.canceled, dishMustHear(recipe));
     let { timings } = await previewTimeline(script, origin);
     const photo = repo.getPhoto(projectId);
     // 촬영 영상의 길이(짧으면 천천히 틀거나 반복)와 소리(있으면 목소리 밑에 작게 깔기)를 미리 잰다
@@ -483,8 +483,8 @@ type Heard = { text: string; m: ReturnType<typeof lineMatch>; transcript: Transc
  * 녹음마다 가장 나은 것(안 들린 낱말 수가 적고, 같으면 대사 일치율이 높은 것)을 남긴다: 새 녹음이 더 나쁘면
  * 앞의 녹음으로 되돌린다. 끝까지 안 들리면 꼭 들어 보라고 남긴다. warned: 안 들린 낱말을 이미 알렸는지
  */
-async function retakeHardWords(scene: Script['scenes'][number], index: number, file: string, first: Heard, qa: RenderQa, shouldStop: () => boolean): Promise<Heard & { warned: boolean }> {
-  const hard = hardWords(scene.line);
+async function retakeHardWords(scene: Script['scenes'][number], index: number, file: string, first: Heard, qa: RenderQa, shouldStop: () => boolean, mustHear: string[]): Promise<Heard & { warned: boolean }> {
+  const hard = hardWords(scene.line, mustHear);
   const unheard = (text: string) => hard.filter((h) => !hardWordHeard(h, text));
   const before = unheard(first.text);
   if (!before.length) return { ...first, warned: false };
@@ -538,7 +538,18 @@ async function retakeHardWords(scene: Script['scenes'][number], index: number, f
  * - 뒷부분이 없거나(중간에 끊겨 만들어짐) 대사와 많이 다르면 그 음성을 한 번 다시 만든다
  * - 그래도 다르면 문제로 남긴다. 받아쓰기도 틀릴 수 있어 '다르게 들림'은 경고로 둔다
  */
-export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: () => boolean = () => false) {
+/**
+ * 받아쓰기로 꼭 확인할 요리 말: 요리 이름의 마지막 낱말(바삭한 김치전 → 김치전)과 첫 재료 이름의 마지막 낱말(잘 익은 김치 → 김치).
+ * 대사에서는 "호두정과"보다 "호두를"처럼 주재료로 더 자주 부른다.
+ */
+export function dishMustHear(recipe: Pick<RecipeInput, 'dishName' | 'ingredients'>): string[] {
+  const lastWord = (t: string) => (t.trim().split(/\s+/).at(-1) ?? '').replace(/[^가-힣]/g, '');
+  const words = [lastWord(recipe.dishName), lastWord(recipe.ingredients[0]?.name ?? '')].filter((w) => w.length >= 2);
+  return [...new Set(words)];
+}
+
+/** mustHear: 발음을 고치지 않았어도 문장 첫머리에서 또렷해야 하는 말 (dishMustHear) */
+export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: () => boolean = () => false, mustHear: string[] = []) {
   const provider = await ttsProvider().catch(() => 'none' as const);
   const identity = await voiceIdentity(provider).catch(() => null);
   let checked = 0;
@@ -574,7 +585,7 @@ export async function checkVoiceLines(script: Script, qa: RenderQa, shouldStop: 
       text = heard2.text;
       transcript = heard2;
     }
-    const hard = await retakeHardWords(scene, i, a.file, { text, m, transcript }, qa, shouldStop);
+    const hard = await retakeHardWords(scene, i, a.file, { text, m, transcript }, qa, shouldStop, mustHear);
     ({ m, text } = hard);
     if (m.critical.length) qa.issues.push({ level: 'warning', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1}에서 불 세기 "${m.critical.join('", "')}"이(가) 다르게 들려요 (받아쓰기: "${text.trim().slice(0, 40)}"). 꼭 들어 보고 확인해 주세요.` });
     if (m.truncated) qa.issues.push({ level: 'error', code: 'mismatch', scene: i + 1, sceneId: scene.id, message: `장면 ${i + 1} 음성이 대사 중간에서 끊겨요 (들린 말: "${text.trim().slice(0, 40)}").` });

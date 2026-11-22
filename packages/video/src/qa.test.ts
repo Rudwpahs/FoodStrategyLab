@@ -297,6 +297,18 @@ describe('발음을 고친 낱말이 들렸는지 (hardWordHeard)', () => {
     expect(hardWordHeard({ written: '떫어요', said: '떨버요' }, '한입 먹자마자 떴어요.')).toBe(false);
     expect(hardWordHeard({ written: '떫어요', said: '떨버요' }, '한 입 먹자마자 떨어요.')).toBe(false);
   });
+  it('요리 말: 첫소리가 다르게 들리면 안 들린 것 (견본 자동 검사: "호두를" → "코드를")', () => {
+    const walnut = { written: '호두', said: '호두' };
+    expect(hardWordHeard(walnut, '코드를 튀기기 전에 왜 먼저 데칠까요?')).toBe(false);
+    expect(hardWordHeard(walnut, '포도 500g에 물')).toBe(false);
+    expect(hardWordHeard(walnut, '호두를 튀기기 전에')).toBe(true);
+  });
+  it('희는 표준 발음 [히]: 받아쓰기가 "히재"로 적어도 맞게 본다', () => {
+    const name = { written: '희재', said: '희재' };
+    expect(hardWordHeard(name, '히재 선생님은 마지막에 넣어요')).toBe(true);
+    expect(hardWordHeard(name, '희재 선생님은')).toBe(true);
+    expect(hardWordHeard(name, '피제 선생님은 거피들깨가루를')).toBe(false);
+  });
   it('이름: 성이 빠지거나 다르게 들리면 안 들린 것', () => {
     const name = { written: '이희재', said: '이희재' };
     expect(hardWordHeard(name, '이 희재의 맛 연구소였어요.')).toBe(true);

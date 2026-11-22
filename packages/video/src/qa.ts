@@ -186,9 +186,11 @@ export const HARD_WORD_MATCH = 0.86;
  * 그대로 들어 있지 않으면 낱말 길이 ±1 글자 창으로 훑어 자모 단위로 가장 많이 같은 곳을 찾는다.
  */
 export function hardWordHeard(word: HardWord, heard: string): boolean {
-  const target = norm(word.said);
+  // '희'는 표준 발음이 [히]라서 받아쓰기가 "히재"로 적어도 맞게 본다 (자모 'ㅢ'를 'ㅣ'로 맞춘 뒤 비교)
+  const flat = (t: string) => t.normalize('NFD').replace(/\u1174/g, '\u1175').normalize('NFC');
+  const target = flat(norm(word.said));
   if (!target) return true;
-  const h = [...norm(speakable(heard)).replace(/[0-9A-Za-z]/g, '')];
+  const h = [...flat(norm(speakable(heard)).replace(/[0-9A-Za-z]/g, ''))];
   if (h.join('').includes(target)) return true;
   const t = target.normalize('NFD');
   const n = [...target].length;

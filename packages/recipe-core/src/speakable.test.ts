@@ -203,3 +203,17 @@ describe('받아쓰기로 꼭 확인할 낱말 (hardWords)', () => {
     expect(hardWords('설탕 1컵, 반죽은 얇게, 넓은 팬에')).toEqual([]);
   });
 });
+
+describe('꼭 또렷해야 하는 말 (이름·요리 이름·주재료)', () => {
+  it('성 없이 부르는 "희재 선생님"도 확인한다 (어디에 나오든)', () => {
+    expect(hardWords('희재 선생님은 거피들깨가루를 마지막에 넣어요.')).toEqual([{ written: '희재', said: '희재' }]);
+    expect(hardWords('그래서 희재 선생님은 데쳐요.')).toEqual([{ written: '희재', said: '희재' }]);
+  });
+  it('요리 이름·주재료는 문장 첫머리에서만 (문장 가운데 ㅎ은 사람도 약하게 읽는다)', () => {
+    const must = ['호두정과', '호두'];
+    expect(hardWords('호두를 튀기기 전에 왜 먼저 데칠까요?', must)).toEqual([{ written: '호두', said: '호두' }]);
+    expect(hardWords('호두정과, 왜 데친 뒤에 튀길까요?', must)).toEqual([{ written: '호두정과', said: '호두정과' }]);
+    expect(hardWords('데친 호두는 찬물에 헹궈 주세요.', must)).toEqual([]);
+    expect(hardWords('그다음 말려요. 호두는 140도에서 튀겨요.', must)).toEqual([{ written: '호두', said: '호두' }]);
+  });
+});

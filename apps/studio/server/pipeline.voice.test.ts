@@ -16,7 +16,7 @@ const tts = vi.hoisted(() => ({
 }));
 vi.mock('./tts.ts', () => tts);
 
-const { checkVoiceLines, startRender } = await import('./pipeline.ts');
+const { checkVoiceLines, dishMustHear, startRender } = await import('./pipeline.ts');
 const { openDb } = await import('./db.ts');
 const { Repo } = await import('./repo.ts');
 type RenderDeps = import('./pipeline.ts').RenderDeps;
@@ -125,6 +125,33 @@ describe('발음을 고쳐 넘긴 낱말 (떫은맛·이희재) 다시 녹음', 
     await checkVoiceLines(script, qa);
     expect(tts.synthesize).not.toHaveBeenCalled();
     expect(qa.issues).toEqual([]);
+  });
+});
+
+describe('요리 이름·주재료 (문장 첫머리에서 또렷해야 하는 말)', () => {
+  it('요리 이름과 첫 재료 이름의 마지막 낱말', () => {
+    expect(dishMustHear({ dishName: '바삭한 김치전', ingredients: [{ name: '잘 익은 김치', amount: '200g' }] })).toEqual(['김치전', '김치']);
+    expect(dishMustHear(SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!)).toEqual(['호두정과', '호두']);
+    expect(dishMustHear({ dishName: '반숙 달걀', ingredients: [{ name: '물', amount: '1L' }] })).toEqual(['달걀']);
+  });
+
+  it('대사 첫머리의 주재료가 다르게 들리면 다시 녹음한다', async () => {
+    const first = audio('dish1.mp3');
+    fs.writeFileSync(first.file, 'take1');
+    tts.cachedAudio.mockImplementation(() => first);
+    let n = 1;
+    tts.synthesize.mockImplementation(async () => {
+      fs.writeFileSync(first.file, `take${++n}`);
+      return first;
+    });
+    const line = '호두를 튀기기 전에 왜 먼저 데칠까요?';
+    tts.transcribeAudio
+      .mockImplementationOnce(async () => ({ text: '코드를 튀기기 전에 왜 먼저 데칠까요?', words: [] }))
+      .mockImplementationOnce(async () => ({ text: '호두를 튀기기 전에 왜 먼저 데칠까요?', words: [] }));
+    const qa: RenderQa = { issues: [], checked: [], fixed: [] };
+    await checkVoiceLines({ title: 't', scenes: [{ id: 's1', type: 'intro', emotion: 'joy', line }] }, qa, () => false, ['호두정과', '호두']);
+    expect(tts.synthesize).toHaveBeenCalledTimes(1);
+    expect(qa.fixed.join(' ')).toContain('"호두" 발음이 또렷하지 않아서 다시 녹음했어요');
   });
 });
 

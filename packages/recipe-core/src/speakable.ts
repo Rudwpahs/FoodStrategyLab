@@ -359,6 +359,8 @@ export function respellDoubleFinalLB(text: string): string {
  * 그래서 글자는 그대로 두고 성 뒤만 띄운다. 자막은 원문 그대로 ("이희재의").
  */
 const NAMES: [RegExp, string][] = [[/이희재/g, '이 희재']];
+/** 발음은 그대로 두지만 받아쓰기로 꼭 확인할 이름 (성 없이 부르는 "희재 선생님") */
+const MUST_HEAR_NAMES = [/희재/];
 
 /** 낱말 발음만 고친다 (겹받침 'ㄼ', 이름). 숫자는 그대로 */
 const respellWords = (text: string) => NAMES.reduce((out, [re, to]) => out.replace(re, to), respellDoubleFinalLB(text));
@@ -388,18 +390,29 @@ export interface HardWord {
  * 녹음 뒤 받아쓰기로 따로 확인한다 (pipeline.ts). 확인할 부분은 바뀐 글자와 그 앞뒤 한 글자까지:
  * 조사까지 넣으면 틀리게 읽은 말("떳은맛이")도 맞는 말과 비슷해 보인다.
  * 숫자는 넣지 않는다 (받아쓰기가 숫자나 글자로 제각각 적고, 엔진이 잘 읽는다).
+ *
+ * 발음을 고치지 않아도 꼭 또렷해야 하는 말도 함께 본다:
+ * - 연구자 이름: 성 없이 부르는 "희재 선생님"까지 (어디에 나오든)
+ * - mustHear(요리 이름·주재료, 예: 호두정과·호두): 문장 첫머리에 나올 때만. 견본 자동 검사(큰 받아쓰기 모델)에서
+ *   대사 첫 어절 "호두를"이 "코드를"로 들렸다 (2026-11-22). 문장 가운데의 'ㅎ'은 사람도 약하게 읽어서("데친 호두는"
+ *   → [데치노두는]) 그 자리까지 보면 맞게 읽은 것도 다시 녹음하게 된다.
  */
-export function hardWords(line: string): HardWord[] {
+export function hardWords(line: string, mustHear: string[] = []): HardWord[] {
   const out: HardWord[] = [];
-  for (const token of line.split(/\s+/)) {
+  const keep = mustHear.map((w) => w.replace(/[^가-힣]/g, '')).filter((w) => w.length >= 2);
+  const tokens = line.split(/\s+/).filter(Boolean);
+  for (const [ti, token] of tokens.entries()) {
     const chars = [...token.replace(/[^가-힣]/g, '')];
     if (!chars.length) continue;
     const word = chars.join('');
     const said = [...respellWords(word).replace(/\s+/g, '')];
     const changed = new Set<number>();
     chars.forEach((c, i) => c !== said[i] && changed.add(i));
-    // 이름은 글자는 그대로 두고 띄어쓰기만 바꾸므로 이름 자리 전체를 본다
-    for (const [re] of NAMES) for (const m of word.matchAll(new RegExp(re.source, 'g'))) for (let k = 0; k < m[0].length; k++) changed.add(m.index + k);
+    // 문장 첫머리: 대사의 첫 어절이거나 앞 어절이 문장 부호로 끝남
+    const sentenceStart = ti === 0 || /[.!?,…]$/.test(tokens[ti - 1]!);
+    // 이름은 글자는 그대로 두고 띄어쓰기만 바꾸므로 이름 자리 전체를 본다. 성 없이 부르는 이름, 문장 첫머리의 요리 이름·주재료도
+    const marks = [...NAMES.map(([r]) => r), ...MUST_HEAR_NAMES, ...(sentenceStart && /^[가-힣]/.test(token) ? keep.map((w) => new RegExp(`^${w}`)) : [])];
+    for (const re of marks) for (const m of word.matchAll(new RegExp(re.source, 'g'))) for (let k = 0; k < m[0].length; k++) changed.add(m.index + k);
     if (!changed.size) continue;
     const lo = Math.min(...changed);
     const hi = Math.max(...changed);
