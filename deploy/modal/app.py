@@ -403,7 +403,8 @@ def web() -> None:
 # 운영 데이터 저장소(matlab-data)는 붙이지 않는다: 운영 DB·콘텐츠를 읽거나 바꾸지 않고, 임시 폴더에서만 만든다.
 # 실행: GitHub Actions의 'Render sample video' (수동) → modal run deploy/modal/app.py::sample --dish 호두정과
 # 이야기 대본(style="ai-story")은 Claude를 부르므로 운영과 같은 비밀값(matlab-studio의 ANTHROPIC_API_KEY)을 붙인다
-@app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
+# 컨테이너 하나에 견본 하나만 (같은 컨테이너를 다시 쓰면 앞 견본의 목소리 중계 포트가 남아 "Address already in use"로 실패했다, 2026-11-23)
+@app.function(image=web_image, cpu=8.0, memory=16384, timeout=3600, max_inputs=1, secrets=[modal.Secret.from_name("matlab-studio"), modal.Secret.from_name("matlab-settings")])
 def render_sample(dish: str = "호두정과", style: str = "", audience: str = "", story_type: str = "", story: str = "") -> dict:
     import sys
     import tempfile
