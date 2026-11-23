@@ -24,6 +24,11 @@ export const MUSIC_LABELS: Record<MusicTrack, string> = {
  * - 궁금증(이 단계는 왜?·두 방법 비교·선생님께 묻다) → 피치카토
  * - 빠른 호흡(한눈에 레시피·보관·남은 재료) → 신나는 리듬
  * - 나머지(실패 원인 하나·조리기능장의 정석 등) → 우쿨렐레
+ * 웃음 형식 (2026-11-23): 돌려쓰기로 웃음 형식끼리 연달아 나오지 않으므로 곡이 겹쳐도 이어 듣지 않는다.
+ * - 부엌 다큐 → 오르골 (가진 곡 가운데 가장 차분하다. 다큐풍 CC0 곡은 출처가 분명한 것을 아직 받지 못했다)
+ * - 글자 그대로 → 피치카토 (엉뚱 가이드처럼 살금살금 들어가다 풀리는 말놀이)
+ * - 사연 한 통·적당히의 나라 → 우쿨렐레 (라디오 사연처럼 가볍고 따뜻하게)
+ * - 이 연구소에서는·이럴 때 꼭 있는 일 → 신나는 리듬 (짧은 선언·목록을 빠른 호흡으로)
  * 2026-11-19 전에 저장된 대본의 갈래(추리·선물 등)도 예전처럼 고른다.
  */
 export function musicFor(script: Pick<Script, 'style' | 'hookType'>): MusicTrack {
@@ -35,12 +40,14 @@ export function musicFor(script: Pick<Script, 'style' | 'hookType'>): MusicTrack
     case 'gift':
     case 'memory':
     case 'story':
+    case 'documentary':
       return 'musicbox';
     case 'why':
     case 'compare':
     case 'qa':
     // 진지한 엉뚱 가이드: 태연한 말투에 살금살금 피치카토가 어울린다
     case 'deadpan':
+    case 'wordplay':
     case 'mystery':
     case 'myth':
     case 'comedy':
@@ -52,7 +59,12 @@ export function musicFor(script: Pick<Script, 'style' | 'hookType'>): MusicTrack
     case 'bet':
     case 'rescue':
     case 'experiment':
+    case 'town-rules':
+    case 'relatable':
       return 'upbeat';
+    case 'listener-story':
+    case 'vague-vs-note':
+      return 'ukulele';
     default:
       return 'ukulele';
   }

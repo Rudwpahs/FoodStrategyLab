@@ -56,7 +56,7 @@ export class StoryWriter {
   }
 
   /** persona: 맛조수 성격 (견본 비교용. 비우면 기본 설정) */
-  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType; mustAudience?: Audience } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
+  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; recentVideos?: string[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType; mustAudience?: Audience } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
     if (!this.available()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const system = storySystem(opts.persona);

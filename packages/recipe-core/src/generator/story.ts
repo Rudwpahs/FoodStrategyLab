@@ -5,6 +5,21 @@ import { checkScript, type Issue } from '../fidelity.ts';
 import { findHealthClaims } from '../wordLists.ts';
 import { CATEGORY_LABELS, EMOTIONS, GAGS, PLACES, SCENE_TYPES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
 import { gagFromLine, gagMenu, gagPlan } from '../gags.ts';
+import {
+  DOC_CUES,
+  FAMILY_QUOTE,
+  LETTER_FICTION,
+  LETTER_REAL,
+  PEOPLE_LABELS,
+  WORDPLAY_TURN,
+  findFakeRealStory,
+  findSufferingFood,
+  isHumorType,
+  isLetterTitle,
+  measuredIngredients,
+  pickHumorType,
+  wordplayWords,
+} from './humor.ts';
 import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE, findFakeExperience, limitLineInstruction, type PersonaId } from './persona.ts';
 import { enforceSourceData } from './prompt.ts';
 import { estimateScriptSeconds } from './template.ts';
@@ -46,7 +61,26 @@ export const AUDIENCE_INFO: Record<Audience, { label: string; short: string; car
  * 2026-11-19 사용자 지적("수사 파일·내기는 유치하다, 레파토리가 똑같다")과 조사로 추리·내기·구출·선물·시간 싸움을 뺐다.
  * 형식별 근거·맞는 시청자는 조사 문서 2장.
  */
-export const STORY_TYPES = ['one-fix', 'compare', 'standard', 'why', 'quick', 'occasion', 'season', 'leftover', 'qa', 'heritage', 'deadpan'] as const;
+export const STORY_TYPES = [
+  'one-fix',
+  'compare',
+  'standard',
+  'why',
+  'quick',
+  'occasion',
+  'season',
+  'leftover',
+  'qa',
+  'heritage',
+  // 웃음 형식 (humor.ts HUMOR_TYPES, 돌려쓰기로 10편 중 3~4편만): 근거는 persona 문서 9절
+  'deadpan',
+  'wordplay',
+  'documentary',
+  'listener-story',
+  'town-rules',
+  'relatable',
+  'vague-vs-note',
+] as const;
 export type StoryType = (typeof STORY_TYPES)[number];
 
 export interface StoryTypeInfo {
@@ -137,6 +171,65 @@ export const STORY_TYPE_INFO: Record<StoryType, StoryTypeInfo> = {
     guide: '유래·역사·추억은 원본 "이야기"에 있는 것만. 없으면 이야기를 지어내지 말고 전통 방식의 이유(원리)만 말한다',
     fits: ['hobby-learner'],
   },
+  /**
+   * 아래는 2026-11-23에 더한 웃음 형식 (사용자: "엉뚱 가이드만 말고 다른 웃음도, 내가 든 것에 얽매이지 말고 정해라").
+   * 지시문은 예문 대신 설명으로 쓴다 (따옴표로 든 말은 작가가 그대로 베낀다). 웃음의 정점은 진짜 정보에 붙인다:
+   * 웃긴 것과 정보가 따로 놀면 웃긴 장면만 기억난다 (Schmidt 1994). "아하" 하고 풀리는 웃음만 유능함 인상을 올린다 (Hoang 외 2023, Howe 외 2023).
+   */
+  wordplay: {
+    label: '글자 그대로',
+    beats: '요리 말 하나를 꺼냄(훅) → 그 말의 다른 뜻을 글자 그대로 보여 주는 장면 1~2개(type "gag", 장면마다 그림 gag 하나) → 그 뜻이 아니라고 밝히는 전환 한 줄 → 요리에서의 진짜 뜻과 원본 원리·재료·순서 → 처음 말로 돌아가는 정리 한 줄',
+    guide:
+      '원본 조리순서·팁에 실제로 나오는 요리 말 하나만 고른다 (사용자 메시지의 말장난 후보 가운데서). 맛조수가 뜻을 몰라 틀리는 게 아니라, 다른 뜻을 알면서 일부러 보여 주는 말놀이다: 실수·착각·헷갈렸다는 말은 쓰지 마. ' +
+      '다른 뜻 장면은 그 뜻을 그대로 그린 일(우체통으로 보내는 일, 부채로 바람을 보내는 일처럼)로 담담하게, 재료 이름·분량·시간·온도 없이. 다른 뜻 장면을 tip·explain으로 쓰지 마 (연구자 카드가 붙어 답이 미리 보여). ' +
+      '전환 줄에서 그 뜻이 아니라고 분명히 말하고, 그 뒤는 원본 그대로 정확하게. 연구자 노트·팁(explain·tip)은 전환 줄 뒤에만. 말장난은 대본 하나에 낱말 하나, 진짜 뜻과 이어지지 않는 억지 말장난은 쓰지 마',
+    fits: ['hobby-learner', 'young-home'],
+  },
+  documentary: {
+    label: '부엌 다큐',
+    beats: '자연 다큐 해설자처럼 낮고 느린 관찰로 시작 → 원본 순서대로 팬·냄비 속 변화를 지켜봄(보이는 색·가장자리·거품, 들리는 소리 같은 익음 신호) → 결정적 순간 하나(원본 원리) → 재료·조리 → 다큐식 마무리 한 줄',
+    guide:
+      '말투는 끝까지 진지하고 차분한 자연 다큐 해설: 현재형으로 지금 눈앞의 변화를 묘사하고, 문장을 짧게 끊어 여운을 둔다. 웃음은 장엄한 말투와 작은 부엌 일의 차이에서만 나오게. ' +
+      '해설 내용은 원본 조리순서·원리에 있는 보이거나 들리는 신호만 (원본에 없는 색·소리·시간을 지어내지 마). 맛·향·식감은 맛조수가 느낀 것처럼 말하지 마. ' +
+      '음식을 아프거나 괴로워하는 생명처럼 그리지 마 (비명·고통·희생 같은 말 금지). 지켜보는 대상은 변화이지 인물이 아니다. 조리 장면은 visual "sizzle"이 잘 맞는다',
+    fits: ['hobby-learner', 'young-home'],
+  },
+  'listener-story': {
+    label: '사연 한 통',
+    beats: '사연 카드로 시작(오늘 사연 한 통) → 평범한 부엌 상황 → 작은 일이 조금씩 커짐 → 한 줄 반전(원인은 원본의 흔한 실수였다) → 맛조수의 짧고 담담한 반응 한마디 → 진짜 해결(원본 원리·재료·조리) → 사연으로 돌아가는 정리',
+    guide:
+      '라디오 사연처럼 태연하게 읽어 주는 형식. 사연은 둘 중 하나만: ' +
+      `(가) 원본 "전문가답변"에 실제로 있는 질문·일화 — 사연 카드 cardTitle "${LETTER_REAL}", cardItems에 답변 원문 문장을 바꾸지 않고. ` +
+      `(나) 그 밖에는 누가 봐도 꾸민 가상 이야기 — 사연 카드 cardTitle "${LETTER_FICTION}", 인물은 이름 없이 어느 집 정도로, 내용은 원본 "흔한실수"를 짧은 장면으로 늘린 것. ` +
+      '가상 이야기를 진짜처럼 소개하지 마: 누가 보냈다, 실제로 있었던 일, 제보, 청취자, 실화 같은 말 금지. 사연 카드는 type "question" 장면 하나에만. ' +
+      '사연 속 틀린 방법은 원본의 흔한 실수 하나만이고 반전 뒤 바로 바로잡는다. 불을 키우거나 기름을 붓는 행동은 따라 할 만큼 자세히 쓰지 마. 맛조수 자신의 사연·경험으로 쓰지 마. 반응은 놀라거나 비웃지 말고 담담하게. 사연 속 숫자는 원본에 있을 때만',
+    fits: ['hobby-learner', 'young-home'],
+  },
+  'town-rules': {
+    label: '이 연구소에서는',
+    beats: '이 연구소의 규칙을 선언하며 시작 → 규칙 2~3개를 하나씩 담담하게 선언(규칙마다 원본 팁·순서·원리·흔한 실수 하나) → 가장 중요한 규칙(핵심) → 그 규칙의 이유 한 줄(원본 원리) → 재료·조리 → 규칙으로 맺는 정리',
+    guide:
+      '자기 동네의 규칙을 엄숙하게 선언하는 해외 밈을 연구소판으로: 연구소를 주어로, 여기서는 하지 않는 일과 하는 일을 짧은 평서문으로 선언한다. 단호하지만 해요체, 과장 없이. 규칙 선언에서는 연구소를 짧게만 부르고, 연구소 정식 이름은 마지막 장면의 한 번만. ' +
+      '같은 첫머리를 규칙마다 되풀이해도 되지만 규칙 내용은 모두 원본 조리순서·팁·원리·흔한 실수에서 나온 것만 (지어낸 규칙·원본에 없는 숫자 금지). 규칙은 점점 중요한 쪽으로 쌓아 마지막이 핵심 규칙이 되게. 이유는 한 줄만. ' +
+      '시청자를 혼내거나 겁주는 말투는 쓰지 마 (웃음은 엄숙한 형식에서, 정보는 규칙 내용에서)',
+    fits: ['young-home', 'hobby-learner'],
+  },
+  relatable: {
+    label: '이럴 때 꼭 있는 일',
+    beats: '이 요리를 할 때 꼭 있는 일 목록을 예고 → 누구나 아는 부엌 상황 1~2개(짧게, 장면마다 하나) → 마지막 상황 = 원본의 흔한 실수 → 기분 탓이 아니라 이유가 있다(원본 원리) → 해결(재료·조리) → 정리',
+    guide:
+      '목록은 사람이 아니라 상황이다: 어떤 사람의 특징·유형으로 묶지 말고 부엌에서 생기는 일로. 앞 상황들은 원본에 없는 흔한 일이므로 사실 주장·분량·시간 없이 가볍게 (누가 먹고 반응했다는 지어낸 이야기도 금지). ' +
+      '마지막 항목만 원본 흔한 실수이고, 거기서 정보로 넘어간다. 항목은 2~3개, 장면마다 하나씩 빠른 호흡으로',
+    fits: ['young-home'],
+  },
+  'vague-vs-note': {
+    label: '적당히의 나라',
+    beats: '집에서 흔히 듣는 어림 말(적당히·눈대중·알아서)로 시작 → 그 말과 노트의 정확한 분량을 나란히 → 재료 카드(원본 분량 그대로) → 분량이 중요한 이유(원본 원리) → 조리 → 감은 이 분량에서 시작하면 된다는 정리',
+    guide:
+      '어림 말은 흔히 듣는 말로만 쓰고 특정 인물이 한 말로 지어내지 마 (가족이 했다는 인용 금지, 연구자 가족 이야기는 원본 이야기·전문가답변에 있을 때만). 그 말을 놀리지 말고 따뜻하게: 오랜 감도 결국 이런 분량에서 나온다는 쪽으로. ' +
+      '분량은 원본 재료 문자열 그대로만 말하고, 원본에 분량이 비었거나 어림으로 적힌 재료는 숫자로 바꾸지 마. 맛조수는 어림하지 않고 노트의 숫자를 읽는 쪽이다',
+    fits: ['young-home', 'hobby-learner'],
+  },
 };
 
 /** 2026-11-19 전에 쓰던 갈래 (저장된 초안의 이름표용, 새로 쓰지 않는다) */
@@ -203,7 +296,7 @@ export const STORY_BEATS = ['hook', 'context', 'point', 'method', 'close'] as co
 /** Claude에게 받는 형식 (구조화 출력) */
 export const StorySceneDraftSchema = z.object({
   beat: z.enum(STORY_BEATS).describe('이 장면의 자리: hook 첫 장면 · context 상황·질문 · point 핵심(원리·차이·이유) · method 재료·조리 · close 마무리'),
-  type: z.enum(SCENE_TYPES).describe('gag는 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계에만'),
+  type: z.enum(SCENE_TYPES).describe('gag는 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계와 글자 그대로(wordplay)의 다른 뜻 장면에만'),
   emotion: z.enum(EMOTIONS),
   gag: z.enum(GAGS).optional().describe('type "gag" 장면의 그림 (대사 내용과 맞게, 장면마다 다르게)'),
   visual: z.enum(VISUALS).optional(),
@@ -255,7 +348,7 @@ ${characterLines(persona)}
     · 반말·아기 말투(~용, ~쥬, ~했지 뭐예요)·유행어·감탄사 연발 금지. 문장마다 "~거든요"를 되풀이하지 마.
     · 조리 안내는 부드러운 권유형("~해 주세요", "~해 보세요"). "반드시 ~하세요!" 같은 단정 명령은 쓰지 마 (귀여운 캐릭터 + 단정 명령은 역효과, Chang 외 2021).
   - 반응: 짧고 자연스럽게, 대본 하나에 많아야 한 번 ("오, 그래서였네요" 정도). 비명·과장 감탄·호들갑·자기 비하는 쓰지 마.
-  - 실수: 맛조수는 실수하지 않는다 (실수 효과는 유능함이 먼저 인정된 사람에게만 생기고, 유머·실수는 신뢰를 깎는다: Aronson 1966, Eisend 2009 메타분석). 실패는 one-fix 형식에서만, 주어를 "많이들 이렇게 되죠"처럼 일반 사례로 두고, 바로 원인 한 가지와 선생님 노트를 붙인다.
+  - 실수: 맛조수는 실수하지 않는다 (실수 효과는 유능함이 먼저 인정된 사람에게만 생기고, 유머·실수는 신뢰를 깎는다: Aronson 1966, Eisend 2009 메타분석). 실패는 one-fix·listener-story·relatable 형식에서만, 주어를 "많이들 이렇게 되죠"처럼 일반 사례로 두고, 바로 원인 한 가지와 선생님 노트를 붙인다.
 - ${BRAND.callName}: ${BRAND.researcherTitle} ${BRAND.researcher}. 화면에 직접 나오지 않고, 맛조수가 "${BRAND.callName}"이라고 부르며 선생님의 노트·팁을 전한다.
 
 ## 시청자 (누구를 위한 영상인지 정하고 써)
@@ -266,9 +359,9 @@ ${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENC
 
 ## 구성 규칙 (가장 중요)
 1. 대본마다 형식(storyType)을 하나 고르고 그 형식의 구성을 따라 (형식 목록은 사용자 메시지에 있어). 형식마다 장면 순서가 달라야 해. 모든 대본이 "실패 → 선생님 노트 → 해결 → 행복한 결말"이 되면 안 돼. 장면마다 beat(hook·context·point·method·close)를 적어.
-2. 첫 대사는 이 영상이 줄 정보 하나를 바로 약속해 (형식에 맞게: 질문, 두 방법, 정석 한 줄, 쓰임 상황, 계절). 공백 빼고 25자 안으로 짧게 (첫 3초에 넘길지 정해진다). 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지. 첫 장면 visual도 형식에 맞게: 완성 먼저(result), 비교(compare), 조리 클로즈업(sizzle). 실패 클로즈업(fail·fail-closeup)은 one-fix에서만.
+2. 첫 대사는 이 영상이 줄 정보 하나를 바로 약속해 (형식에 맞게: 질문, 두 방법, 정석 한 줄, 쓰임 상황, 계절). 공백 빼고 25자 안으로 짧게 (첫 3초에 넘길지 정해진다). 인사·자기소개·"오늘은 ~ 만들어요" 같은 시작은 금지. 첫 장면 visual도 형식에 맞게: 완성 먼저(result), 비교(compare), 조리 클로즈업(sizzle). 실패 클로즈업(fail·fail-closeup)은 one-fix에서만 (listener-story·relatable은 반전 뒤 장면에서만).
 3. 대본끼리 형식, 첫 대사, 장면 순서, 마지막 대사가 모두 달라야 해. 같은 문장 틀을 돌려 쓰지 마. 첫 대사의 첫 어절도 대본끼리 겹치지 않게 (예: "조리기능장은 ~"으로 시작하는 첫 대사는 많아야 하나). 실패에서 시작하는 대본(one-fix, 첫 장면이 mistake나 실패 화면)은 한 번에 많아야 하나.
-4. 어른 시청자에게 유치하게 느껴지는 구도는 쓰지 마: 추리·수사·범인·사건·단서, 내기, 구출 작전·미션·출동, 맛조수 세계의 가상 인물(친구 로봇·할머니 등)과 그들의 감동 반응, 과장된 위기("큰일 났어요!"). 재미는 정보의 반전(생각과 다른 원리, 의외의 차이)에서, 따뜻함은 시청자의 실제 상황(가족 반찬·손님상·도시락)에서 나오게 해.
+4. 어른 시청자에게 유치하게 느껴지는 구도는 쓰지 마: 추리·수사·범인·사건·단서, 내기, 구출 작전·미션·출동, 맛조수 세계의 가상 인물(친구 로봇·할머니 등)과 그들의 감동 반응(listener-story의 "${LETTER_FICTION}" 카드 속 이름 없는 인물만 예외), 과장된 위기("큰일 났어요!"). 재미는 정보의 반전(생각과 다른 원리, 의외의 차이)에서, 따뜻함은 시청자의 실제 상황(가족 반찬·손님상·도시락)에서 나오게 해.
 5. 설명문을 읽는 말투도, 어린이 방송 말투도 아니게: 옆에서 요점을 짚어 주는 진행자처럼. 느낌표는 대본 전체에 ${MAX_EXCLAMATIONS}개 이하.
 6. 아래 말은 쓰지 마 (예전 영상에서 너무 반복됐어): ${STORY_BANNED_PHRASES.map((p) => `"${p.trim()}"`).join(', ')}. 유치하게 들리는 말도 쓰지 마: ${CHILDISH_FRAMING.map((c) => `"${c.word}"`).join(', ')}.
 6-1. 대본마다 "친구한테 보내고 싶은" 한 가지를 꼭 넣어: 원본의 핵심원리·팁·흔한 실수 가운데 하나를, 몰랐던 사람이 "아 그래서였구나" 할 한 문장으로 또렷하게 (인스타그램은 보내기(공유)를 가장 중요하게 본다). 원본에 없는 사실로 만들지 마.
@@ -280,16 +373,17 @@ ${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENC
 10. 조리 장면(type "steps")을 꼭 하나 넣고 cardItems는 원본 조리순서 문장을 순서대로 그대로 써 (최대 5개, 앞에서부터).
 11. 원리 장면(type "explain")의 cardTitle은 "${BRAND.notePhrase}"로 하고, 원본의 핵심원리를 말해.
 12. ${BRAND.researcher} 선생님이 실제로 겪은 일·한 말을 지어내지 마. 선생님 경험은 원본의 "이야기"·"전문가답변"에 있을 때만, 그 내용 그대로.
-13. 지어낸 인물·사건·후기("아이가 잘 먹었어요", "손님이 감탄했어요")는 쓰지 마. "실험 결과", "연구로 증명", "해 봤더니" 같은 가짜 사실 표현, 건강 효능 주장도 금지.
+13. 지어낸 인물·사건·후기("아이가 잘 먹었어요", "손님이 감탄했어요")는 쓰지 마. 예외는 listener-story에서 사연 카드에 "${LETTER_FICTION}"이라고 밝힌 꾸민 이야기 하나뿐이고, 그것도 진짜 있었던 일처럼 말하면 안 돼. "실험 결과", "연구로 증명", "해 봤더니" 같은 가짜 사실 표현, 건강 효능 주장도 금지.
 
 ## 형식
 - 장면 6~8개. 대사는 공백 빼고 대본 전체 170~220자 (실제 목소리로 약 32~40초). 270자를 넘으면 영상이 45초를 넘어 지루해져. 한 장면 대사는 한두 문장, 짧고 말하기 쉽게.
 - type: ${SCENE_TYPES.join(' | ')}
-  - gag: 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계에만. 카드(cardTitle·cardItems)·분량·재료 이름 없이 대사만. 화면은 아래 gag 그림으로 바뀌고 "농담" 표시가 붙어.
-- gag(type "gag" 장면에 필수): 대사가 말하는 엉뚱한 일을 그대로 보여 줄 그림. 한 대본에서 같은 그림을 두 번 쓰지 마. 엉뚱한 단계는 이 그림들로 보여 줄 수 있는 일로 지어:
+  - gag: 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계와 글자 그대로(wordplay)의 다른 뜻 장면에만. 카드(cardTitle·cardItems)·분량·재료 이름 없이 대사만. 화면은 아래 gag 그림으로 바뀌고 "농담" 표시가 붙어. 농담이라고(그 뜻이 아니라고) 밝히는 전환 줄보다 앞에만 써.
+  - 사연 카드: listener-story에서만 type "question" 장면 하나에 cardTitle "${LETTER_FICTION}"(꾸민 이야기) 또는 "${LETTER_REAL}"(원본 전문가답변 그대로)을 쓰면 화면에 편지 모양 카드가 떠. 다른 형식에는 이 이름을 쓰지 마.
+- gag(type "gag" 장면에 필수): 대사가 말하는 엉뚱한 일(또는 낱말의 다른 뜻)을 그대로 보여 줄 그림. 한 대본에서 같은 그림을 두 번 쓰지 마. 그 장면은 이 그림들로 보여 줄 수 있는 일로 지어:
 ${gagMenu()}
 - emotion: ${EMOTIONS.join(' | ')} (surprised·embarrassed는 아껴 써)
-- visual(선택): result(완성 음식 먼저) | fail(맛조수가 든 실패 접시 — one-fix의 흔한 실패에만, 농담 장면에는 쓰지 마) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만). type "gag" 장면에는 visual을 쓰지 마.
+- visual(선택): result(완성 음식 먼저) | fail(맛조수 옆 실패 접시 — one-fix·listener-story·relatable의 흔한 실패에만, 농담 장면에는 쓰지 마) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만). type "gag" 장면에는 visual을 쓰지 마.
 - place(필수): 대본 하나에 2~3곳을 써서 무대가 바뀌게 해 (너무 자주 옮기지 마). 조리 장면(type "steps", visual "sizzle")은 불이 있는 kitchen이나 lab에서만.
 ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 - 대사에는 숫자를 원본 표기 그대로 써 (예: "설탕 2큰술").`;
@@ -298,17 +392,35 @@ ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
 export function storyUser(
   recipe: RecipeInput,
-  opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType; mustAudience?: Audience },
+  opts: {
+    count: number;
+    avoidTitles?: string[];
+    expertAnswers?: string[];
+    recent?: RecentStory[];
+    /** 최근에 실제로 만든 영상의 형식 (새것부터, 웃음 돌려쓰기용). 비우면 recent의 형식을 쓴다 */
+    recentVideos?: string[];
+    realClips?: number;
+    persona?: PersonaId;
+    mustInclude?: StoryType;
+    mustAudience?: Audience;
+  },
 ): string {
   const source = storySourceData(recipe, opts.expertAnswers);
   const recent = opts.recent ?? [];
   const overused = overusedTypes(recent);
-  // 다른 형식이 남아 있을 때만 최근에 많이 쓴 형식을 뺀다
   const all = availableStoryTypes(recipe, { expertAnswers: opts.expertAnswers, realClips: opts.realClips });
-  const rest = all.filter((t) => !overused.includes(t)).length >= opts.count ? all.filter((t) => !overused.includes(t)) : all;
-  // 꼭 쓸 형식(견본·사용자가 고른 형식)은 최근에 많이 썼어도 넣는다
+  // 꼭 쓸 형식(견본·사용자가 고른 형식)은 최근에 많이 썼어도, 웃음 돌려쓰기에 막혀도 넣는다
   const must = opts.mustInclude && all.includes(opts.mustInclude) ? opts.mustInclude : undefined;
+  // 웃음 형식은 돌려쓰기(humor.ts)를 통과한 것 하나까지만 보여 준다. 꼭 쓸 형식이 웃음 형식이면 그것 하나만
+  const humor = must && isHumorType(must) ? must : pickHumorType(all, opts.recentVideos ?? recent.map((r) => r.storyType), { seed: recipe.dishName, expertAnswers: opts.expertAnswers });
+  const pool = all.filter((t) => !isHumorType(t) || t === humor);
+  // 다른 형식이 남아 있을 때만 최근에 많이 쓴 형식을 뺀다 (웃음 형식은 돌려쓰기가 이미 골랐으므로 남긴다)
+  const fresh = pool.filter((t) => !overused.includes(t) || t === humor);
+  const rest = fresh.length >= opts.count ? fresh : pool;
   const types = must && !rest.includes(must) ? [must, ...rest] : rest;
+  const humorLine = humor
+    ? `\n- 웃음 형식은 이번 묶음에 ${humor}(${STORY_TYPE_INFO[humor].label}) 하나뿐이고 많아야 대본 하나에만 써. 나머지 대본은 정보형으로, 웃기려 하지 말고 정보의 반전으로만 재미를 줘.${humor === 'wordplay' ? wordplayHint(recipe) : ''}`
+    : '';
   const mustWho = opts.mustAudience && AUDIENCES.includes(opts.mustAudience) ? opts.mustAudience : undefined;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 대본은 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
   const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
@@ -322,10 +434,16 @@ export function storyUser(
   return `아래 원본 자료로 형식이 서로 다른 대본 ${opts.count}개를 써.
 ## 고를 수 있는 형식 (storyType — 이름: 구성 / 지킬 것 / 잘 맞는 시청자)
 ${types.map((t) => `- ${t}(${STORY_TYPE_INFO[t].label}): ${STORY_TYPE_INFO[t].beats} / ${STORY_TYPE_INFO[t].guide} / ${audienceLabels(STORY_TYPE_INFO[t].fits)}`).join('\n')}
-${mustLine(must, mustWho)}${avoid}${account}${limit}
+${mustLine(must, mustWho)}${humorLine}${avoid}${account}${limit}
 
 ## 원본 자료
 ${JSON.stringify(source, null, 2)}`;
+}
+
+/** 글자 그대로: 원본에 나오는 말장난 후보와 그 다른 뜻 (그림 이름까지) */
+function wordplayHint(recipe: RecipeInput): string {
+  const words = wordplayWords(recipe);
+  return words.length ? `\n- 말장난 후보 (원본에 나오는 요리 말 — 다른 뜻 / 맞는 그림): ${words.map((w) => `${w.word} — ${w.other} / ${w.gags.join('·')}`).join('; ')}` : '';
 }
 
 /**
@@ -435,6 +553,19 @@ export function availableStoryTypes(recipe: RecipeInput, opts: { expertAnswers?:
     if (t === 'leftover') return KEEPING_WORDS.test(text);
     if (t === 'qa') return Boolean(opts.expertAnswers?.some((a) => a.trim()));
     if (t === 'heritage') return Boolean(recipe.story?.trim() || recipe.category === 'tradition');
+    // 웃음 형식: 웃음거리가 원본 안에 있어야 한다 (형식을 위해 사실을 지어내지 않게)
+    // 글자 그대로: 원본 순서·팁에 다른 뜻이 있는 요리 말이 나올 때
+    if (t === 'wordplay') return wordplayWords(recipe).length > 0;
+    // 부엌 다큐: 원본 순서에 보이거나 들리는 익음 신호가 있을 때 (해설할 거리)
+    if (t === 'documentary') return recipe.steps.length >= 2 && DOC_CUES.test(recipe.steps.join(' '));
+    // 사연 한 통: 연구자 답변(진짜 질문) 또는 흔한 실수(가상 사연의 재료)가 있을 때
+    if (t === 'listener-story') return Boolean(opts.expertAnswers?.some((a) => a.trim()) || recipe.commonMistake?.trim());
+    // 이 연구소에서는: 규칙으로 선언할 원본 내용(팁·흔한 실수·원리)이 셋 이상
+    if (t === 'town-rules') return recipe.tips.length + (recipe.commonMistake?.trim() ? 1 : 0) + (recipe.principle?.trim() ? 1 : 0) + Math.min(recipe.steps.length, 2) >= 4 && recipe.tips.length >= 1;
+    // 이럴 때 꼭 있는 일: 마지막 항목이 될 원본 흔한 실수가 있을 때
+    if (t === 'relatable') return Boolean(recipe.commonMistake?.trim());
+    // 적당히의 나라: 숫자로 적힌 분량이 둘 이상일 때 (어림으로 적힌 레시피면 웃음도 정보도 약하다)
+    if (t === 'vague-vs-note') return measuredIngredients(recipe) >= 2;
     return true;
   });
 }
@@ -460,10 +591,10 @@ export interface StoryCandidate {
 export const AI_STORY_STYLE = 'ai-story';
 
 /** Claude가 낸 이야기 하나를 대본으로 바꾸고 원본 대조·품질 검사를 한다 */
-export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string): StoryCandidate | { id: string; error: string } {
+export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string, opts: { expertAnswers?: string[] } = {}): StoryCandidate | { id: string; error: string } {
   const last = draft.scenes.length - 1;
   const gagNotes: string[] = [];
-  const drafted = gagScenes(draft, gagNotes);
+  const drafted = letterScenes({ ...draft, scenes: gagScenes(draft, gagNotes) }, gagNotes, opts.expertAnswers);
   const gags = gagPlan(drafted.map((s) => ({ type: s.type, line: s.line, gag: s.gag })));
   const raw = {
     title: draft.title.trim(),
@@ -510,6 +641,31 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
     if (danger.length) warnings.push(`엉뚱 가이드에 따라 하면 위험한 장난이 들어 있어요: ${danger.map((d) => `"${d}"`).join(', ')}`);
     if (!DEADPAN_TURN.test(all)) warnings.push('엉뚱한 부분이 농담이라고 밝히는 줄이 없어요 (시청자가 진짜로 믿을 수 있어요)');
   }
+  const extraIssues: Issue[] = [];
+  if (draft.storyType === 'wordplay') {
+    const danger = findDeadpanDanger(all);
+    if (danger.length) warnings.push(`말장난 장면에 따라 하면 위험한 일이 들어 있어요: ${danger.map((d) => `"${d}"`).join(', ')}`);
+    if (!WORDPLAY_TURN.test(all)) warnings.push('다른 뜻 장면 뒤에 "그 뜻이 아니다"라고 밝히는 줄이 없어요 (말장난이 진짜 뜻처럼 남을 수 있어요)');
+  }
+  if (draft.storyType === 'documentary') {
+    const hurt = findSufferingFood(all);
+    if (hurt.length) warnings.push(`음식을 아파하는 생명처럼 그리는 말: ${hurt.map((h) => `"${h}"`).join(', ')} (먹고 싶은 마음이 줄어요)`);
+  }
+  if (draft.storyType === 'listener-story') {
+    const letter = script.scenes.find((s) => isLetterTitle(s.cardTitle));
+    const fakeReal = findFakeRealStory(`${script.title}\n${all}`);
+    // 꾸민 사연을 진짜처럼 소개하면 만들 수 없다 (가짜 후기·제보와 같다: 원칙)
+    if (fakeReal.length && letter?.cardTitle === LETTER_FICTION)
+      extraIssues.push({ level: 'error', code: 'claim', sceneId: letter.id, message: `가상 사연인데 진짜 받은 사연처럼 들리는 말이 있습니다: ${fakeReal.map((f) => `"${f}"`).join(', ')}. 지어낸 이야기를 진짜처럼 소개할 수 없습니다.` });
+    else if (fakeReal.length) warnings.push(`사연을 누가 보낸 것처럼 들리는 말: ${fakeReal.map((f) => `"${f}"`).join(', ')}`);
+  }
+  if (draft.storyType === 'relatable' && PEOPLE_LABELS.test(all)) warnings.push('사람을 유형으로 묶는 말이 있어요: 사람 대신 부엌에서 생기는 상황으로 써 주세요');
+  if (draft.storyType === 'vague-vs-note') {
+    const quote = all.match(FAMILY_QUOTE)?.[0];
+    const grounded = [recipe.story ?? '', ...(opts.expertAnswers ?? [])].join(' ');
+    if (quote && !grounded.includes(quote.match(/엄마|어머니|시어머니|할머니/)?.[0] ?? '\u0000'))
+      warnings.push(`가족이 한 말처럼 지어낸 인용: "${quote}" (흔히 듣는 말로만 써 주세요)`);
+  }
   const fake = findFakeExperience(all);
   if (fake.length) warnings.push(`맛조수가 직접 해 보거나 맛본 것처럼 들리는 말(AI라 그런 경험이 없어요): ${fake.map((f) => `"${f}"`).join(', ')}`);
   const labCount = all.split(BRAND.labName).length - 1;
@@ -530,7 +686,7 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
     logline: draft.logline.trim(),
     script,
     seconds: Math.round(seconds),
-    issues: checkScript(recipe, script),
+    issues: [...checkScript(recipe, script), ...extraIssues],
     notes: [...gagNotes, ...enforced.notes],
     warnings,
   };
@@ -576,15 +732,21 @@ type DraftScene = StoryDraft['scenes'][number];
  * - 다른 형식: 농담 장면이 있으면 질문 장면으로 되돌린다 (엉뚱한 그림은 엉뚱 가이드에만).
  */
 function gagScenes(draft: StoryDraft, notes: string[]): DraftScene[] {
-  if (draft.storyType !== 'deadpan') {
+  if (!GAG_STORY_TYPES.includes(draft.storyType)) {
     return draft.scenes.map((s, i) => {
       if (s.type !== 'gag') return s;
-      notes.push(`s${i + 1} 장면: 농담 장면은 진지한 엉뚱 가이드에만 써서 질문 장면으로 바꿨습니다.`);
+      notes.push(`s${i + 1} 장면: 농담 장면은 진지한 엉뚱 가이드·글자 그대로에만 써서 질문 장면으로 바꿨습니다.`);
       return { ...s, type: 'question' as const, gag: undefined };
     });
   }
-  const turn = draft.scenes.findIndex((s, i) => i > 0 && DEADPAN_TURN.test(s.line));
+  const turnRe = draft.storyType === 'wordplay' ? WORDPLAY_TURN : DEADPAN_TURN;
+  const turn = draft.scenes.findIndex((s, i) => i > 0 && turnRe.test(s.line));
   return draft.scenes.map((s, i) => {
+    // 농담 그림은 전환 줄보다 앞에만: 진짜 방법(진짜 뜻)을 말하는 동안 엉뚱한 그림이 뜨면 정보가 농담처럼 보인다
+    if (turn > 0 && i >= turn && s.type === 'gag') {
+      notes.push(`s${i + 1} 장면: 농담이라고 밝힌 뒤의 장면이라 농담 그림을 빼고 질문 장면으로 바꿨습니다.`);
+      return { ...s, type: 'question' as const, gag: undefined };
+    }
     // 질문·실수처럼 적었어도 대사가 엉뚱한 곳(사막·달 등)을 말하면 그림을 보여 주려고 농담 장면으로
     const absurd = s.type !== 'ingredients' && s.type !== 'steps' && s.type !== 'gag' && s.type !== 'outro' && gagFromLine(s.line) !== null;
     if (turn > 0 && i > 0 && i < turn && (s.type === 'tip' || s.type === 'explain' || absurd)) {
@@ -593,6 +755,52 @@ function gagScenes(draft: StoryDraft, notes: string[]): DraftScene[] {
     }
     return s;
   });
+}
+
+/** 농담 그림 장면(type "gag")을 쓸 수 있는 형식 */
+export const GAG_STORY_TYPES: readonly StoryType[] = ['deadpan', 'wordplay'];
+
+/**
+ * 사연 카드 정리 (안전망, 사연 한 통 형식).
+ * - 사연 카드("가상 사연"·"선생님이 받은 질문")는 대본에 하나, 질문·첫 장면 종류에만. 없으면 첫 이야기 장면에 "가상 사연" 카드를 붙인다
+ *   (꾸민 이야기를 표시 없이 내보내지 않게).
+ * - "선생님이 받은 질문"은 카드 글이 연구자 답변 원문에 그대로 있을 때만. 아니면 "가상 사연"으로 바꾼다 (지어낸 사연을 진짜처럼 보이게 하지 않게).
+ * - 다른 형식에 사연 카드 이름이 있으면 뺀다.
+ */
+function letterScenes(draft: StoryDraft, notes: string[], expertAnswers: string[] = []): DraftScene[] {
+  if (draft.storyType !== 'listener-story') {
+    return draft.scenes.map((s, i) => {
+      if (!isLetterTitle(s.cardTitle)) return s;
+      notes.push(`s${i + 1} 장면: 사연 카드는 사연 한 통 형식에만 써서 카드 이름을 뺐습니다.`);
+      return { ...s, cardTitle: undefined };
+    });
+  }
+  const infoTypes: readonly string[] = ['explain', 'tip', 'ingredients', 'steps', 'outro'];
+  const firstInfo = draft.scenes.findIndex((s) => infoTypes.includes(s.type));
+  let at = draft.scenes.findIndex((s) => isLetterTitle(s.cardTitle));
+  const scenes = draft.scenes.map((s, i) => (i !== at && isLetterTitle(s.cardTitle) ? { ...s, cardTitle: undefined } : s));
+  if (at < 0) {
+    const storyEnd = firstInfo < 0 ? scenes.length : firstInfo;
+    at = scenes.findIndex((s, i) => i < storyEnd && (s.type === 'question' || s.type === 'intro' || s.type === 'mistake'));
+    if (at < 0) at = 0;
+    notes.push(`s${at + 1} 장면: 사연 카드가 없어 "${LETTER_FICTION}" 카드를 붙였습니다 (꾸민 이야기는 표시해야 해요).`);
+    scenes[at] = { ...scenes[at]!, cardTitle: LETTER_FICTION, cardItems: undefined };
+  }
+  let letter = scenes[at]!;
+  // 사연 카드는 질문 장면 모양으로 (원리·팁 장면이면 연구자 카드가 덮어쓴다)
+  if (!['question', 'intro', 'mistake'].includes(letter.type)) letter = { ...letter, type: 'question', gag: undefined, visual: undefined };
+  if (letter.cardTitle?.trim() === LETTER_REAL) {
+    const norm = (t: string) => t.replace(/[\s"'“”‘’.,!?…~]/g, '');
+    const answers = expertAnswers.map(norm).filter(Boolean);
+    const items = (letter.cardItems ?? []).map(norm).filter(Boolean);
+    const real = items.length > 0 && items.every((it) => it.length >= 6 && answers.some((a) => a.includes(it)));
+    if (!real) {
+      notes.push(`s${at + 1} 장면: 카드 글이 연구자 답변 원문에 없어 "${LETTER_REAL}" 대신 "${LETTER_FICTION}"으로 바꿨습니다.`);
+      letter = { ...letter, cardTitle: LETTER_FICTION, cardItems: undefined };
+    }
+  } else letter = { ...letter, cardTitle: LETTER_FICTION };
+  scenes[at] = letter;
+  return scenes;
 }
 
 /** 엉뚱 가이드: 농담이라고 밝히는 줄 (농담·장난·물론 아니고·진짜 방법·사실은) */

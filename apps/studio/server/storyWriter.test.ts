@@ -14,9 +14,11 @@ let repo: Repo;
 let close: () => void;
 let calls = 0;
 let gate: Promise<void> | null = null;
+let lastUser = '';
 
 const counted: StoryCallFn = async (req) => {
   calls++;
+  lastUser = req.user;
   if (gate) await gate;
   return fakeStoryCall(req);
 };
@@ -43,6 +45,7 @@ async function call(method: string, url: string, body?: unknown) {
 }
 
 const walnut = SAMPLE_RECIPES.find((r) => r.dishName === '호두정과')!;
+const kimchi = SAMPLE_RECIPES.find((r) => r.dishName === '바삭한 김치전')!;
 
 describe('AI 이야기 대본 API', () => {
   it('이야기를 받아 저장하고, 원본 대조를 통과한 것만 영상으로 만든다', async () => {
@@ -87,6 +90,23 @@ describe('AI 이야기 대본 API', () => {
     const listed = await call('GET', `/projects/${pid}/stories`);
     const card = listed.body.stories[0].script.scenes.find((s: { type: string }) => s.type === 'ingredients');
     expect(card.cardItems).toContain('호두 300g');
+  });
+
+  it('웃음 형식 돌려쓰기는 다른 콘텐츠에서 실제로 만든 영상으로 센다 (바로 앞 영상이 웃음 형식이면 이번엔 정보형만)', async () => {
+    const made = async (hookType: string) => {
+      const other = (await call('POST', '/projects', { recipe: walnut })).body.id;
+      const scenes = [0, 1, 2].map((i) => ({ id: `s${i + 1}`, type: 'question', emotion: 'curious', line: `장면 ${i + 1}` }));
+      repo.addScriptVersion(other, { title: `${hookType} 영상`, style: 'ai-story', hookType, scenes }, 'ai-story', '테스트');
+      await new Promise((r) => setTimeout(r, 5));
+    };
+    const pid = (await call('POST', '/projects', { recipe: kimchi })).body.id;
+    await made('wordplay');
+    expect((await call('POST', `/projects/${pid}/stories`)).status).toBe(200);
+    expect(lastUser).not.toContain('웃음 형식은 이번 묶음에');
+    await made('why');
+    await call('POST', `/projects/${pid}/stories`);
+    expect(lastUser).toContain('웃음 형식은 이번 묶음에');
+    expect(lastUser).not.toMatch(/^- wordplay\(/m);
   });
 
   it('쓰는 중에 또 누르면 두 번 부르지 않는다, 월 한도를 넘으면 부르지 않는다', async () => {

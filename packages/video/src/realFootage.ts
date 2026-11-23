@@ -1,4 +1,4 @@
-import { clipGroups, lcsLength, type Scene, type Script } from '@mat-lab/recipe-core';
+import { clipGroups, isLetterTitle, lcsLength, type Scene, type Script } from '@mat-lab/recipe-core';
 import { CAPTION_SAFE_BOTTOM, VIDEO } from './theme.ts';
 import { CAPTION_HEIGHT } from './three/captionPlacement.ts';
 import type { SceneTiming } from './timeline.ts';
@@ -109,6 +109,8 @@ const norm = (t: string) => t.replace(/[^0-9A-Za-z가-힣]/g, '');
 
 /** 위쪽 정보 카드에 크게 들어가는 글 (SceneCard와 같은 규칙). 카드에 따로 글이 없는 종류는 null */
 export function cardHeadline(scene: Pick<Scene, 'type' | 'line' | 'cardTitle' | 'cardItems' | 'hook' | 'visual'>, topic: string): string | null {
+  // 사연 카드(편지): 카드 항목(답변 원문) 또는 대사
+  if (isLetterTitle(scene.cardTitle) && (scene.type === 'question' || scene.type === 'intro' || scene.type === 'mistake')) return scene.cardItems?.[0] ?? scene.line;
   switch (scene.type) {
     case 'question':
       return scene.hook || scene.visual ? scene.line : topic;

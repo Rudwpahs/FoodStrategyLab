@@ -3,7 +3,7 @@ import React from 'react';
 import { Character } from '../components/Character.tsx';
 import { COLORS, VIDEO } from '../theme.ts';
 import { Dish2D, shade } from './Dish2D.tsx';
-import { coasterAngle, coasterX, coasterY, deadpanEmotion, ease, hash01, lift, progressOf, swingAngle } from './gagMotion.ts';
+import { clamp01, coasterAngle, coasterX, coasterY, deadpanEmotion, ease, hash01, lift, progressOf, swingAngle } from './gagMotion.ts';
 
 /**
  * 농담 장면 그림 ('진지한 엉뚱 가이드'의 말도 안 되는 단계). 2D 그림을 3D 화면 위에 덮는다.
@@ -122,7 +122,7 @@ const Wind: React.FC<{ f: number; rows: number[]; speed?: number; color?: string
   </g>
 );
 
-// ───────── 그림 14가지 ─────────
+// ───────── 그림 (엉뚱 가이드용 14가지 + 글자 그대로용 3가지) ─────────
 
 /** 사막 한가운데: 모래 언덕 위 접시, 뜨거운 해, 아지랑이, 선인장 */
 const Desert: React.FC<Ctx> = ({ f, host, dish }) => (
@@ -633,6 +633,194 @@ const Parachute: React.FC<Ctx> = ({ f, p, host, dish }) => {
   );
 };
 
+
+// ───────── 글자 그대로(wordplay)용 그림 (2026-11-23) ─────────
+
+/** 빨간 우체통: 우표 붙인 봉투에 담긴 접시가 우체통 입구로 들어간다 ('편지를 부치다') */
+const Mailbox: React.FC<Ctx> = ({ f, p, host, food }) => {
+  // 앞 55%: 우체통 입구 위로 날아감, 뒤: 입구로 쏙 내려가 사라짐 (입구 윗선 아래는 잘라 낸다)
+  const t = ease(p / 0.55);
+  const drop = ease((p - 0.55) / 0.4);
+  const ex = 340 + (760 - 340) * t;
+  const ey = 860 - Math.sin(t * Math.PI) * 140 - (860 - 540) * t + drop * 330;
+  return (
+    <g>
+      <Sky id="mail" top="#A6DAF5" bottom="#EAF7FF" until={1130} />
+      <Cloud x={230} y={420} s={0.8} />
+      <Cloud x={860} y={330} s={0.6} />
+      {/* 담장과 보도 */}
+      <rect x={0} y={880} width={1080} height={260} fill="#E9C9A3" />
+      {Array.from({ length: 8 }, (_, i) => (
+        <line key={i} x1={i * 150} y1={880} x2={i * 150} y2={1130} stroke="#C9A47A" strokeWidth={5} />
+      ))}
+      <line x1={0} y1={880} x2={1080} y2={880} stroke={INK} strokeWidth={6} />
+      <rect x={0} y={1130} width={1080} height={790} fill="#C9CDD4" />
+      <line x1={0} y1={1130} x2={1080} y2={1130} stroke={INK} strokeWidth={SW} />
+      {/* 우체통: 둥근 지붕, 입구, 기둥 */}
+      <g transform="translate(760 0)">
+        <rect x={-30} y={1060} width={60} height={90} fill="#8A2A1C" {...line} />
+        <path d="M -150 1070 L -150 640 Q -150 520 0 520 Q 150 520 150 640 L 150 1070 Z" fill={COLORS.red} {...line} />
+        <path d="M -150 640 Q -150 520 0 520 Q 150 520 150 640 Z" fill={COLORS.redDark} {...line} />
+        <rect x={-110} y={680} width={220} height={44} rx={22} fill={INK} />
+        <rect x={-96} y={688} width={192} height={10} rx={5} fill="#5A3A33" />
+        {/* 앞면 띠 두 줄 (글 없이) */}
+        <rect x={-150} y={800} width={300} height={22} fill={COLORS.white} stroke={INK} strokeWidth={5} />
+        <rect x={-150} y={840} width={300} height={10} fill={COLORS.white} stroke={INK} strokeWidth={4} />
+        <rect x={-60} y={930} width={120} height={70} rx={10} fill={COLORS.redDark} stroke={INK} strokeWidth={5} />
+        <circle cx={0} cy={965} r={10} fill="#FFC94A" stroke={INK} strokeWidth={3} />
+      </g>
+      {/* 봉투: 입구 쪽으로 날아가 끝에 쏙 들어간다 */}
+      <defs>
+        <clipPath id="mail-slot">
+          <rect x={0} y={0} width={1080} height={702} />
+        </clipPath>
+      </defs>
+      <g clipPath="url(#mail-slot)">
+        <g transform={`translate(${ex} ${ey}) rotate(${-8 + t * 8}) scale(0.62)`}>
+          <path d="M -150 -40 L 0 -150 L 150 -40 Z" fill="#F4EBDD" {...line} />
+          <rect x={-150} y={-40} width={300} height={190} rx={10} fill="#FFFDF7" {...line} />
+          <Dish2D food={food} x={0} y={-30} scale={0.5} frame={f} steam={false} shadow={false} />
+          <path d="M -150 -10 L 0 70 L 150 -10 L 150 150 L -150 150 Z" fill="#FFFDF7" {...line} />
+          {/* 항공 우편 줄무늬 */}
+          {Array.from({ length: 9 }, (_, i) => (
+            <rect key={i} x={-142 + i * 33} y={128} width={16} height={12} fill={i % 2 ? COLORS.navy : COLORS.red} />
+          ))}
+          {/* 우표 (톱니 테두리, 글 없이 그림만) */}
+          <g transform="translate(96 40)">
+            <rect x={-34} y={-40} width={68} height={80} fill={COLORS.white} stroke={INK} strokeWidth={4} strokeDasharray="6 5" />
+            <rect x={-24} y={-30} width={48} height={60} fill="#7CC6A4" />
+            <circle cx={0} cy={-6} r={12} fill="#FFC94A" stroke={INK} strokeWidth={3} />
+            <path d="M -24 30 L -6 10 L 6 22 L 24 4 L 24 30 Z" fill="#3E8E6E" />
+          </g>
+        </g>
+      </g>
+      {host(200, 1250, 290)}
+    </g>
+  );
+};
+
+/** 커다란 부채: 맛조수 옆의 접이 부채가 오가며 접시 쪽으로 바람을 보낸다 ('부채를 부치다') */
+const HandFan: React.FC<Ctx> = ({ f, host, dish }) => {
+  const swing = Math.sin((2 * Math.PI * f) / 36) * 16 * clamp01(f / 12);
+  const ribs = 13;
+  const r = 330;
+  const at = (k: number, rad: number): [number, number] => {
+    const a = ((-150 + (120 * k) / (ribs - 1)) * Math.PI) / 180;
+    return [Math.cos(a) * rad, Math.sin(a) * rad];
+  };
+  const arc = (rad: number) =>
+    Array.from({ length: ribs }, (_, k) => at(k, rad))
+      .map(([x, y], k) => `${k ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`)
+      .join(' ');
+  const [bx, by] = at(3, r * 0.6);
+  const [mx, my] = at(6, r * 0.82);
+  const [tx, ty] = at(10, r * 0.88);
+  return (
+    <g>
+      {/* 방: 창살 벽과 마루 */}
+      <rect x={0} y={0} width={1080} height={1080} fill={COLORS.cream} />
+      {Array.from({ length: 7 }, (_, i) => (
+        <line key={`v${i}`} x1={60 + i * 160} y1={240} x2={60 + i * 160} y2={1060} stroke="#E8CFA8" strokeWidth={6} />
+      ))}
+      {Array.from({ length: 6 }, (_, i) => (
+        <line key={`h${i}`} x1={0} y1={260 + i * 160} x2={1080} y2={260 + i * 160} stroke="#E8CFA8" strokeWidth={6} />
+      ))}
+      <rect x={0} y={1060} width={1080} height={860} fill={COLORS.wood} />
+      <line x1={0} y1={1060} x2={1080} y2={1060} stroke={INK} strokeWidth={SW} />
+      {Array.from({ length: 6 }, (_, i) => (
+        <line key={i} x1={0} y1={1120 + i * 70} x2={1080} y2={1120 + i * 70} stroke={COLORS.woodDark} strokeWidth={4} />
+      ))}
+      {/* 낮은 소반 위 접시 */}
+      <path d="M 560 1066 L 580 1180 M 880 1066 L 860 1180" stroke={INK} strokeWidth={18} strokeLinecap="round" />
+      <ellipse cx={720} cy={1050} rx={230} ry={46} fill="#B5743F" {...line} />
+      {dish(720, 1000, 0.85, Math.sin(f / 5) * 1.5)}
+      <Wind f={f} rows={[760, 850, 930]} speed={24} color="#7FBCE0" />
+      {host(200, 1250, 290)}
+      {/* 부채: 사북(손잡이 끝)을 축으로 오간다 */}
+      <g transform={`translate(400 1000) rotate(${swing})`}>
+        <path d={`M 0 0 ${arc(r).replace('M', 'L')} Z`} fill="#FFF1C9" {...line} />
+        {/* 그림: 매화 가지 (글 없이) */}
+        <path d={`M ${bx} ${by} Q ${mx} ${my} ${tx} ${ty}`} stroke="#6B4A3A" strokeWidth={8} fill="none" strokeLinecap="round" />
+        {[4, 6, 8, 10].map((k) => {
+          const [x, y] = at(k, r * (0.7 + (k % 3) * 0.08));
+          return <circle key={k} cx={x} cy={y} r={14} fill="#F49AB0" stroke={INK} strokeWidth={3} />;
+        })}
+        {Array.from({ length: ribs }, (_, k) => {
+          const [x, y] = at(k, r);
+          return <line key={k} x1={0} y1={0} x2={x} y2={y} stroke="#B98A55" strokeWidth={k === 0 || k === ribs - 1 ? 8 : 3} />;
+        })}
+        <path d={arc(r)} fill="none" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+        <path d={arc(r * 0.42)} fill="none" stroke="#B98A55" strokeWidth={5} />
+        <circle cx={0} cy={0} r={14} fill="#B98A55" stroke={INK} strokeWidth={5} />
+      </g>
+    </g>
+  );
+};
+
+/** 이불 덮고 재우기: 밤, 작은 침대에서 접시가 베개를 베고 이불을 덮고 잔다 ('재우다') */
+const Bedtime: React.FC<Ctx> = ({ f, host, food }) => (
+  <g>
+    {/* 밤 방: 벽지와 창 */}
+    <rect x={0} y={0} width={1080} height={1100} fill="#33406B" />
+    {Array.from({ length: 30 }, (_, i) => (
+      <circle key={i} cx={(i % 6) * 190 + 60 + (Math.floor(i / 6) % 2) * 95} cy={300 + Math.floor(i / 6) * 160} r={6} fill="#4A5888" />
+    ))}
+    <g transform="translate(700 470)">
+      <rect x={-190} y={-170} width={380} height={300} rx={18} fill="#1B2547" {...line} />
+      <g transform="translate(-190 -170) scale(0.35 0.28)">
+        <Stars f={f} n={14} until={1000} salt={9} />
+      </g>
+      <path d="M 70 -120 a 60 60 0 1 0 44 98 a 48 48 0 1 1 -44 -98 Z" fill="#FFE7A0" stroke={INK} strokeWidth={5} />
+      <line x1={0} y1={-170} x2={0} y2={130} stroke={INK} strokeWidth={8} />
+      <line x1={-190} y1={-20} x2={190} y2={-20} stroke={INK} strokeWidth={8} />
+      {/* 커튼 */}
+      <path d="M -210 -190 Q -150 -20 -230 150 L -250 150 L -250 -190 Z" fill={COLORS.red} {...line} />
+      <path d="M 210 -190 Q 150 -20 230 150 L 250 150 L 250 -190 Z" fill={COLORS.red} {...line} />
+    </g>
+    <rect x={0} y={1090} width={1080} height={830} fill="#8C6A54" />
+    <line x1={0} y1={1090} x2={1080} y2={1090} stroke={INK} strokeWidth={SW} />
+    {/* 침대: 머리판, 매트리스 */}
+    <rect x={930} y={760} width={60} height={420} rx={20} fill={COLORS.wood} {...line} />
+    <rect x={420} y={1000} width={540} height={110} rx={20} fill="#F6EFE4" {...line} />
+    <rect x={420} y={1100} width={540} height={60} fill={COLORS.woodDark} {...line} />
+    <path d="M 440 1160 L 440 1200 M 940 1160 L 940 1200" stroke={INK} strokeWidth={16} strokeLinecap="round" />
+    {/* 베개 + 접시 */}
+    <rect x={760} y={940} width={170} height={80} rx={36} fill={COLORS.white} {...line} />
+    <Dish2D food={food} x={810} y={945} scale={0.5} rotate={-14} frame={f} steam={false} shadow={false} />
+    {/* 이불 (체크 무늬) */}
+    <defs>
+      <clipPath id="quilt">
+        <path d="M 440 960 Q 600 930 790 975 L 800 1110 L 430 1110 Z" />
+      </clipPath>
+    </defs>
+    <g clipPath="url(#quilt)">
+      <rect x={420} y={920} width={400} height={200} fill="#7CC6A4" />
+      {Array.from({ length: 6 }, (_, i) => (
+        <rect key={`a${i}`} x={420 + i * 72} y={920} width={30} height={200} fill="#66B08F" />
+      ))}
+      {Array.from({ length: 4 }, (_, i) => (
+        <rect key={`b${i}`} x={420} y={930 + i * 52} width={400} height={18} fill={COLORS.white} opacity={0.35} />
+      ))}
+    </g>
+    <path d="M 440 960 Q 600 930 790 975 L 800 1110 L 430 1110 Z" fill="none" {...line} />
+    {/* Zzz */}
+    {[0, 1, 2].map((i) => {
+      const k = ((f + i * 20) % 60) / 60;
+      return (
+        <text key={i} x={850 + i * 34 + k * 30} y={880 - i * 46 - k * 50} fontSize={44 + i * 10} fontWeight={900} fill={COLORS.white} stroke={INK} strokeWidth={3} opacity={1 - k * 0.7} fontFamily="Pretendard, sans-serif">
+          Z
+        </text>
+      );
+    })}
+    {/* 작은 스탠드 */}
+    <circle cx={360} cy={990} r={90} fill="#FFF3B0" opacity={0.18} />
+    <rect x={330} y={1010} width={60} height={90} fill="#C9A47A" {...line} />
+    <path d="M 310 1010 L 330 940 L 390 940 L 410 1010 Z" fill="#FFE59A" {...line} />
+    {host(170, 1250, 270)}
+  </g>
+);
+
+
 const ART: Record<Gag, React.FC<Ctx>> = {
   desert: Desert,
   moon: Moon,
@@ -648,4 +836,7 @@ const ART: Record<Gag, React.FC<Ctx>> = {
   magnifier: Magnifier,
   'roller-coaster': RollerCoaster,
   parachute: Parachute,
+  mailbox: Mailbox,
+  'hand-fan': HandFan,
+  bedtime: Bedtime,
 };

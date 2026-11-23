@@ -1,7 +1,7 @@
 import { GAGS, GAG_LABELS, type Gag, type Scene } from './types.ts';
 
 /**
- * 농담 장면 그림 고르기. '진지한 엉뚱 가이드'(deadpan)의 말도 안 되는 단계마다 그 말을 그대로 그린 그림을 띄운다
+ * 농담 장면 그림 고르기. '진지한 엉뚱 가이드'(deadpan)의 말도 안 되는 단계, '글자 그대로'(wordplay)의 다른 뜻 장면마다 그 말을 그대로 그린 그림을 띄운다
  * (예시 영상은 엘리베이터 안 텐트, 엘리베이터를 드는 타워 크레인처럼 엉뚱한 생각을 글자 그대로 보여 줬다).
  * 작가(Claude)가 gag를 고르고, 비었거나 예전 대본이면 대사 낱말로 고른다.
  */
@@ -22,6 +22,9 @@ export const GAG_HINTS: Record<Gag, string> = {
   magnifier: '커다란 돋보기로 접시를 들여다봄',
   'roller-coaster': '롤러코스터 맨 앞자리에 탄 접시',
   parachute: '낙하산을 매고 하늘에서 내려오는 접시',
+  mailbox: '우표 붙인 봉투에 담긴 접시가 빨간 우체통 입구로 들어감 (편지·소포를 부치다)',
+  'hand-fan': '맛조수가 커다란 접이 부채로 접시에 바람을 부침 (부채를 부치다)',
+  bedtime: '접시가 베개를 베고 이불을 덮고 잠듦, 창밖에 달 (재우다)',
 };
 
 /** 대사 낱말 → 그림. 앞에서부터 먼저 맞는 것. '달군다'의 '달', '산'이 든 다른 낱말을 피하려고 앞뒤를 본다 */
@@ -29,7 +32,10 @@ const GAG_WORDS: { gag: Gag; re: RegExp }[] = [
   { gag: 'rocket', re: /로켓|우주선|우주로|발사/ },
   { gag: 'moon', re: /(^|[\s"'“‘(])달(까지|로|에|나라|\s?표면|\s?위)|달나라|월면/ },
   { gag: 'desert', re: /사막|모래\s?언덕|선인장/ },
-  { gag: 'giant-fan', re: /선풍기|바람개비|송풍기|부채질/ },
+  { gag: 'mailbox', re: /우체통|우표|편지|소포|우편|택배/ },
+  { gag: 'hand-fan', re: /부채/ },
+  { gag: 'giant-fan', re: /선풍기|바람개비|송풍기/ },
+  { gag: 'bedtime', re: /재우|재워|재운|이불|자장가|침대|잠들/ },
   { gag: 'giant-swing', re: /그네/ },
   { gag: 'crane', re: /크레인|기중기/ },
   { gag: 'balloon', re: /열기구|풍선/ },
