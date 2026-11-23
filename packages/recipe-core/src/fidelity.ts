@@ -7,7 +7,7 @@ export type IssueLevel = 'error' | 'warning' | 'info';
 
 export interface Issue {
   level: IssueLevel;
-  code: 'quantity' | 'ingredient' | 'step' | 'safety' | 'claim' | 'branding';
+  code: 'quantity' | 'ingredient' | 'step' | 'safety' | 'claim' | 'branding' | 'gag';
   message: string;
   sceneId?: string;
 }
@@ -218,6 +218,13 @@ export function checkScript(recipe: RecipeInput, script: Script): Issue[] {
 
     for (const q of quantityIssues(recipe, sceneText)) {
       issues.push({ level: 'error', code: 'quantity', sceneId: scene.id, message: q.message });
+    }
+
+    // 농담 장면: 엉뚱한 말에 분량이 섞이면 진짜 방법처럼 기억될 수 있고, 카드는 연구자 조언처럼 보인다 (원본에 있는 분량이어도 막는다)
+    if (scene.type === 'gag') {
+      const amounts = extractQuantities(scene.line).map((q) => q.raw);
+      if (amounts.length) issues.push({ level: 'error', code: 'gag', sceneId: scene.id, message: `농담 장면에 분량·시간·온도 "${amounts.join(', ')}"가 있습니다. 농담 장면에는 분량을 넣지 않습니다.` });
+      if (scene.cardTitle || scene.cardItems?.length) issues.push({ level: 'error', code: 'gag', sceneId: scene.id, message: '농담 장면에 카드가 있습니다. 농담 장면에는 연구자 노트·팁 카드를 붙이지 않습니다.' });
     }
 
     if (scene.type === 'ingredients') {

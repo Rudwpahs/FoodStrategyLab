@@ -109,6 +109,9 @@ export function shotFor(type: SceneType, indexOfType: number): Shot {
       return { ...base, ...PLATE_CLOSE, mood: 'golden', fov: 40, plated: 'done', cook: [1, 1] };
     case 'outro':
       return { ...base, ...PRESENT, mood: 'golden', plated: 'done', cook: [1, 1], action: 'present' };
+    // 농담 장면은 2D 농담 그림(gags/)이 화면 전체를 덮는다. 3D는 그리지 않으므로 아무 화면이나 조용한 것으로
+    case 'gag':
+      return { ...base, ...CHEF_CLOSE, mood: 'curious', fov: 42 };
   }
 }
 
@@ -245,6 +248,7 @@ export function shotVariants(scene: Pick<Scene, 'type' | 'visual'>, indexOfType:
       case 'outro':
         return [PRESENT_LOW, { ...HERO_LOW, action: 'idle', fov: 40 }];
       case 'mistake':
+      case 'gag':
         return [];
     }
   })();

@@ -56,8 +56,10 @@ export function sfxCues(script: Script): SfxCue[] {
     if (s.visual === 'signature') return { name: 'pop', offset: 4 };
     return null;
   };
+  // 농담 장면: 첫 농담 그림이 나타날 때만 가볍게 '퐁' (장면마다 넣으면 시끄럽고 엔딩 서명 소리가 빠진다)
+  const firstGag = script.scenes.find((s) => s.type === 'gag' && !s.hook)?.id;
   for (const s of script.scenes) {
-    const c = pick(s);
+    const c = s.id === firstGag ? { name: 'pop' as const, offset: 6 } : pick(s);
     if (c) cues.push({ sceneId: s.id, ...c });
   }
   return cues.slice(0, 4);

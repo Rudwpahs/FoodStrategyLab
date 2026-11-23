@@ -67,7 +67,12 @@ export const RecipeInputSchema = z.object({
 });
 export type RecipeInput = z.infer<typeof RecipeInputSchema>;
 
-export const SCENE_TYPES = ['intro', 'question', 'mistake', 'explain', 'ingredients', 'steps', 'tip', 'outro'] as const;
+/**
+ * gag: '진지한 엉뚱 가이드'(deadpan)의 말도 안 되는 단계. 화면은 고른 그림(gag)으로 바뀌고 '농담' 표시가 붙으며,
+ * 연구자 카드(노트·팁)는 절대 붙지 않는다 (진짜 방법보다 먼저 답이 보이거나, 농담이 연구자 조언처럼 보이지 않게).
+ * 연출 엔진·템플릿은 만들지 않고 AI 이야기 대본만 쓴다.
+ */
+export const SCENE_TYPES = ['intro', 'question', 'mistake', 'explain', 'ingredients', 'steps', 'tip', 'outro', 'gag'] as const;
 export const SceneTypeSchema = z.enum(SCENE_TYPES);
 export type SceneType = z.infer<typeof SceneTypeSchema>;
 
@@ -106,6 +111,46 @@ export const PLACE_LABELS: Record<Place, string> = {
   lab: '연구실 칠판',
 };
 
+/**
+ * 농담 장면(type 'gag')의 그림. 요리(접시)가 터무니없는 곳에서 쓰이고, 맛조수는 옆에서 태연하게 지켜본다.
+ * 그림은 packages/video/src/gags (2D 그림, 3D 캔버스 위에 덮는다)
+ */
+export const GAGS = [
+  'desert',
+  'moon',
+  'rocket',
+  'giant-fan',
+  'giant-swing',
+  'crane',
+  'balloon',
+  'mountain',
+  'ocean',
+  'north-pole',
+  'camping',
+  'magnifier',
+  'roller-coaster',
+  'parachute',
+] as const;
+export const GagSchema = z.enum(GAGS);
+export type Gag = z.infer<typeof GagSchema>;
+
+export const GAG_LABELS: Record<Gag, string> = {
+  desert: '사막 한가운데',
+  moon: '달 위',
+  rocket: '로켓 타고 우주로',
+  'giant-fan': '집채만 한 선풍기',
+  'giant-swing': '거대한 그네',
+  crane: '타워 크레인',
+  balloon: '열기구',
+  mountain: '산꼭대기',
+  ocean: '바다 위 배',
+  'north-pole': '북극 얼음 위',
+  camping: '텐트 캠핑',
+  magnifier: '커다란 돋보기',
+  'roller-coaster': '롤러코스터',
+  parachute: '낙하산',
+};
+
 export const SceneSchema = z.object({
   id: z.string().min(1),
   type: SceneTypeSchema,
@@ -121,6 +166,8 @@ export const SceneSchema = z.object({
   place: PlaceSchema.optional(),
   /** 훅(첫 장면) 여부: 훅을 바꿀 때 이 장면만 다시 만든다 */
   hook: z.boolean().optional(),
+  /** 농담 장면(type 'gag')의 그림. 비어 있으면 대사 낱말로 고른다 (gagForScene) */
+  gag: GagSchema.optional(),
 });
 export type Scene = z.infer<typeof SceneSchema>;
 

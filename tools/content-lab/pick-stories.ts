@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.MATLAB_DATA_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'pick-stories-'));
-const { SAMPLE_RECIPES, STORY_TYPES, finalizeStory, isPersonaId } = await import('@mat-lab/recipe-core');
+const { AUDIENCES, SAMPLE_RECIPES, STORY_TYPES, finalizeStory, isPersonaId } = await import('@mat-lab/recipe-core');
 const { openDb } = await import('../../apps/studio/server/db.ts');
 const { StoryWriter } = await import('../../apps/studio/server/storyWriter.ts');
 const { pickStory } = await import('../../apps/studio/e2e/pickStory.ts');
@@ -40,12 +40,17 @@ for (const [i, job] of jobs.entries()) {
   const persona = job.persona && isPersonaId(job.persona) ? job.persona : undefined;
   const recent = recentBy.get(persona ?? '') ?? [];
   recentBy.set(persona ?? '', recent);
-  const { drafts, costUsd } = await writer.write(recipe, { recent: recent.slice(0, 12), persona, mustInclude: job.type && (STORY_TYPES as readonly string[]).includes(job.type) ? (job.type as (typeof STORY_TYPES)[number]) : undefined });
+  // 요청한 형식과 시청자를 함께 강제한다 (형식만 강제하면 다른 시청자로 써서 견본이 뒤바뀌었다: 2026-11-23)
+  const mustInclude = job.type && (STORY_TYPES as readonly string[]).includes(job.type) ? (job.type as (typeof STORY_TYPES)[number]) : undefined;
+  const mustAudience = job.audience && (AUDIENCES as readonly string[]).includes(job.audience) ? (job.audience as (typeof AUDIENCES)[number]) : undefined;
+  const { drafts, costUsd } = await writer.write(recipe, { recent: recent.slice(0, 12), persona, mustInclude, mustAudience });
   total += costUsd;
   const stories = drafts.map((d, k) => finalizeStory(recipe, d, `story-${k + 1}`));
   fs.writeFileSync(path.join(dir, 'stories.json'), JSON.stringify(stories, null, 2));
   const pick = pickStory(stories, job.audience, job.type);
   picks.push(pick ?? null);
+  if (pick && ((job.type && pick.storyType !== job.type) || (job.audience && pick.audience !== job.audience)))
+    console.warn(`⚠ ${job.dish}: 요청(${job.type ?? '-'}/${job.audience ?? '-'})과 다른 대본을 골랐어요 (${pick.storyType}/${pick.audience})`);
   // 스튜디오처럼 쓴 대본 전부가 다음 요리의 '최근 대본'이 된다
   for (const d of drafts) recent.unshift({ storyType: d.storyType, title: d.title, firstLine: d.scenes[0]?.line ?? '', lines: d.scenes.map((sc) => sc.line) });
   console.log(`${pick ? '✓' : '✘'} ${job.dish}${persona ? ` (${persona})` : ''}: ${pick ? `[${pick.storyType}/${pick.audience}] ${pick.script.title}` : '원본 대조를 통과한 대본 없음'} ($${costUsd.toFixed(2)})`);

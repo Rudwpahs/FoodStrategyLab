@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EMOTIONS, EMOTION_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, type Scene, type Script } from '@mat-lab/recipe-core';
+import { EMOTIONS, EMOTION_LABELS, GAGS, GAG_LABELS, SCENE_TYPES, VISUALS, VISUAL_LABELS, gagPlan, type Scene, type Script } from '@mat-lab/recipe-core';
 import { buildTimeline, videoSeconds, type SceneTiming } from '@mat-lab/video';
 import { HookPicker } from '../components/HookPicker.tsx';
 import { CandidatePicker } from '../components/CandidatePicker.tsx';
@@ -20,6 +20,7 @@ const TYPE_LABELS: Record<Scene['type'], string> = {
   steps: '조리 순서',
   tip: '한 줄 팁',
   outro: '엔딩',
+  gag: '농담 (엉뚱한 장면)',
 };
 const SOURCE_LABELS = { template: '템플릿', 'ai-paste': 'AI 붙여넣기', 'ai-story': 'AI 이야기', 'ai-revise': 'AI 수정', edit: '직접 수정' } as const;
 
@@ -121,6 +122,11 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
     setDirty(true);
   };
   const setScene = (i: number, patch: Partial<Scene>) => draft && update({ ...draft, scenes: draft.scenes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
+  /** 장면 종류 바꾸기: 농담 장면이 되면 카드·연출을 빼고 대사로 그림을 고른다. 농담 장면을 벗어나면 그림을 뺀다 */
+  const typePatch = (s: Scene, type: Scene['type']): Partial<Scene> => {
+    if (type === 'gag') return { type, cardTitle: undefined, cardItems: undefined, visual: undefined, gag: s.gag ?? gagPlan([{ type, line: s.line }])[0] ?? undefined };
+    return { type, gag: undefined };
+  };
   const move = (i: number, d: -1 | 1) => {
     if (!draft) return;
     const scenes = [...draft.scenes];
@@ -240,16 +246,23 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
             <div className="scene" key={s.id + i}>
               <div className="scene-head">
                 <span className="sid">{i + 1}</span>
-                <select aria-label={`${i + 1}번 장면 종류`} value={s.type} onChange={(e) => setScene(i, { type: e.target.value as Scene['type'] })}>
+                <select aria-label={`${i + 1}번 장면 종류`} value={s.type} onChange={(e) => setScene(i, typePatch(s, e.target.value as Scene['type']))}>
                   {SCENE_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
                 </select>
                 <select aria-label={`${i + 1}번 장면 맛조수 표정`} value={s.emotion} onChange={(e) => setScene(i, { emotion: e.target.value as Scene['emotion'] })}>
                   {EMOTIONS.map((e) => <option key={e} value={e}>{EMOTION_LABELS[e]}</option>)}
                 </select>
-                <select value={s.visual ?? ''} onChange={(e) => setScene(i, { visual: (e.target.value || undefined) as Scene['visual'] })} aria-label={`${i + 1}번 장면 화면 연출`}>
-                  <option value="">기본 화면</option>
-                  {VISUALS.map((v) => <option key={v} value={v}>{VISUAL_LABELS[v]}</option>)}
-                </select>
+                {s.type === 'gag' ? (
+                  <select value={s.gag ?? ''} onChange={(e) => setScene(i, { gag: (e.target.value || undefined) as Scene['gag'] })} aria-label={`${i + 1}번 장면 농담 그림`}>
+                    <option value="">대사로 고르기</option>
+                    {GAGS.map((g) => <option key={g} value={g}>{GAG_LABELS[g]}</option>)}
+                  </select>
+                ) : (
+                  <select value={s.visual ?? ''} onChange={(e) => setScene(i, { visual: (e.target.value || undefined) as Scene['visual'] })} aria-label={`${i + 1}번 장면 화면 연출`}>
+                    <option value="">기본 화면</option>
+                    {VISUALS.map((v) => <option key={v} value={v}>{VISUAL_LABELS[v]}</option>)}
+                  </select>
+                )}
                 {s.hook && <span className="badge" title="첫 장면(훅). 훅을 바꾸면 이 장면만 다시 만들어요.">첫 장면</span>}
                 <div className="scene-tools">
                   <button className="btn small ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`${i + 1}번 장면 위로`}>↑</button>
@@ -261,7 +274,8 @@ export const ScriptStep: React.FC<StepProps> = ({ project, setProject, go, reloa
                 맛조수 대사 (음성·자막)
                 <textarea rows={2} value={s.line} onChange={(e) => setScene(i, { line: e.target.value })} />
               </label>
-              {(s.cardTitle !== undefined || s.cardItems !== undefined) && (
+              {s.type === 'gag' && <p className="hint">농담 장면: 엉뚱한 그림과 '농담' 표시가 나오고, 카드·분량은 넣지 않아요.</p>}
+              {s.type !== 'gag' && (s.cardTitle !== undefined || s.cardItems !== undefined) && (
                 <div className="grid2" style={{ marginTop: 8 }}>
                   <label className="field">
                     화면 카드 제목

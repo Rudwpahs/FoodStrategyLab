@@ -190,6 +190,9 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
         </div>
       );
     }
+    // 농담 장면에는 카드가 없다 (KitchenVideo가 '농담' 표시만 붙인다)
+    case 'gag':
+      return null;
     case 'outro':
       return (
         <div style={{ ...style, textAlign: 'center', top: 330, background: COLORS.red, color: COLORS.white }}>
