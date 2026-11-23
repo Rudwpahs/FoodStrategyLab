@@ -43,9 +43,9 @@ const sampleDraft = (over: Partial<StoryDraft['scenes'][number]>[] = []): StoryD
 };
 
 describe('농담 장면 그림 (gag)', () => {
-  it('그림 목록은 12~16가지이고 이름·설명이 모두 있다', () => {
+  it('그림 목록은 12~20가지이고 이름·설명이 모두 있다', () => {
     expect(GAGS.length).toBeGreaterThanOrEqual(12);
-    expect(GAGS.length).toBeLessThanOrEqual(16);
+    expect(GAGS.length).toBeLessThanOrEqual(20);
     for (const g of GAGS) {
       expect(GAG_LABELS[g]).toBeTruthy();
       expect(GAG_HINTS[g]).toBeTruthy();
@@ -59,6 +59,16 @@ describe('농담 장면 그림 (gag)', () => {
     expect(gagFromLine('보통은 호두를 타워크레인으로 옥상까지 올려요.')).toBe('crane');
     expect(gagFromLine('팬을 충분히 달군다.')).toBeNull();
     expect(gagFromLine('반죽을 얇게 펴 주세요.')).toBeNull();
+  });
+
+  it('글자 그대로용 그림: 편지·우체통, 부채, 재우기', () => {
+    expect(gagFromLine('글자 그대로면 전을 우체통에 넣어 보내는 일이에요.')).toBe('mailbox');
+    expect(gagFromLine('편지를 부치는 그 부치다요.')).toBe('mailbox');
+    expect(gagFromLine('커다란 부채로 바람을 보내 드려요.')).toBe('hand-fan');
+    expect(gagFromLine('부채질을 아주 성실하게 해요.')).toBe('hand-fan');
+    expect(gagFromLine('집채만 한 선풍기를 틀어요.')).toBe('giant-fan');
+    expect(gagFromLine('고기를 이불 덮어 재워 주세요.')).toBe('bedtime');
+    expect(gagFromLine('반죽을 앞뒤로 노릇하게 부친다.')).toBeNull();
   });
 
   it('대본 안에서 그림이 겹치지 않게 고르고, 작가가 고른 그림은 그대로 둔다', () => {

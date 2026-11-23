@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, gagPlan, ingredientProps, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, LETTER_FICTION, fictionStoryScenes, gagPlan, ingredientProps, type Scene } from '@mat-lab/recipe-core';
 import { GagScene } from '../gags/GagScene.tsx';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
@@ -37,6 +37,8 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const byId = useMemo(() => new Map(timings.map((t) => [t.sceneId, t])), [timings]);
   const clips = useMemo(() => clipLayers(script, timings, sceneMedia), [script, timings, sceneMedia]);
   const sfx = useMemo(() => sfxCues(script), [script]);
+  // 사연 한 통: 꾸민 사연이면 진짜 정보가 나오기 전까지 '가상 사연' 표시 (카드가 가려져도 늘 보이게)
+  const fiction = useMemo(() => fictionStoryScenes(script), [script]);
   const music = useMemo(() => ({ intervals: speechIntervals(timings), total: totalFrames(timings) }), [timings]);
   // 실제 완성 사진을 화면 가득: 첫 장면(훅)과 '완성 음식 먼저' 장면 (그 장면에 촬영 영상이 있으면 영상이 우선)
   const photos = useMemo(() => photoLayers(script, timings, photoUrl, clips), [script, timings, photoUrl, clips]);
@@ -141,7 +143,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
       )}
       {whip.amount > 0 && <AbsoluteFill style={{ backgroundColor: '#FFF6E8', opacity: whip.amount * 0.32, pointerEvents: 'none' }} />}
       <PostFx frame={frame} />
-      {script.scenes.map((scene) => {
+      {script.scenes.map((scene, sceneIndex) => {
         const timing = byId.get(scene.id);
         if (!timing) return null;
         return (
@@ -158,6 +160,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
               keywords={keywords}
               realMedia={realScenes.has(scene.id)}
               opening={timing.from === 0}
+              fiction={fiction.includes(sceneIndex)}
             />
             <SpeechAudio timing={timing} />
           </Sequence>
@@ -290,6 +293,8 @@ const Overlay: React.FC<{
   realMedia: boolean;
   /** 영상 첫 장면(훅) */
   opening: boolean;
+  /** '가상 사연' 표시를 붙일 장면 */
+  fiction?: boolean;
 }> = ({
   scene,
   timing,
@@ -302,6 +307,7 @@ const Overlay: React.FC<{
   keywords,
   realMedia,
   opening,
+  fiction,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -313,6 +319,7 @@ const Overlay: React.FC<{
     <AbsoluteFill>
       {/* 3D 실패 장면 표시. 실제 사진·영상이 덮으면 그건 연출이 아니므로 붙이지 않는다 ('실제 완성 사진' 표시가 대신 나온다) */}
       {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && !realMedia && scene.type !== 'gag' && <IllustrationTag />}
+      {fiction && <FictionTag below={(scene.visual === 'fail' || scene.visual === 'fail-closeup') && !realMedia} />}
       {/* 농담 장면: 그림이 화면을 채우고 '농담' 표시만. 연구자 카드(노트·팁)는 붙이지 않는다 */}
       {scene.type === 'gag' ? (
         <JokeTag />
@@ -450,6 +457,13 @@ const StepTicker: React.FC<{ scene: Scene; frame: number; duration: number }> = 
 /** 농담 장면 표시: 엉뚱한 단계가 연구자 조언으로 보이지 않게 ('설명용 연출'과 같은 자리·모양) */
 const JokeTag: React.FC = () => (
   <div style={{ position: 'absolute', right: 40, top: 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>농담</div>
+);
+
+/** 꾸민 사연 표시: 지어낸 이야기가 실제 받은 사연처럼 보이지 않게 ('농담'·'설명용 연출'과 같은 모양) */
+const FictionTag: React.FC<{ below?: boolean }> = ({ below }) => (
+  <div style={{ position: 'absolute', right: 40, top: below ? 290 : 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>
+    {LETTER_FICTION}
+  </div>
 );
 
 const IllustrationTag: React.FC = () => (

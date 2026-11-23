@@ -84,8 +84,8 @@ function sameScript(next: Script, current: Script): boolean {
  * 고친 대본 검사: 구조·원본 대조(finalizeStory) → 원본과 다른 분량·재료·순서가 있으면 거절 → 바뀐 곳이 없으면 거절.
  * 통과하면 저장할 대본(재료·순서 카드는 원본 그대로)과 원본 대조 결과를 돌려준다.
  */
-export function checkRevision(recipe: RecipeInput, current: Script, draft: StoryDraft): { ok: true; candidate: StoryCandidate } | { ok: false; error: string } {
-  const c = finalizeStory(recipe, draft, 'revise');
+export function checkRevision(recipe: RecipeInput, current: Script, draft: StoryDraft, opts: { expertAnswers?: string[] } = {}): { ok: true; candidate: StoryCandidate } | { ok: false; error: string } {
+  const c = finalizeStory(recipe, draft, 'revise', opts);
   if ('error' in c) return { ok: false, error: `고친 대본을 쓸 수 없어요: ${c.error}` };
   if (storyBlocked(c)) {
     const errs = c.issues.filter((i) => i.level === 'error').map((i) => i.message);

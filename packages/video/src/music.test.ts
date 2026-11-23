@@ -33,6 +33,16 @@ describe('배경 음악', () => {
     expect(musicFor({})).toBe('ukulele');
   });
 
+  it('웃음 형식마다 곡을 고른다: 부엌 다큐는 가장 차분한 오르골', () => {
+    expect(musicFor({ style: 'ai-story', hookType: 'documentary' })).toBe('musicbox');
+    expect(musicFor({ style: 'ai-story', hookType: 'wordplay' })).toBe('pizzicato');
+    expect(musicFor({ style: 'ai-story', hookType: 'deadpan' })).toBe('pizzicato');
+    expect(musicFor({ style: 'ai-story', hookType: 'listener-story' })).toBe('ukulele');
+    expect(musicFor({ style: 'ai-story', hookType: 'vague-vs-note' })).toBe('ukulele');
+    expect(musicFor({ style: 'ai-story', hookType: 'town-rules' })).toBe('upbeat');
+    expect(musicFor({ style: 'ai-story', hookType: 'relatable' })).toBe('upbeat');
+  });
+
   it('대사 중에는 줄이고, 쉬는 틈에는 키우고, 처음·끝은 부드럽게', () => {
     const iv = speechIntervals(timings);
     expect(iv).toEqual([[0, 45], [60, 130]]);

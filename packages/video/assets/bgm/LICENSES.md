@@ -8,7 +8,7 @@
 | `ukulele.mp3` | 밝음 · 기본 | [short ukulele loop by rea](https://freesound.org/people/reasanka/sounds/383023) | reasanka | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `upbeat.mp3` | 신남 · 시간 싸움·내기·구출·실험 | [happy loop](https://freesound.org/people/wi-photos/sounds/506791) | wi-photos | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `pizzicato.mp3` | 궁금함 · 추리·오해 깨기·코미디·문제 해결 | [Short Pizzicato Song](https://freesound.org/people/DanJFilms/sounds/529008) (앞 40초) | DanJFilms | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| `musicbox.mp3` | 따뜻함 · 선물·추억·이야기 | [sweet music box loop](https://freesound.org/people/ZHR%C3%98/sounds/676722) | ZHRØ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `musicbox.mp3` | 따뜻함 · 선물·추억·이야기, 부엌 다큐(가진 곡 중 가장 차분) | [sweet music box loop](https://freesound.org/people/ZHR%C3%98/sounds/676722) | ZHRØ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 
 - 찾은 곳: [Openverse](https://openverse.org) (라이선스 CC0로 걸러 검색, 2026-11-18). Freesound 파일 서버가 개발 컨테이너를 막아 `.github/workflows/fetch-sfx.yml`(사용자 승인)로 GitHub 서버에서 받았다.
 - 다듬은 방법: 모노 44.1kHz, 96kbps MP3, 소리 크기 -20 LUFS로 맞춤. 피치카토 곡은 앞 40초만 쓰고 끝 2.5초를 서서히 줄였다.

@@ -68,7 +68,7 @@ export const RecipeInputSchema = z.object({
 export type RecipeInput = z.infer<typeof RecipeInputSchema>;
 
 /**
- * gag: '진지한 엉뚱 가이드'(deadpan)의 말도 안 되는 단계. 화면은 고른 그림(gag)으로 바뀌고 '농담' 표시가 붙으며,
+ * gag: '진지한 엉뚱 가이드'(deadpan)의 말도 안 되는 단계, '글자 그대로'(wordplay)의 다른 뜻 장면. 화면은 고른 그림(gag)으로 바뀌고 '농담' 표시가 붙으며,
  * 연구자 카드(노트·팁)는 절대 붙지 않는다 (진짜 방법보다 먼저 답이 보이거나, 농담이 연구자 조언처럼 보이지 않게).
  * 연출 엔진·템플릿은 만들지 않고 AI 이야기 대본만 쓴다.
  */
@@ -130,6 +130,10 @@ export const GAGS = [
   'magnifier',
   'roller-coaster',
   'parachute',
+  // 글자 그대로(wordplay)용 (2026-11-23): 편지를 부치다, 부채를 부치다, 아이를 재우다
+  'mailbox',
+  'hand-fan',
+  'bedtime',
 ] as const;
 export const GagSchema = z.enum(GAGS);
 export type Gag = z.infer<typeof GagSchema>;
@@ -149,6 +153,9 @@ export const GAG_LABELS: Record<Gag, string> = {
   magnifier: '커다란 돋보기',
   'roller-coaster': '롤러코스터',
   parachute: '낙하산',
+  mailbox: '빨간 우체통',
+  'hand-fan': '커다란 부채',
+  bedtime: '이불 덮고 재우기',
 };
 
 export const SceneSchema = z.object({

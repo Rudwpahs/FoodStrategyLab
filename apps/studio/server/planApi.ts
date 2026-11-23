@@ -77,10 +77,11 @@ export function mountPlanApi(api: Router, d: PlanApiDeps): PlanStore {
     revising.add(pid);
     try {
       const recipe = repo.getRecipe(pid);
-      const { output, costUsd } = await d.reviser.revise(recipe, latest.script, cleaned.request, { expertAnswers: d.expertAnswers(pid) });
+      const expertAnswers = d.expertAnswers(pid);
+      const { output, costUsd } = await d.reviser.revise(recipe, latest.script, cleaned.request, { expertAnswers });
       // Claude를 기다리는 동안 누가 대본을 바꿨으면 저장하지 않는다
       if (repo.latestScript(pid)?.version !== latest.version) throw new HttpError(409, '기다리는 동안 대본이 바뀌었어요. 화면을 새로 고친 뒤 다시 요청해 주세요.');
-      const checked = checkRevision(recipe, latest.script, output.story);
+      const checked = checkRevision(recipe, latest.script, output.story, { expertAnswers });
       if (!checked.ok) {
         repo.logEvent(pid, 'script', `수정 요청을 반영하지 못함 (약 $${costUsd.toFixed(2)}): ${checked.error}`);
         throw new HttpError(422, checked.error);

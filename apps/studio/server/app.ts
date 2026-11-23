@@ -1018,8 +1018,10 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
   /** 저장된 초안을 지금 레시피로 다시 대조한다 (레시피를 고친 뒤에도 원본과 어긋나지 않게) */
   const storyList = (pid: number) => {
     const recipe = repo.getRecipe(pid);
+    // 연구자 답변: '사연 한 통'의 '선생님이 받은 질문' 카드가 답변 원문 그대로인지 대조한다
+    const expertAnswers = answerTexts(repo.getExpertNotes(pid));
     return repo.getStories(pid).map((st) => {
-      const c = finalizeStory(recipe, st.draft, st.id);
+      const c = finalizeStory(recipe, st.draft, st.id, { expertAnswers });
       if ('error' in c) return { id: st.id, createdAt: st.createdAt, error: c.error };
       return { ...c, createdAt: st.createdAt, label: storyTypeLabel(c.storyType), blocked: storyBlocked(c) };
     });
@@ -1046,7 +1048,16 @@ export function createApp(repo: Repo, deps: AppDeps = { startRender }) {
         .map((st) => ({ storyType: st.draft.storyType, title: st.draft.title, firstLine: st.draft.scenes[0]?.line ?? '', lines: st.draft.scenes.map((sc) => sc.line) }));
       // 연구자가 올린 실제 촬영 장면 수 (생성 AI 클립 '.ai.'은 빼고): 2개 이상이면 '두 방법 비교' 형식을 쓸 수 있다
       const realClips = Object.values(project.sceneMedia ?? {}).filter((m) => !/\.ai\./.test(m.url)).length;
-      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, realClips, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
+      // 최근에 실제로 만든 영상의 형식 (다른 콘텐츠, 새것부터 10개): 웃음 형식 돌려쓰기(10편 중 3~4편, 연달아 금지)는 쓴 초안이 아니라 만든 영상으로 센다
+      const recentVideos = repo
+        .listProjects()
+        .filter((p) => p.id !== pid)
+        .map((p) => repo.latestScript(p.id))
+        .filter((v): v is NonNullable<typeof v> => Boolean(v))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 10)
+        .map((v) => (v.script.style === 'ai-story' ? (v.script.hookType ?? 'ai-story') : (v.script.style ?? v.source)));
+      const { drafts, costUsd } = await storyWriter.write(project.recipe, { avoidTitles, recent, recentVideos, realClips, expertAnswers: answerTexts(repo.getExpertNotes(pid)) });
       const added = new Set(repo.addStories(pid, drafts, costUsd).map((s) => s.id));
       res.json({ stories: storyList(pid), added: [...added], costUsd });
     } finally {

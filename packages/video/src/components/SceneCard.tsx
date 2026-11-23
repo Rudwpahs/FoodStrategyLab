@@ -1,6 +1,6 @@
 import React from 'react';
 import { interpolate, spring } from 'remotion';
-import { BRAND, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, LETTER_FICTION, isLetterTitle, type Scene } from '@mat-lab/recipe-core';
 import { reviewNote } from '../brandText.ts';
 import { COLORS, FONT_FAMILY } from '../theme.ts';
 import { LogoMark } from './Stage.tsx';
@@ -75,6 +75,11 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
     const p = spring({ frame: frame - 6 - i * 5, fps, config: { damping: 16 } });
     return { opacity: p, transform: `translateX(${interpolate(p, [0, 1], [40, 0])}px)` };
   };
+
+  // 사연 한 통: 편지 모양 카드 ('가상 사연' 또는 '선생님이 받은 질문')
+  if (isLetterTitle(scene.cardTitle) && (scene.type === 'question' || scene.type === 'intro' || scene.type === 'mistake')) {
+    return <LetterCard scene={scene} style={style} />;
+  }
 
   switch (scene.type) {
     case 'intro':
@@ -209,6 +214,38 @@ export const SceneCard: React.FC<CardProps> = ({ scene, topic, frame, fps, revie
         </div>
       );
   }
+};
+
+/**
+ * 사연 카드: 줄 친 편지지 + 우표. 이름표는 카드 제목 그대로 ('가상 사연'이면 꾸민 이야기라는 표시가 카드 맨 위에 크게).
+ * 글은 카드 항목(연구자 답변 원문)이 있으면 그것, 없으면 대사.
+ */
+export const LetterCard: React.FC<{ scene: Scene; style: React.CSSProperties }> = ({ scene, style }) => {
+  const fiction = scene.cardTitle?.trim() === LETTER_FICTION;
+  const text = scene.cardItems?.[0] ?? scene.line;
+  return (
+    <div
+      style={{
+        ...style,
+        top: 300,
+        background: `repeating-linear-gradient(180deg, #FFFDF5 0px, #FFFDF5 78px, #E9D9BE 78px, #E9D9BE 81px)`,
+        borderLeft: `6px solid ${COLORS.ink}`,
+        padding: '40px 52px 52px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <Label color={fiction ? COLORS.ink : COLORS.navy}>✉ {scene.cardTitle}</Label>
+        {/* 우표 (톱니 테두리) */}
+        <div style={{ width: 92, height: 108, border: `5px dashed ${COLORS.ink}`, background: COLORS.white, padding: 8, transform: 'rotate(6deg)', marginTop: -24 }}>
+          <div style={{ width: '100%', height: '100%', background: COLORS.mint, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 99, background: COLORS.yellow, border: `4px solid ${COLORS.ink}` }} />
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: fitSize(text, 60, 32), fontWeight: 700, lineHeight: 1.35 }}>{text}</div>
+      {fiction && <div style={{ marginTop: 22, fontSize: 32, fontWeight: 600, color: '#7A6A5E' }}>흔히 있는 일로 꾸민 이야기예요</div>}
+    </div>
+  );
 };
 
 function stripExclaim(line: string) {
