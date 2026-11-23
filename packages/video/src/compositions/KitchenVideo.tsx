@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { BRAND, ingredientProps, type Scene } from '@mat-lab/recipe-core';
+import { BRAND, gagPlan, ingredientProps, type Scene } from '@mat-lab/recipe-core';
+import { GagScene } from '../gags/GagScene.tsx';
 import { Captions } from '../components/Captions.tsx';
 import { faceSafeCaptionBottom } from '../three/captionPlacement.ts';
 import { captionKeywords, type CaptionKeywords } from '../captionStyle.ts';
@@ -39,7 +40,11 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const music = useMemo(() => ({ intervals: speechIntervals(timings), total: totalFrames(timings) }), [timings]);
   // 실제 완성 사진을 화면 가득: 첫 장면(훅)과 '완성 음식 먼저' 장면 (그 장면에 촬영 영상이 있으면 영상이 우선)
   const photos = useMemo(() => photoLayers(script, timings, photoUrl, clips), [script, timings, photoUrl, clips]);
-  const real = layerAt(clips, frame) ?? layerAt(photos, frame);
+  const now = sceneAt(script, timings, frame);
+  // 농담 장면('진지한 엉뚱 가이드'): 2D 농담 그림이 화면 전체를 덮는다. 실제 촬영 영상·사진보다도 위 (농담이 그림으로 보여야 웃긴다)
+  const gags = useMemo(() => gagPlan(script.scenes), [script]);
+  const gagNow = now && now.scene.type === 'gag' ? (gags[script.scenes.indexOf(now.scene)] ?? null) : null;
+  const real = gagNow ? null : (layerAt(clips, frame) ?? layerAt(photos, frame));
   // 실제 촬영 영상·사진으로 시작하는 장면 (3D 맛조수가 가려진다): 고글 동작은 그다음 노트 장면에서, 첫 장면이면 노트 카드도 띄우지 않는다
   const realScenes = useMemo(() => new Set(timings.filter((t) => layerAt(clips, t.from) ?? layerAt(photos, t.from)).map((t) => t.sceneId)), [timings, clips, photos]);
   // 맛조수 고정 소리: 연구자 노트 카드가 뜰 때마다 노트 넘기는 소리 (hostCues.ts)
@@ -49,8 +54,7 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
   const compare = sceneAt(script, timings, frame)?.scene.visual === 'compare';
   const failState = compare ? stageAt(script, timings, frame, food.kind, labels, 'compare-fail') : null;
   const keywords = useMemo(() => captionKeywords(recipe), [recipe]);
-  const captionBottom = state && !real && !compare ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
-  const now = sceneAt(script, timings, frame);
+  const captionBottom = state && !real && !compare && !gagNow ? faceSafeCaptionBottom(state, width, height) : CAPTION_SAFE_BOTTOM;
   // 첫 화면에는 로고를 두지 않는다: 브랜드 배지는 첫 장면이 끝난 뒤 나타난다
   const openingEnd = timings[0] ? timings[0].from + timings[0].durationInFrames : 0;
   // 장소가 바뀌는 장면 경계: 화면을 옆으로 휙 넘기며(가로 흐림) 바꾼다 — 끊김이 아니라 일부러 넘긴 것처럼
@@ -69,13 +73,15 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
         }}
       >
         {/* 캔버스는 언제나 이 자리에 하나만: 비교 장면은 같은 캔버스 위쪽 절반에 '건너뛴 쪽'을 그린다 */}
-        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={compare ? [] : props} split={failState} />}
+        {/* 농담 장면 동안은 3D를 그리지 않는다 (그림이 덮으므로 렌더 시간만 든다). 캔버스는 지우지 않고 남겨 둔다 */}
+        {state && <KitchenScene width={width} height={height} frame={frame} state={state} food={food} props={compare ? [] : props} split={failState} skip={Boolean(gagNow)} />}
       </AbsoluteFill>
       {/* 재료 이름표: 3D 소품 위에 붙는다 (장소를 넘길 때는 3D 화면과 함께 밀린다) */}
       <AbsoluteFill style={{ transform: whipTransform }}>
         {state &&
           !compare &&
           !real &&
+          !gagNow &&
           props.map((p, i) => {
             const pop = state.propPop[i] ?? 0;
             if (pop < 0.3) return null;
@@ -120,6 +126,19 @@ export const KitchenVideo: React.FC<VideoProps> = ({ script, timings, reviewed, 
           <ResultPhoto url={photoUrl!} />
         </Sequence>
       ))}
+      {gagNow && now && (
+        <AbsoluteFill style={{ filter: `contrast(1.04)${whip.amount > 0 ? ' url(#whip-blur)' : ''}`, transform: whipTransform }}>
+          <GagScene
+            gag={gagNow}
+            frame={now.local}
+            duration={now.timing.durationInFrames}
+            food={food}
+            emotion={now.scene.emotion}
+            talking={now.local < now.timing.speechFrames}
+            mouth={mouthAt(now.timing.mouth, now.local)}
+          />
+        </AbsoluteFill>
+      )}
       {whip.amount > 0 && <AbsoluteFill style={{ backgroundColor: '#FFF6E8', opacity: whip.amount * 0.32, pointerEvents: 'none' }} />}
       <PostFx frame={frame} />
       {script.scenes.map((scene) => {
@@ -293,8 +312,11 @@ const Overlay: React.FC<{
   return (
     <AbsoluteFill>
       {/* 3D 실패 장면 표시. 실제 사진·영상이 덮으면 그건 연출이 아니므로 붙이지 않는다 ('실제 완성 사진' 표시가 대신 나온다) */}
-      {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && !realMedia && <IllustrationTag />}
-      {scene.visual === 'compare' ? (
+      {(scene.visual === 'fail' || scene.visual === 'fail-closeup') && !realMedia && scene.type !== 'gag' && <IllustrationTag />}
+      {/* 농담 장면: 그림이 화면을 채우고 '농담' 표시만. 연구자 카드(노트·팁)는 붙이지 않는다 */}
+      {scene.type === 'gag' ? (
+        <JokeTag />
+      ) : scene.visual === 'compare' ? (
         <CompareOverlay scene={scene} frame={frame} fps={fps} />
       ) : scene.visual === 'signature' ? (
         <SignatureCard frame={frame} fps={fps} reviewed={reviewed} reviewer={reviewer} cleanDraft={cleanDraft} />
@@ -425,6 +447,11 @@ const StepTicker: React.FC<{ scene: Scene; frame: number; duration: number }> = 
 };
 
 /** 3D 실패 장면은 실제 조리 결과가 아니므로 "설명용 연출"을 표시한다 */
+/** 농담 장면 표시: 엉뚱한 단계가 연구자 조언으로 보이지 않게 ('설명용 연출'과 같은 자리·모양) */
+const JokeTag: React.FC = () => (
+  <div style={{ position: 'absolute', right: 40, top: 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>농담</div>
+);
+
 const IllustrationTag: React.FC = () => (
   <div style={{ position: 'absolute', right: 40, top: 230, background: 'rgba(43,35,33,0.82)', color: COLORS.white, borderRadius: 14, padding: '6px 18px', fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: 30 }}>설명용 연출</div>
 );

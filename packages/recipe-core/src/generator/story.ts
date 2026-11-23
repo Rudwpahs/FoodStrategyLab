@@ -3,7 +3,8 @@ import { BRAND } from '../brand.ts';
 import { formatIngredient, splitSentences } from '../format.ts';
 import { checkScript, type Issue } from '../fidelity.ts';
 import { findHealthClaims } from '../wordLists.ts';
-import { CATEGORY_LABELS, EMOTIONS, PLACES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
+import { CATEGORY_LABELS, EMOTIONS, GAGS, PLACES, SCENE_TYPES, ScriptSchema, VISUALS, type Place, type RecipeInput, type Script } from '../types.ts';
+import { gagFromLine, gagMenu, gagPlan } from '../gags.ts';
 import { DEFAULT_PERSONA, PERSONAS, SENSORY_RULE, findFakeExperience, limitLineInstruction, type PersonaId } from './persona.ts';
 import { enforceSourceData } from './prompt.ts';
 import { estimateScriptSeconds } from './template.ts';
@@ -121,12 +122,13 @@ export const STORY_TYPE_INFO: Record<StoryType, StoryTypeInfo> = {
    */
   deadpan: {
     label: '진지한 엉뚱 가이드',
-    beats: '누구나 겪는 흔한 상황(훅) → 말도 안 되는 방법 2~3단계를 상식인 것처럼 담담하게, 점점 더 크게 → 농담이라고 분명히 밝히는 한 줄 → 진짜 방법(원본 원리·재료·순서) → 정리',
+    beats: '누구나 겪는 흔한 상황(훅) → 말도 안 되는 방법 2~3단계(type "gag", 장면마다 그림 gag 하나)를 상식인 것처럼 담담하게, 점점 더 크게 → 농담이라고 분명히 밝히는 한 줄 → 진짜 방법(원본 원리·재료·순서) → 정리',
     guide:
       '엉뚱한 단계는 물리적으로 불가능하거나 터무니없는 일(집채만 한 도구, 엉뚱한 장소, 말도 안 되는 규모)로, 누구도 진짜로 믿지 않게. 말투는 끝까지 진지하고 태연하게 (웃기려는 티·비명·느낌표 금지). ' +
       '엉뚱한 부분에는 재료 이름·분량·시간·온도를 넣지 마. 그럴듯한 틀린 요리 팁(예: 실제로 해 볼 법한 잘못된 순서·양)도 쓰지 마. ' +
       '불·기름·뜨거운 물·칼·가스·전기·폭발·날고기 위생·아이·동물을 다치게 하는 장난은 절대 쓰지 마 (따라 할 수 있다). ' +
-      '전환 줄에서 지금까지는 농담이라고 분명히 말하고, 그 뒤는 원본 그대로 정확하게.',
+      '엉뚱한 단계는 type "gag"로 쓰고, 대사 내용과 맞는 그림(gag)을 장면마다 다르게 골라 (그림 목록은 시스템 지시의 gag). 엉뚱한 장면을 tip·explain으로 쓰지 마 (연구자 카드가 붙어 답이 미리 보여). ' +
+      '전환 줄에서 지금까지는 농담이라고 분명히 말하고, 그 뒤는 원본 그대로 정확하게. 연구자 노트·팁(explain·tip)은 전환 줄 뒤에만.',
     fits: ['young-home', 'hobby-learner'],
   },
   heritage: {
@@ -201,8 +203,9 @@ export const STORY_BEATS = ['hook', 'context', 'point', 'method', 'close'] as co
 /** Claude에게 받는 형식 (구조화 출력) */
 export const StorySceneDraftSchema = z.object({
   beat: z.enum(STORY_BEATS).describe('이 장면의 자리: hook 첫 장면 · context 상황·질문 · point 핵심(원리·차이·이유) · method 재료·조리 · close 마무리'),
-  type: z.enum(['intro', 'question', 'mistake', 'explain', 'ingredients', 'steps', 'tip', 'outro']),
+  type: z.enum(SCENE_TYPES).describe('gag는 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계에만'),
   emotion: z.enum(EMOTIONS),
+  gag: z.enum(GAGS).optional().describe('type "gag" 장면의 그림 (대사 내용과 맞게, 장면마다 다르게)'),
   visual: z.enum(VISUALS).optional(),
   place: z.enum(PLACES),
   line: z.string().describe('맛조수가 소리 내어 말하는 대사 (해요체, 한두 문장)'),
@@ -281,16 +284,22 @@ ${AUDIENCES.map((a) => `- ${a} = ${AUDIENCE_INFO[a].label}: 관심 — ${AUDIENC
 
 ## 형식
 - 장면 6~8개. 대사는 공백 빼고 대본 전체 170~220자 (실제 목소리로 약 32~40초). 270자를 넘으면 영상이 45초를 넘어 지루해져. 한 장면 대사는 한두 문장, 짧고 말하기 쉽게.
-- type: intro | question | mistake | explain | ingredients | steps | tip | outro
+- type: ${SCENE_TYPES.join(' | ')}
+  - gag: 진지한 엉뚱 가이드(deadpan)의 말도 안 되는 단계에만. 카드(cardTitle·cardItems)·분량·재료 이름 없이 대사만. 화면은 아래 gag 그림으로 바뀌고 "농담" 표시가 붙어.
+- gag(type "gag" 장면에 필수): 대사가 말하는 엉뚱한 일을 그대로 보여 줄 그림. 한 대본에서 같은 그림을 두 번 쓰지 마. 엉뚱한 단계는 이 그림들로 보여 줄 수 있는 일로 지어:
+${gagMenu()}
 - emotion: ${EMOTIONS.join(' | ')} (surprised·embarrassed는 아껴 써)
-- visual(선택): result(완성 음식 먼저) | fail(맛조수가 든 실패 접시) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만)
+- visual(선택): result(완성 음식 먼저) | fail(맛조수가 든 실패 접시 — one-fix의 흔한 실패에만, 농담 장면에는 쓰지 마) | fail-closeup(실패 음식 클로즈업) | compare(비교) | sizzle(조리 클로즈업) | react(맛조수 반응 클로즈업) | signature(마지막 서명 카드, 마지막 장면에만). type "gag" 장면에는 visual을 쓰지 마.
 - place(필수): 대본 하나에 2~3곳을 써서 무대가 바뀌게 해 (너무 자주 옮기지 마). 조리 장면(type "steps", visual "sizzle")은 불이 있는 kitchen이나 lab에서만.
 ${PLACES.map((p) => `  - ${p}: ${PLACE_GUIDE[p]}`).join('\n')}
 - 대사에는 숫자를 원본 표기 그대로 써 (예: "설탕 2큰술").`;
 }
 
 /** 사용자 프롬프트: 원본 자료 + 이번에 쓸 개수·피할 것 */
-export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType }): string {
+export function storyUser(
+  recipe: RecipeInput,
+  opts: { count: number; avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType; mustAudience?: Audience },
+): string {
   const source = storySourceData(recipe, opts.expertAnswers);
   const recent = opts.recent ?? [];
   const overused = overusedTypes(recent);
@@ -300,6 +309,7 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
   // 꼭 쓸 형식(견본·사용자가 고른 형식)은 최근에 많이 썼어도 넣는다
   const must = opts.mustInclude && all.includes(opts.mustInclude) ? opts.mustInclude : undefined;
   const types = must && !rest.includes(must) ? [must, ...rest] : rest;
+  const mustWho = opts.mustAudience && AUDIENCES.includes(opts.mustAudience) ? opts.mustAudience : undefined;
   const avoid = opts.avoidTitles?.length ? `\n- 이미 쓴 제목과 비슷한 대본은 피해: ${opts.avoidTitles.map((t) => `"${t}"`).join(', ')}` : '';
   const motifs = repeatedMotifs(recent, [recipe.dishName, recipe.topic]);
   const phrases = repeatedPhrases(recent.map((r) => r.lines ?? []), [recipe.dishName]);
@@ -312,10 +322,22 @@ export function storyUser(recipe: RecipeInput, opts: { count: number; avoidTitle
   return `아래 원본 자료로 형식이 서로 다른 대본 ${opts.count}개를 써.
 ## 고를 수 있는 형식 (storyType — 이름: 구성 / 지킬 것 / 잘 맞는 시청자)
 ${types.map((t) => `- ${t}(${STORY_TYPE_INFO[t].label}): ${STORY_TYPE_INFO[t].beats} / ${STORY_TYPE_INFO[t].guide} / ${audienceLabels(STORY_TYPE_INFO[t].fits)}`).join('\n')}
-${must ? `\n- 대본 가운데 하나는 반드시 형식 ${must}(${STORY_TYPE_INFO[must].label})로 써.` : ''}${avoid}${account}${limit}
+${mustLine(must, mustWho)}${avoid}${account}${limit}
 
 ## 원본 자료
 ${JSON.stringify(source, null, 2)}`;
+}
+
+/**
+ * 꼭 써야 하는 대본 한 줄 (견본·사용자가 고른 형식·시청자). 형식만 강제하면 작가가 다른 시청자로 써서,
+ * '바삭한 김치전:young-home:deadpan' 요청이 4050 대본으로, 호두정과 4050 요청이 2030 대본으로 나왔다 (2026-11-23 견본).
+ */
+function mustLine(type: StoryType | undefined, audience: Audience | undefined): string {
+  if (type && audience)
+    return `\n- 대본 가운데 하나는 반드시 형식 ${type}(${STORY_TYPE_INFO[type].label})로, 시청자 ${audience}(${AUDIENCE_INFO[audience].label})를 위해 써. 그 대본의 storyType은 "${type}", audience는 "${audience}"이고, 첫 대사부터 그 시청자의 관심사로 말을 걸어.`;
+  if (type) return `\n- 대본 가운데 하나는 반드시 형식 ${type}(${STORY_TYPE_INFO[type].label})로 써.`;
+  if (audience) return `\n- 대본 가운데 하나는 반드시 시청자 ${audience}(${AUDIENCE_INFO[audience].label})를 위해 써 (audience "${audience}").`;
+  return '';
 }
 
 /** Claude에게 보내는 원본 자료 (이야기 쓰기·수정 요청 반영이 같이 쓴다) */
@@ -440,19 +462,24 @@ export const AI_STORY_STYLE = 'ai-story';
 /** Claude가 낸 이야기 하나를 대본으로 바꾸고 원본 대조·품질 검사를 한다 */
 export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string): StoryCandidate | { id: string; error: string } {
   const last = draft.scenes.length - 1;
+  const gagNotes: string[] = [];
+  const drafted = gagScenes(draft, gagNotes);
+  const gags = gagPlan(drafted.map((s) => ({ type: s.type, line: s.line, gag: s.gag })));
   const raw = {
     title: draft.title.trim(),
     style: AI_STORY_STYLE,
     hookType: draft.storyType,
-    scenes: draft.scenes.map((s, i) => ({
+    scenes: drafted.map((s, i) => ({
       id: `s${i + 1}`,
       type: s.type,
       emotion: s.emotion,
       line: s.line.trim(),
-      ...(s.cardTitle?.trim() ? { cardTitle: s.cardTitle.trim() } : {}),
-      ...(s.cardItems?.length ? { cardItems: s.cardItems.map((c) => c.trim()).filter(Boolean) } : {}),
-      // 서명 카드는 마지막 장면에만 (중간에 나오면 영상이 끝난 것처럼 보인다)
-      ...(s.visual && (s.visual !== 'signature' || i === last) ? { visual: s.visual } : {}),
+      // 농담 장면에는 카드를 붙이지 않는다 (연구자 카드가 농담을 조언처럼 보이게 하거나 진짜 답을 미리 보여 준다)
+      ...(s.type !== 'gag' && s.cardTitle?.trim() ? { cardTitle: s.cardTitle.trim() } : {}),
+      ...(s.type !== 'gag' && s.cardItems?.length ? { cardItems: s.cardItems.map((c) => c.trim()).filter(Boolean) } : {}),
+      ...(s.type === 'gag' ? { gag: gags[i]! } : {}),
+      // 서명 카드는 마지막 장면에만 (중간에 나오면 영상이 끝난 것처럼 보인다). 농담 장면은 그림이 화면 전체라 연출을 쓰지 않는다
+      ...(s.type !== 'gag' && s.visual && (s.visual !== 'signature' || i === last) ? { visual: s.visual } : {}),
       // 불이 없는 무대(시장·식탁·찬장)에서는 팬·불이 그려지지 않으므로 조리 장면은 주방으로 옮긴다
       place: (s.type === 'steps' || s.visual === 'sizzle') && !FIRE_PLACES.includes(s.place) ? 'kitchen' : s.place,
       ...(i === 0 ? { hook: true } : {}),
@@ -504,7 +531,7 @@ export function finalizeStory(recipe: RecipeInput, draft: StoryDraft, id: string
     script,
     seconds: Math.round(seconds),
     issues: checkScript(recipe, script),
-    notes: enforced.notes,
+    notes: [...gagNotes, ...enforced.notes],
     warnings,
   };
 }
@@ -537,6 +564,35 @@ function pinExpertCards(recipe: RecipeInput, script: Script, notes: string[]): S
     return sc;
   });
   return { ...script, scenes };
+}
+
+type DraftScene = StoryDraft['scenes'][number];
+
+/**
+ * 농담 장면 정리 (안전망).
+ * - 엉뚱 가이드(deadpan): 농담이라고 밝히는 줄(DEADPAN_TURN)보다 앞의 tip·explain 장면은 농담 장면(gag)으로 바꾼다.
+ *   견본에서 작가가 엉뚱한 단계를 tip으로 적어, 진짜 '한 줄 팁' 카드가 농담 중에 떠 답을 미리 보여 줬다 (2026-11-23).
+ *   연구자 카드(노트·팁)는 전환 줄 뒤에만 나온다. 첫 장면(훅)은 흔한 상황이라 바꾸지 않는다.
+ * - 다른 형식: 농담 장면이 있으면 질문 장면으로 되돌린다 (엉뚱한 그림은 엉뚱 가이드에만).
+ */
+function gagScenes(draft: StoryDraft, notes: string[]): DraftScene[] {
+  if (draft.storyType !== 'deadpan') {
+    return draft.scenes.map((s, i) => {
+      if (s.type !== 'gag') return s;
+      notes.push(`s${i + 1} 장면: 농담 장면은 진지한 엉뚱 가이드에만 써서 질문 장면으로 바꿨습니다.`);
+      return { ...s, type: 'question' as const, gag: undefined };
+    });
+  }
+  const turn = draft.scenes.findIndex((s, i) => i > 0 && DEADPAN_TURN.test(s.line));
+  return draft.scenes.map((s, i) => {
+    // 질문·실수처럼 적었어도 대사가 엉뚱한 곳(사막·달 등)을 말하면 그림을 보여 주려고 농담 장면으로
+    const absurd = s.type !== 'ingredients' && s.type !== 'steps' && s.type !== 'gag' && s.type !== 'outro' && gagFromLine(s.line) !== null;
+    if (turn > 0 && i > 0 && i < turn && (s.type === 'tip' || s.type === 'explain' || absurd)) {
+      notes.push(`s${i + 1} 장면: 농담이라고 밝히기 전 장면이라 농담 장면으로 바꾸고 연구자 카드를 뺐습니다.`);
+      return { ...s, type: 'gag' as const, cardTitle: undefined, cardItems: undefined, visual: undefined };
+    }
+    return s;
+  });
 }
 
 /** 엉뚱 가이드: 농담이라고 밝히는 줄 (농담·장난·물론 아니고·진짜 방법·사실은) */

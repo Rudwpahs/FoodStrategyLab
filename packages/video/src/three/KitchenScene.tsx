@@ -211,6 +211,12 @@ const SplitTop: React.FC<{ frame: number; state: StageState; food: FoodProfile }
   return createPortal(<SceneContents frame={frame} state={state} food={food} props={[]} />, scene);
 };
 
+/** 우선순위 1인 빈 그리기: R3F 기본 그리기(gl.render)를 건너뛴다 (SplitTop과 같은 방법) */
+const SkipDraw: React.FC = () => {
+  useFrame(() => {}, 1);
+  return null;
+};
+
 export const KitchenScene: React.FC<{
   width: number;
   height: number;
@@ -220,11 +226,14 @@ export const KitchenScene: React.FC<{
   props: IngredientProp[];
   /** 비교 장면: 위쪽 절반에 그릴 상태 (같은 캔버스 안에 그린다) */
   split?: StageState | null;
-}> = ({ width, height, frame, state, food, props, split }) => (
+  /** 이 프레임은 그리지 않는다 (농담 그림이 화면을 덮는 동안). 캔버스는 그대로 두어 다시 만들지 않는다 */
+  skip?: boolean;
+}> = ({ width, height, frame, state, food, props, split, skip }) => (
   // dpr 1: 영상은 1080×1920 그대로 그린다. 휴대폰(화면 배율 3)에서 3배 크기로 그리면 메모리가 넘쳐 브라우저가 멈춘다
   <ThreeCanvas width={width} height={height} dpr={1} shadows gl={GL} camera={{ fov: state.camera.fov, position: state.camera.pos }}>
     <CameraRig {...state.camera} />
     <SceneContents frame={frame} state={state} food={food} props={props} />
-    {split && <SplitTop frame={frame} state={split} food={food} />}
+    {split && !skip && <SplitTop frame={frame} state={split} food={food} />}
+    {skip && <SkipDraw />}
   </ThreeCanvas>
 );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AI_CLIP_CHECK, BRAND, CHECKLIST_ITEMS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
+import { AI_CLIP_CHECK, BRAND, CHECKLIST_ITEMS, GAG_LABELS, formatIngredient, type Issue } from '@mat-lab/recipe-core';
 import { BLOG_STYLE_INFO, type BlogStyle } from '@mat-lab/publishing';
 import { buildTimeline, videoSeconds, type SceneTiming } from '@mat-lab/video';
 import { api, renderFile } from '../api.ts';
@@ -179,7 +179,7 @@ export const ReviewStep: React.FC<StepProps> = ({ project, setProject, go, reloa
             <div className="line" key={s.id}>
               <b>{i + 1}</b>
               <div>
-                {s.line}
+                {s.type === 'gag' && <span className="badge" title="엉뚱한 농담 그림이 나오는 장면 (연구자 카드 없음)">농담{s.gag ? ` · ${GAG_LABELS[s.gag]}` : ''}</span>} {s.line}
                 {s.cardItems && s.cardItems.length > 0 && (
                   <div className="muted small" style={{ marginTop: 4 }}>
                     화면 카드 {s.cardTitle ? `[${s.cardTitle}] ` : ''}

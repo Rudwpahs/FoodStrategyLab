@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { StoryOutputSchema, storySystem, storyUser, type PersonaId, type StoryType, type RecentStory, type RecipeInput, type StoryDraft } from '@mat-lab/recipe-core';
+import { StoryOutputSchema, storySystem, storyUser, type Audience, type PersonaId, type StoryType, type RecentStory, type RecipeInput, type StoryDraft } from '@mat-lab/recipe-core';
 import type { Db } from './db.ts';
 import { DEFAULT_MODEL, aiConfigured, claudeError, costUsd, recordUsage, reserveBudget } from './claudeUsage.ts';
 import { rewriteCostUsd, type RewriteUsage } from './humanize.ts';
@@ -56,7 +56,7 @@ export class StoryWriter {
   }
 
   /** persona: 맛조수 성격 (견본 비교용. 비우면 기본 설정) */
-  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
+  async write(recipe: RecipeInput, opts: { avoidTitles?: string[]; expertAnswers?: string[]; recent?: RecentStory[]; realClips?: number; persona?: PersonaId; mustInclude?: StoryType; mustAudience?: Audience } = {}): Promise<{ drafts: StoryDraft[]; costUsd: number }> {
     if (!this.available()) throw new HttpError(409, 'Claude API가 아직 설정되지 않았어요. 서버에 ANTHROPIC_API_KEY를 넣어 주세요.');
     const model = process.env.CLAUDE_MODEL || DEFAULT_MODEL;
     const system = storySystem(opts.persona);

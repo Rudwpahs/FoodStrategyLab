@@ -1,4 +1,4 @@
-import { PLACES, type Place, type Scene, type Script } from '@mat-lab/recipe-core';
+import { PLACES, gagPlan, type Place, type Scene, type Script } from '@mat-lab/recipe-core';
 import { seeded } from '../random.ts';
 import type { SceneTiming } from '../timeline.ts';
 
@@ -104,6 +104,7 @@ function wantedPlace(scene: Pick<Scene, 'type' | 'visual'>, look: VideoLook): Pl
     case 'intro':
     case 'question':
     case 'mistake':
+    case 'gag':
       return 'follow';
   }
 }
@@ -176,7 +177,10 @@ export const WHIP_FRAMES = 6;
  * amount: 0(넘김 없음)~1(경계 순간), side: -1 = 나가는 장면(왼쪽으로 밀려남), 1 = 들어오는 장면(오른쪽에서 들어옴)
  */
 export function placeTransitionAt(script: Script, timings: SceneTiming[], frame: number): { amount: number; side: -1 | 1 } {
-  const plan = placePlan(script);
+  // 농담 그림(gag)이 바뀌거나 시작·끝나는 경계도 장소가 바뀌는 것처럼 넘긴다 (그림 자체가 다른 곳이다)
+  const gags = gagPlan(script.scenes);
+  const places = placePlan(script);
+  const plan = places.map((p, i) => (gags[i] ? `gag:${gags[i]}` : p));
   const index = (id: string) => script.scenes.findIndex((s) => s.id === id);
   for (let i = 1; i < timings.length; i++) {
     const cut = timings[i]!.from;

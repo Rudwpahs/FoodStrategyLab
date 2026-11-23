@@ -93,7 +93,8 @@ export function buildTimeline(
     const speech = speechSeconds[i] ?? estimateSpeechSeconds(scene.line);
     let seconds = Math.max(speech + PAD_SECONDS, readingSeconds(scene), scene.type === 'intro' ? MIN_INTRO_SECONDS : MIN_SCENE_SECONDS);
     if (scene.type === 'outro') seconds += OUTRO_EXTRA_SECONDS;
-    if (scene.type === 'tip' || scene.type === 'mistake') seconds += PUNCH_BEAT_SECONDS;
+    // 농담 장면도 대사 뒤에 잠깐 쉰다: 엉뚱한 그림을 볼 틈 (태연한 침묵이 웃음 자리다)
+    if (scene.type === 'tip' || scene.type === 'mistake' || scene.type === 'gag') seconds += PUNCH_BEAT_SECONDS;
     if (keyIndex > 0 && i === keyIndex - 1) seconds += KEY_PAUSE_SECONDS;
     const durationInFrames = Math.ceil(seconds * fps);
     const extra = extras[i];

@@ -57,7 +57,7 @@ ${persona.sensoryRule ? `- ${SENSORY_RULE}\n` : ''}- 실수: 맛조수는 실수
     { "id": "s1", "type": "intro", "emotion": "joy", "line": "대사", "cardTitle": "화면 카드 제목(선택)", "cardItems": ["카드 항목(선택)"] }
   ]
 }
-- type: ${SCENE_TYPES.join(' | ')}
+- type: ${SCENE_TYPES.filter((t) => t !== 'gag').join(' | ')}
 - emotion: ${EMOTIONS.join(' | ')}
 - ingredients 장면의 cardItems는 원본 재료 문자열을 그대로 써.
 - steps 장면의 cardItems는 원본 조리순서 문장을 순서대로 그대로 써.

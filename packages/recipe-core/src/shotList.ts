@@ -87,6 +87,19 @@ export function shotList(script: Script, recipe: RecipeInput): FilmShot[] {
     const scenes = ids.map((id) => byId.get(id)!).filter(Boolean);
     const isFirst = gi === 0;
     const isLast = gi === groups.length - 1 && groups.length > 1;
+    // 농담 장면 묶음: 그림(농담 연출)이 화면을 채우므로 찍을 것이 없다
+    if (scenes.length && scenes.every((s) => s.type === 'gag')) {
+      return {
+        group: gi + 1,
+        sceneIds: ids,
+        kind: 'closeup' as const,
+        seconds: clampSeconds(scenes.reduce((sum, s) => sum + estimateSceneSeconds(s), 0)),
+        title: '농담 장면 · 찍지 않아도 돼요',
+        instruction: '이 묶음은 엉뚱한 농담 그림이 화면을 채워요. 따로 찍지 않아도 돼요.',
+        quote: [],
+        tip: '찍은 영상을 올려도 농담 그림이 위에 그려져요.',
+      };
+    }
     const kind = kindOf(scenes, isFirst, isLast);
     const seconds = clampSeconds(scenes.reduce((sum, s) => sum + estimateSceneSeconds(s), 0));
     const base = { group: gi + 1, sceneIds: ids, kind, seconds };

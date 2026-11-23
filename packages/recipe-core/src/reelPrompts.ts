@@ -33,6 +33,7 @@ const SHOT: Record<Scene['type'], string> = {
   steps: 'Over-the-shoulder high-angle shot of the stove, blue gas flame on, MATJOSU cooking step by step.',
   tip: 'Close-up of the finished dish on a white plate on the counter, light steam rising.',
   outro: 'Medium shot, MATJOSU proudly holding the finished dish toward the camera, happy.',
+  gag: 'Medium shot, MATJOSU standing calmly with a straight face next to the finished dish in the absurd, impossible place the line describes (clearly a joke).',
 };
 
 const EMOTION_EN: Record<Scene['emotion'], string> = {
@@ -48,20 +49,26 @@ const EMOTION_EN: Record<Scene['emotion'], string> = {
 export const CLIP_SECONDS = 8;
 export const CLIP_MAX_LINES = 2;
 
-/** 이어진 장면을 약 8초 클립으로 묶는다. 결과: 클립별 장면 id 목록 */
+/**
+ * 이어진 장면을 약 8초 클립으로 묶는다. 결과: 클립별 장면 id 목록.
+ * 농담 장면(gag)은 농담 장면끼리만 묶는다: 농담 그림은 실제 촬영 대신 화면에 그려지므로, 촬영 묶음에 섞이면 찍은 영상이 잘려 보인다.
+ */
 export function clipGroups(script: Script): string[][] {
   const groups: string[][] = [];
   let cur: string[] = [];
   let secs = 0;
+  let gag = false;
   for (const scene of script.scenes) {
     const s = estimateSceneSeconds(scene);
-    if (cur.length && (secs + s > CLIP_SECONDS || cur.length >= CLIP_MAX_LINES)) {
+    const isGag = scene.type === 'gag';
+    if (cur.length && (secs + s > CLIP_SECONDS || cur.length >= CLIP_MAX_LINES || isGag !== gag)) {
       groups.push(cur);
       cur = [];
       secs = 0;
     }
     cur.push(scene.id);
     secs += s;
+    gag = isGag;
   }
   if (cur.length) groups.push(cur);
   return groups;
